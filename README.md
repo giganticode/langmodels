@@ -30,5 +30,12 @@ export MODEL_ZOO_PATH="$HOME/dev/modelzoo"
 
 ### CLI API  
 ```
-python langmodels/inference/entropies.py <path-to-file> --path-to-output <path-to-output> --verbose
+~/dev/langmodels$ python langmodels/inference/entropies.py <file> [--output-path <output-path>] [--verbose]
+
+positional arguments:
+  <file>                           Path to file for which entropies are to be calculated.
+
+optional arguments:
+  --output-path <output-path>      Path to file to which entropies are to be written. If not specified, --verbose option is set to true. 
+  --verbose                        Write preprocessed lines and their entropies to stdout.
 ```

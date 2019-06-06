@@ -27,7 +27,6 @@ if __name__ == '__main__':
     parser.add_argument('--output-path', action='store', help='Path to file to which entropies are to be written.')
     parser.add_argument('--verbose', action='store_true', help='Write preprocessed lines and their entropies to stdout.')
     args = parser.parse_args()
-    print(args.verbose)
     verbose = args.verbose or 'output_path' not in args
 
     model = TrainedModel.get_default_model()

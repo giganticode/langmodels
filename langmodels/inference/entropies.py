@@ -19,7 +19,7 @@ def get_entopy_for_each_line(trained_model: TrainedModel, file: str, entropy_agg
                 print(f'{[(prep_token, token_entropy) for prep_token, token_entropy in zip(prep_line, entropies)]}')
                 print(line_entropy)
                 print("=============")
-    return list(zip(*prep_lines_and_entropies))[1]
+    return list(zip(*prep_lines_and_entropies))[2]
 
 
 if __name__ == '__main__':

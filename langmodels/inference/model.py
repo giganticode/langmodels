@@ -4,7 +4,7 @@ import os
 import dill as pickle
 import torch
 from fastai.text import AWD_LSTM, SequentialRNN, get_language_model, awd_lstm_lm_config, F
-from typing import List, Generator
+from typing import List, Generator, Dict
 
 from torchtext.data import Field
 
@@ -18,7 +18,10 @@ MODEL_ZOO_PATH_ENV_VAR = 'MODEL_ZOO_PATH'
 
 # TODO this params should not be hardcoded:
 MODEL_NAME = '336101/100_baseline'
+
+# prep params below correspond to 336101
 BPE_CODES_ID = '10k'
+PREP_PARAMS = {'no_case': True, 'no_com': True, 'no_str': False, 'no_spaces': True}
 
 VOCAB_SIZE = 10096
 EMB_SZ = 300
@@ -80,6 +83,9 @@ class TrainedModel(object):
     def get_bpe_codes_id(self):
         return BPE_CODES_ID
 
+    def get_prep_params(self) -> Dict[str, bool]:
+        return PREP_PARAMS
+
     def predict_next(self, how_many: int = 1) -> Generator[str, None, None]:
         for i in range(how_many):
             res, *_ = self.model(self.last_predicted_tokens)
@@ -87,12 +93,12 @@ class TrainedModel(object):
             yield self.legacy_vocab.vocab.itos[n[0]]
             self.last_predicted_tokens = n[0].unsqueeze(0)
 
-    def get_entropy_for_next(self, input: List[str]) -> float:
+    def get_entropies_for_next(self, input: List[str]) -> List[float]:
         numericalized_input = self.legacy_vocab.numericalize([input], -1)
-        loss_sum = 0
-        for token in numericalized_input:
+        losses: List[float] = []
+        for token, num_token in zip(input, numericalized_input):
             res, *_ = self.model(self.last_predicted_tokens)
-            loss = F.cross_entropy(res[-1], token).item()
-            self.last_predicted_tokens = token.unsqueeze(0)
-            loss_sum += loss
-        return loss_sum / len(input)
+            loss = F.cross_entropy(res[-1], num_token).item()
+            self.last_predicted_tokens = num_token.unsqueeze(0)
+            losses.append(loss)
+        return losses

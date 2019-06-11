@@ -3,6 +3,7 @@ import os
 
 import dill as pickle
 import torch
+from dataprep.model.placeholders import placeholders
 from fastai.text import AWD_LSTM, SequentialRNN, get_language_model, awd_lstm_lm_config, F
 from typing import List, Generator, Dict
 
@@ -35,7 +36,7 @@ else:
     MODEL_ZOO_PATH = os.path.join(os.environ['HOME'], 'modelzoo')
 
 class TrainedModel(object):
-    STARTING_TOKENS = ['``']
+    STARTING_TOKENS = [placeholders['ect']]
 
     def __init__(self, path: str):
         self.model = self._load_model(path)

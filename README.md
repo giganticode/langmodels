@@ -1,5 +1,8 @@
 # langmodels
-Applying machine learning to large source code corpora
+
+[![Build Status](https://travis-ci.org/giganticode/langmodels.svg?branch=master)](https://travis-ci.org/giganticode/langmodels)
+
+**Applying machine learning to large source code corpora**
 
 # Quick start
 

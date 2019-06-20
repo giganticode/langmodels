@@ -73,11 +73,12 @@ if __name__ == '__main__':
                              '\'full-token-average\': average over all full-tokens\' entopies '
                              '(entropy of a full token is a sum of entopies of its subtokens to which a token was split during pre-processing) \n'
                              '\'full-token-entropies\': a list of full-token entropies (gives freedom to library\'s clients to compute line-entropy in their own way) \n')
+    parser.add_argument('-c', '--cpu', action='store_true', help='Forse cpu usage for inference even if cuda-supported GPU is available.')
     parser.add_argument('-v', '--verbose', action='store_true', help='Write preprocessed lines and their entropies to stdout.')
     args = parser.parse_args()
     verbose = args.verbose or not args.output_path
 
-    model = TrainedModel.get_default_model()
+    model = TrainedModel.get_default_model(force_use_cpu=args.cpu)
     entropy_aggregator = parse_entropy_aggregator_value(args.entropy_aggregator)
     entropies = get_entopy_for_each_line(model, args.file, entropy_aggregator, verbose)
     if args.output_path:

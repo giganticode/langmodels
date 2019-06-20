@@ -45,4 +45,5 @@ optional arguments:
                                                      'full-token-average' (default): average over all full-tokens' entopies (entropy of a full token is a sum of entopies of its subtokens to which a token was split during pre-processing) 
                                                      'full-token-entropies': a list of full-token entropies (gives freedom to library's clients to compute line-entropy in their own way)
   --verbose, -v                                      Write preprocessed lines and their entropies to stdout.
+  --cpu, -c                                          Forse cpu usage for inference even if cuda-supported GPU is available.
 ```

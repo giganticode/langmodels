@@ -5,6 +5,7 @@ import dill as pickle
 import torch
 from dataprep.model.placeholders import placeholders
 from fastai.text import AWD_LSTM, SequentialRNN, get_language_model, awd_lstm_lm_config, F
+from torch import cuda
 from typing import List, Generator, Dict
 
 from torchtext.data import Field
@@ -35,14 +36,20 @@ if MODEL_ZOO_PATH_ENV_VAR in os.environ:
 else:
     MODEL_ZOO_PATH = os.path.join(os.environ['HOME'], 'modelzoo')
 
+
+def get_device(force_use_cpu: bool) -> int:
+    return cuda.current_device() if cuda.is_available() and not force_use_cpu else -1
+
+
 class TrainedModel(object):
     STARTING_TOKENS = [placeholders['ect']]
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, force_use_cpu: bool = False):
+        self.force_use_cpu = force_use_cpu
         self.model = self._load_model(path)
         self._to_test_mode()
         self.legacy_vocab = self._load_vocab(path)
-        self.last_predicted_tokens = self.legacy_vocab.numericalize([self.STARTING_TOKENS], -1)
+        self.last_predicted_tokens = self.legacy_vocab.numericalize([self.STARTING_TOKENS], get_device(force_use_cpu))
 
     def _load_model(self, path: str) -> SequentialRNN:
         path_to_model = os.path.join(path, WEIGHTS_FILE)
@@ -50,7 +57,18 @@ class TrainedModel(object):
 
         awd_lstm_lm_config.update({'emb_sz': EMB_SZ, 'n_hid': N_HID, 'n_layers': N_LAYERS, 'out_bias': False})
         model = get_language_model(AWD_LSTM, VOCAB_SIZE, awd_lstm_lm_config)
-        state_dict = torch.load(path_to_model, map_location=lambda storage, loc: storage)
+        if self.force_use_cpu:
+            map_location = lambda storage, loc: storage
+            logger.debug("Using CPU for inference")
+        elif cuda.is_available():
+            map_location = None
+            model.cuda()
+            logger.debug("Using GPU for inference")
+        else:
+            map_location = lambda storage, loc: storage
+            logger.info("Cuda not available. Falling back to using CPU.")
+
+        state_dict = torch.load(path_to_model, map_location=map_location)
         model.load_state_dict(weights_to_v1(state_dict), strict=True)
 
         return model
@@ -69,17 +87,17 @@ class TrainedModel(object):
         self.model.reset()
 
     @classmethod
-    def from_path(cls, path: str) -> 'TrainedModel':
-        return cls(path)
+    def from_path(cls, path: str, force_use_cpu: bool = False) -> 'TrainedModel':
+        return cls(path, force_use_cpu)
 
     @classmethod
-    def get_default_model(cls) -> 'TrainedModel':
+    def get_default_model(cls, force_use_cpu: bool = False) -> 'TrainedModel':
         path = os.path.join(MODEL_ZOO_PATH, MODEL_NAME)
         if not os.path.exists(path):
             raise FileNotFoundError(f'The path does not exist: {path}. ' 
                                     f'Did you set {MODEL_ZOO_PATH_ENV_VAR} env var correctly? '
                                     f'Your current {MODEL_ZOO_PATH_ENV_VAR} path is {MODEL_ZOO_PATH}')
-        return cls.from_path(path)
+        return cls.from_path(path, force_use_cpu)
 
     def get_bpe_codes_id(self):
         return BPE_CODES_ID
@@ -95,7 +113,7 @@ class TrainedModel(object):
             self.last_predicted_tokens = n[0].unsqueeze(0)
 
     def get_entropies_for_next(self, input: List[str]) -> List[float]:
-        numericalized_input = self.legacy_vocab.numericalize([input], -1)
+        numericalized_input = self.legacy_vocab.numericalize([input], get_device(self.force_use_cpu))
         losses: List[float] = []
         for token, num_token in zip(input, numericalized_input):
             res, *_ = self.model(self.last_predicted_tokens)

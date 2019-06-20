@@ -1,9 +1,15 @@
 import argparse
+import logging
 
 import dataprep
 from typing import List, Tuple, Callable, Union
 
 from langmodels.inference.model import TrainedModel
+from langmodels.profiling import TimeMeasurer
+
+logger = logging.getLogger(__name__)
+
+time_measurer = TimeMeasurer()
 
 
 def get_entopy_for_each_line(trained_model: TrainedModel,
@@ -13,8 +19,12 @@ def get_entopy_for_each_line(trained_model: TrainedModel,
     prep_lines_and_entropies: List[Tuple[List[str], List[float], float]] = []
     with open(file, 'r') as f:
         for line in f:
+            time_measurer.tick("Preprocessing")
             prep_line, metadata = dataprep.bpe(line, trained_model.get_bpe_codes_id(), extension="java", **trained_model.get_prep_params(), return_metadata=True)
+            time_measurer.tock("Preprocessing")
+            time_measurer.tick("Inference")
             entropies = trained_model.get_entropies_for_next(prep_line)
+            time_measurer.tock("Inference")
             line_entropy = entropy_aggregator(entropies, metadata.word_boundaries)
             prep_lines_and_entropies.append((prep_line, entropies, line_entropy))
         if verbose:
@@ -78,7 +88,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     verbose = args.verbose or not args.output_path
 
+    time_measurer.tick('Model loading')
     model = TrainedModel.get_default_model(force_use_cpu=args.cpu)
+    time_measurer.tock('Model loading')
     entropy_aggregator = parse_entropy_aggregator_value(args.entropy_aggregator)
     entropies = get_entopy_for_each_line(model, args.file, entropy_aggregator, verbose)
     if args.output_path:
@@ -86,3 +98,8 @@ if __name__ == '__main__':
             for entropy in entropies:
                 f.write(f'{entropy}\n')
         print(f'Entropies are written to {args.output_path}')
+
+    if verbose:
+        totals = time_measurer.totals()
+        for what, total_time in totals.items():
+            logger.debug(f'{what} took {total_time:.4f} s')

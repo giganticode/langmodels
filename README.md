@@ -33,7 +33,7 @@ export MODEL_ZOO_PATH="$HOME/dev/modelzoo"
 
 ### CLI API  
 ```
-~/dev/langmodels$ python langmodels/inference/entropies.py <file> [-o <output-path>] [-e <entropy_aggregator>] [-v]
+~/dev/langmodels$ python langmodels/inference/entropies.py <file> [-o <output-path>] [-e <entropy_aggregator>] [-c] [-v]
 
 positional arguments:
   <file>                           Path to file for which entropies are to be calculated.
@@ -44,6 +44,6 @@ optional arguments:
                                                      'subtoken-average': average over all subtokens' entropies 
                                                      'full-token-average' (default): average over all full-tokens' entopies (entropy of a full token is a sum of entopies of its subtokens to which a token was split during pre-processing) 
                                                      'full-token-entropies': a list of full-token entropies (gives freedom to library's clients to compute line-entropy in their own way)
-  --verbose, -v                                      Write preprocessed lines and their entropies to stdout.
   --cpu, -c                                          Forse cpu usage for inference even if cuda-supported GPU is available.
+  --verbose, -v                                      Write preprocessed lines and their entropies to stdout.
 ```

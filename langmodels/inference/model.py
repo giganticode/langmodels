@@ -3,7 +3,7 @@ import os
 
 import dill as pickle
 import torch
-from dataprep.model.placeholders import placeholders
+from dataprep.parse.model.placeholders import placeholders
 from fastai.text import AWD_LSTM, SequentialRNN, get_language_model, awd_lstm_lm_config, F
 from torch import cuda
 from typing import List, Generator, Dict

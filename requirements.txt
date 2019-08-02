@@ -1,3 +1,4 @@
 fastai==1.0.52
 giganticode-dataprep==1.0.0-alpha.6
 torchtext==0.2.3
+sacred==0.7.5

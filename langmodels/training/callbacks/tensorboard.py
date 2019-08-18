@@ -3,6 +3,7 @@
 from fastai.callback import Callback
 from pathlib import Path
 import shutil
+import os
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -35,6 +36,9 @@ class TensorboardLogger(Callback):
         self.cfgtxt = cfgtxt
 
         path = Path(self.md.path) / "logs"
+        if not path.exists():
+            os.makedirs(path)        
+
         print(f"Logging tensorboard data to {path}")
         self.log_name = log_name
         self.log_dir = path / log_name

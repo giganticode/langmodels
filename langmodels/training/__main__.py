@@ -17,20 +17,24 @@ from langmodels.training.training import train, encode_config
 jsons.set_serializer(prep_function_serializer, PrepFunction)
 jsons.set_deserializer(prep_function_deserializer, cls=PrepFunction)
 
-PATH_TO_TRAINED_MODELS = '/home/hlib/dev/trained-models'
-PATH_TO_PREP_DATASETS = '/home/hlib/dev/prep-datasets'
+HOME = os.environ['HOME']
+
+PATH_TO_TRAINED_MODELS = os.path.join(HOME, 'trained-models')
+PATH_TO_PREP_DATASETS = os.path.join(HOME, 'prep-datasets')
 
 lm_training_config = LMTrainingConfig(base_model=None,
-                                      corpus=Corpus(path='/home/hlib/dev/yahtzee', extensions="java"),
-                                      prep_function=PrepFunction(api.bpe, ['10k'],
-                                                                 {'no_str': True,
+                                      corpus=Corpus(path=os.path.join(HOME, 'raw_datasets/rafael/c-large-split'), extensions="c"),
+                                      prep_function=PrepFunction(api.bpe, ['c-bpe-training_nounicode-10000'],
+                                                                  {                                                                 
                                                                   'no_com': True,
-                                                                  'no_case': True,
+                                                                  'no_unicode': True, 
+                                                                  'no_spaces': True,
+                                                                  'max_str_length': 14,
                                                                   }),
-                                      arch=TransformerArch(),
-                                      bs=4, bptt=30,
+                                      arch=LstmArch(n_layers=1, emb_sz=2048, n_hid=2048),
+                                      bs=64, bptt=200,
                                       training_procedure=TrainingProcedure(base_lr=1e-3,
-                                                                           cycle=LearningRateCycle(n=5,
+                                                                           cycle=LearningRateCycle(n=3,
                                                                                                    len=1,
                                                                                                    mult=1)))
 
@@ -44,7 +48,7 @@ ex = Experiment(create_experiment_id(lm_training_config))
 from sacred.observers import MongoObserver
 from langmodels.mongocreds_test import USER, PASSWORD, HOST, PORT, DATABASE
 
-ex.observers.append(MongoObserver.create(url=f'mongodb://{USER}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}', db_name=DATABASE))
+#ex.observers.append(MongoObserver.create(url=f'mongodb://{USER}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}', db_name=DATABASE))
 
 
 # ex.add_config(jsons.dump(lm_training_config))
@@ -70,10 +74,11 @@ def prep_and_train(config, output_path):
     prep_corpus: api.PreprocessedCorpus = config.prep_function.apply(config.corpus, output_path=output_path)
 
     train(prep_corpus=prep_corpus,
-          path_to_model=os.path.join(PATH_TO_TRAINED_MODELS, encode_config('10k')),
+          path_to_model=os.path.join(PATH_TO_TRAINED_MODELS, encode_config('c-10k-1-2048')),
           device=cuda.current_device(),
           lm_training_config=config,
-          use_pretrained_model=False,
+#          path_to_pretrained_model=os.path.join(PATH_TO_TRAINED_MODELS, 'large-20k-3-1024-bs64-2ep'),
+          path_to_pretrained_model=None,
           sacred_exp=ex)
 
 

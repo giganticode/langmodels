@@ -14,6 +14,7 @@ from fastai.text.models.transformer import init_transformer
 from sacred import Experiment
 from torch import Tensor
 from tqdm import tqdm
+from fastai.callbacks import SaveModelCallback
 
 from langmodels.config.datamodel import LMTrainingConfig, LstmArch, TransformerArch
 from langmodels.training.callbacks.sacred import SacredCallback
@@ -58,9 +59,10 @@ def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
 
 
 def train(prep_corpus: PreprocessedCorpus,
-          path_to_model: str, device: Optional[int],
+          path_to_model: str, 
+          device: Optional[int],
           lm_training_config: LMTrainingConfig,
-          use_pretrained_model: bool = True,
+          path_to_pretrained_model: str = None,
           sacred_exp: Optional[Experiment] = None):
     vocab = create_vocab_for_lm(prep_corpus)
 
@@ -69,7 +71,7 @@ def train(prep_corpus: PreprocessedCorpus,
     text_list = TextList(file_path_list, path=prep_corpus.path_to_prep_dataset, processor=Numericalizer(vocab))
 
     print("Splitting into training/validation sets")
-    split_list = text_list.split_by_rand_pct()
+    split_list = text_list.split_by_folder()
 
     print("Labeling for langmodeling")
     labelled_list = split_list.label_for_lm()
@@ -87,20 +89,25 @@ def train(prep_corpus: PreprocessedCorpus,
     learner = language_model_learner(databunched, arch_class,
                                      # drop_mult=lm_training_config.arch.drop.multiplier,
                                      config=config, pretrained=not config)
-    if use_pretrained_model and os.path.exists(f'{path_to_model}.pth'):
-        print(f"Using pretrained model: {path_to_model}.pth")
-        learner.load(path_to_model, device=device)
+    if path_to_pretrained_model:
+        full_path_to_pretrained_model = f'{path_to_pretrained_model}.pth'
+        if os.path.exists(full_path_to_pretrained_model):
+            print(f"Using pretrained model: {full_path_to_pretrained_model}")
+        else:
+            print(f'Pretrained model at path not found: {full_path_to_pretrained_model}')
+            return
+        learner.load(path_to_pretrained_model, device=device)
     else:
         print("Training form scratch")
 
     if sacred_exp:
         exp_name = sacred_exp.get_experiment_info()['name']
         tb_callback = TensorboardLogger(learner, f'{exp_name}', jsons.dumps(lm_training_config), del_existing=False)
-
         sacred_callback = SacredCallback(sacred_exp, ["validation_loss"] + [m.__name__ for m in learner.metrics])
+        save_model_callback = SaveModelCallback(learner, every='epoch', name='epoch')
+        learner.callbacks.extend([save_model_callback, tb_callback, sacred_callback])
 
-        learner.callbacks.extend([tb_callback, sacred_callback])
-
+    print("Starting training...")
     learner.fit(epochs=lm_training_config.training_procedure.cycle.n,
                 lr=lm_training_config.training_procedure.base_lr,
                 wd=lm_training_config.training_procedure.weight_decay)
@@ -109,8 +116,9 @@ def train(prep_corpus: PreprocessedCorpus,
 
 def check_data(databunched, vocab):
     first_batch = databunched.one_batch()[0]
-    if not contains_no_value(first_batch, UNKNOWN_TOKEN_INDEX):
-        raise ValueError(f"Unknown is found in tensor: {first_batch}")
+
+#    if not contains_no_value(first_batch, UNKNOWN_TOKEN_INDEX):
+#        raise ValueError(f"Unknown is found in tensor: {first_batch}")
     print(f'Displaying the first batch:\n{first_batch}')
     token_seqs = [vocab.textify(seq) for seq in first_batch]
     pprint(token_seqs)

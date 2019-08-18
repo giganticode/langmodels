@@ -102,3 +102,7 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+langmodels/mongocreds.py
+langmodels/mongocreds_test.py
+

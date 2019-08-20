@@ -10,7 +10,7 @@ class MrrTest(unittest.TestCase):
 
         actual = mrr(preds, targs)
         expected = 1.0
-        self.assertAlmostEqual(expected, actual)
+        self.assertAlmostEqual(expected, actual.item())
 
     def test_mrr_simple(self):
         preds = torch.tensor([[0.2, 0.55, 0.25], [0.006, 0.004, 0.99]])
@@ -18,7 +18,7 @@ class MrrTest(unittest.TestCase):
 
         actual = mrr(preds, targs)
         expected = 0.41666668653
-        self.assertAlmostEqual(expected, actual)
+        self.assertAlmostEqual(expected, actual.item())
 
 
 if __name__ == '__main__':

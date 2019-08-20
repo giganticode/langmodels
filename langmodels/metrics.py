@@ -7,7 +7,7 @@ def _find_sorted_array_position(tensor: Tensor, values_tensor: Tensor) -> Tensor
     return position_of_value.add(1)
 
 
-def mrr(preds: Tensor, targs: Tensor) -> float:
+def mrr(preds: Tensor, targs: Tensor) -> Tensor:
     """
     E.g.:
     preds = torch.tensor([[0.2, 0.55, 0.25], [0.005, 0.005, 0.99]])
@@ -17,4 +17,4 @@ def mrr(preds: Tensor, targs: Tensor) -> float:
     pred_values = preds.gather(1, targs.view(-1, 1))
     guessed_positions = _find_sorted_array_position(preds, pred_values).float()
     reciprocal = torch.reciprocal(guessed_positions)
-    return torch.mean(reciprocal).item()
+    return torch.mean(reciprocal)

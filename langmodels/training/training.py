@@ -11,12 +11,14 @@ from dataprep.api.corpus import PreprocessedCorpus
 from fastai.text import Vocab, TextList, language_model_learner, PreProcessor, Collection, partition_by_cores, \
     List, awd_lstm_lm_config
 from fastai.text.models.transformer import init_transformer
+from fastai.metrics import accuracy
 from sacred import Experiment
 from torch import Tensor
 from tqdm import tqdm
 from fastai.callbacks import SaveModelCallback
 
 from langmodels.config.datamodel import LMTrainingConfig, LstmArch, TransformerArch
+from langmodels.metrics import mrr
 from langmodels.training.callbacks.sacred import SacredCallback
 from langmodels.training.callbacks.tensorboard import TensorboardLogger
 
@@ -59,7 +61,7 @@ def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
 
 
 def train(prep_corpus: PreprocessedCorpus,
-          path_to_model: str, 
+          path_to_model: str,
           device: Optional[int],
           lm_training_config: LMTrainingConfig,
           path_to_pretrained_model: str = None,
@@ -88,7 +90,7 @@ def train(prep_corpus: PreprocessedCorpus,
     arch_class = lm_training_config.get_arch_class()
     learner = language_model_learner(databunched, arch_class,
                                      # drop_mult=lm_training_config.arch.drop.multiplier,
-                                     config=config, pretrained=not config)
+                                     config=config, pretrained=not config, metrics=[accuracy, mrr])
     if path_to_pretrained_model:
         full_path_to_pretrained_model = f'{path_to_pretrained_model}.pth'
         if os.path.exists(full_path_to_pretrained_model):

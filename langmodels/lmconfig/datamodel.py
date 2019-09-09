@@ -1,10 +1,16 @@
+import os
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Tuple, Union, Any, List, Dict
 
 from dataprep.api.corpus import PreprocessedCorpus
 from fastai.text import AWD_LSTM, Transformer, TransformerXL, Activation
 
+
 CONFIG_VERSION = '1.0.0'
+
+HOME = os.environ['HOME']
+
+PATH_TO_TRAINED_MODELS = os.environ['PATH_TO_TRAINED_MODELS'] if 'PATH_TO_TRAINED_MODELS' in os.environ else os.path.join(HOME, 'modelzoo')
 
 
 @dataclass(frozen=True)
@@ -24,10 +30,29 @@ class RegFn(object):
 
 
 @dataclass(frozen=True)
-class LearningRateCycle(object):
-    n: int
-    len: int
-    mult: int
+class TrainingSchedule(object):
+    pass
+
+
+@dataclass(frozen=True)
+class RafaelsTrainingSchedule(TrainingSchedule):
+    init_lr: float = 0.01
+    mult_coeff: float = 0.5
+    max_epochs: int = 50
+    max_lr_reduction_times: int = 6
+
+
+@dataclass(frozen=True)
+class EarlyStop(object):
+    patience: int = 3
+
+
+@dataclass(frozen=True)
+class CosineLRSchedule(TrainingSchedule):
+    max_lr: float = 1e-4
+    cyc_len: int = 5
+    max_epochs: int = 50
+    early_stop: EarlyStop = EarlyStop()
 
 
 @dataclass(frozen=True)
@@ -48,7 +73,7 @@ class PrepFunction(object):
 
     @property
     def apply(self) -> ParametrizedPrepCallable:
-        def prep_corpus(corpus: Corpus, **kwargs):
+        def prep_corpus(corpus: Corpus, **kwargs) -> PreprocessedCorpus:
             return self.callable(corpus.path, *self.params, **self.options, **kwargs,
                                  calc_vocab=True, extensions=corpus.extensions)
 
@@ -94,21 +119,25 @@ class TransformerArch(object):
 
 @dataclass(frozen=True)
 class TrainingProcedure(object):
-    base_lr: float
-    cycle: LearningRateCycle
+    schedule: RafaelsTrainingSchedule = RafaelsTrainingSchedule()
     weight_decay: float = 1e-6
-    early_stop: bool = True  ###
+
+
+@dataclass(frozen=True)
+class Gpu(object):
+    fallback_to_cpu: bool = False
+    non_default_device_to_use: Optional[int] = None
 
 
 @dataclass(frozen=True)
 class LMTrainingConfig(object):
     base_model: Optional[str]
+    bs: int
     corpus: Corpus
     prep_function: PrepFunction
     arch: Union[LstmArch, TransformerArch]
-    bs: int
     bptt: int
-    training_procedure: TrainingProcedure
+    training_procedure: TrainingProcedure = TrainingProcedure()
     config_version: str = CONFIG_VERSION
 
     def __post_init__(self):
@@ -124,3 +153,36 @@ class LMTrainingConfig(object):
             return Transformer
         else:
             raise ValueError(f"Unknown architecture: {self.arch}")
+
+
+class Run:
+    def __init__(self, config: LMTrainingConfig, gpu: Gpu):
+        self.config = config
+        self.gpu = gpu
+        self.id = self._generate_run_id()
+
+    @classmethod
+    def with_config(cls, config: LMTrainingConfig, gpu: Gpu = Gpu()):
+        return cls(config, gpu)
+
+    def _generate_run_id(self) -> str:
+        name_parts = []
+        if self.config.base_model:
+            name_parts.append(self.config.base_model)
+
+        dataset = os.path.basename(self.config.corpus.path)
+        prep_func_param = self.config.prep_function.params[0]
+        n_layers = self.config.arch.n_layers
+        n_hid = self.config.arch.n_hid
+
+        import datetime
+        time_now = datetime.datetime.now()
+        timestamp = f"{time_now:%y%m%d.%H%M%S}"
+
+        name_parts.append([dataset, str(prep_func_param), str(n_layers), str(n_hid), timestamp])
+
+        return "_-_".join(map(lambda p: "_".join(p), name_parts))
+
+    @property
+    def path_to_trained_model(self):
+        return os.path.join(PATH_TO_TRAINED_MODELS, self.id)

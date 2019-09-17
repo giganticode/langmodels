@@ -1,10 +1,10 @@
 import logging
 
 from fastai.basic_train import Learner
-from langmodels.retrying import retry
 from typing import Any
 
 from fastai.callbacks import SaveModelCallback
+from retrying import retry
 
 logger = logging.getLogger(__name__)
 

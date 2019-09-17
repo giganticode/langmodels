@@ -1,26 +1,39 @@
+import logging
 import os
 from concurrent.futures.process import ProcessPoolExecutor
 from pathlib import Path
 from pprint import pprint
-from typing import Optional, Dict, Any
 
-import jsons
+import dataprep.api.corpus as api
 import numpy as np
 import torch
 from dataprep.api.corpus import PreprocessedCorpus
+from fastai.basic_data import DataBunch
+from fastai.callbacks.mem import PeakMemMetric
+from fastai.callbacks.misc import StopAfterNBatches
+from fastai.callbacks.tracker import EarlyStoppingCallback
+from fastai.metrics import accuracy
 from fastai.text import Vocab, TextList, language_model_learner, PreProcessor, Collection, partition_by_cores, \
-    List, awd_lstm_lm_config
-from fastai.text.models.transformer import init_transformer
-from sacred import Experiment
+    List
+from fastai.train import fit_one_cycle, Learner
 from torch import Tensor
 from tqdm import tqdm
 
-from langmodels.config.datamodel import LMTrainingConfig, LstmArch, TransformerArch
-from langmodels.training.callbacks.sacred import SacredCallback
-from langmodels.training.callbacks.tensorboard import TensorboardLogger
+from langmodels.lmconfig.datamodel import LMTrainingConfig, Gpu, Run, PATH_TO_TRAINED_MODELS
+from langmodels.lmconfig.datamodel import RafaelsTrainingSchedule, CosineLRSchedule, TrainingProcedure
+from langmodels.lmconfig.serialization import dump_config
+from langmodels.metrics import mrr
+from langmodels.model import TrainedModel, create_custom_config
+from langmodels.retrier import RetryingSaveModelCalback
+from langmodels.training.schedule import ReduceLRCallback
+from langmodels.training.tracking.comet import log_to_comet
+
+logger = logging.getLogger(__name__)
 
 UNKNOWN_TOKEN_INDEX = 0
-PAD_TOKEN_INDEX = 1
+
+HOME = os.environ['HOME']
+PATH_TO_PREP_DATASETS = os.environ['PATH_TO_PREP_DATASETS'] if 'PATH_TO_PREP_DATASETS' in os.environ else os.path.join(HOME, 'prep-datasets')
 
 
 class Numericalizer(PreProcessor):
@@ -57,98 +70,141 @@ def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
     return Vocab(['`unk', '`pad'] + list(prep_corpus.load_vocab().keys()))
 
 
-def train(prep_corpus: PreprocessedCorpus,
-          path_to_model: str, device: Optional[int],
-          lm_training_config: LMTrainingConfig,
-          use_pretrained_model: bool = True,
-          sacred_exp: Optional[Experiment] = None):
-    vocab = create_vocab_for_lm(prep_corpus)
+def get_device(gpu: Gpu):
+    if torch.cuda.is_available():
+        return gpu.non_default_device_to_use or torch.cuda.current_device()
+    elif gpu.fallback_to_cpu:
+        return "cpu"
+    else:
+        raise EnvironmentError("Cuda not available")
 
+
+def add_callbacks(learner: Learner, tune: bool) -> None:
+
+    save_every_epoch_callback = RetryingSaveModelCalback(learner, every='epoch', name='epoch')
+    learner.callbacks.append(save_every_epoch_callback)
+    save_best_model_callback = RetryingSaveModelCalback(learner, every='improvement', name='best')
+    learner.callbacks.append(save_best_model_callback)
+
+    if tune:
+        logger.warning("Tune mode is ON!")
+        learner.callbacks.append(StopAfterNBatches(n_batches=2))
+
+
+def start_training(learner: Learner, training_procedure: TrainingProcedure) -> None:
+    schedule = training_procedure.schedule
+    if isinstance(schedule, RafaelsTrainingSchedule):
+        reduce_lr_callback = ReduceLRCallback(learner,
+                                              mult_coeff=schedule.mult_coeff,
+                                              max_times_lr_decrease=schedule.max_lr_reduction_times)
+        learner.callbacks.append(reduce_lr_callback)
+        learner.fit(epochs=schedule.max_epochs, lr=schedule.init_lr, wd=training_procedure.weight_decay)
+    elif isinstance(schedule, CosineLRSchedule):
+        if schedule.early_stop:
+            learner.callbacks.append(EarlyStoppingCallback(learner, patience=schedule.early_stop.patience))
+        fit_one_cycle(learner, cyc_len=schedule.cyc_len, tot_epochs=schedule.max_epochs,
+                      max_lr=schedule.max_lr,
+                      wd=training_procedure.weight_decay)
+    # not saving the model explicitly because it should have been saved by the callbacks
+
+
+def check_path_to_trained_model(path) -> None:
+    if not os.path.exists(path):
+        os.mkdir(path)
+    elif not os.access(path, os.W_OK | os.X_OK):
+        raise FileNotFoundError(path)
+
+
+def check_path_to_base_model(config: LMTrainingConfig) -> None:
+    if config.base_model:
+        path_to_best_model = os.path.join(config.base_model, 'best.pth')
+        if not os.path.exists(path_to_best_model):
+            raise FileNotFoundError(path_to_best_model)
+
+
+def create_databunch(prep_corpus: PreprocessedCorpus, vocab: Vocab, config: LMTrainingConfig, device: str) -> DataBunch:
     print(f'Getting preprocessed corpus from {prep_corpus.path_to_prep_dataset}')
     file_path_list = [Path(os.fsdecode(p)) for p in prep_corpus.get_file_iterator()]
     text_list = TextList(file_path_list, path=prep_corpus.path_to_prep_dataset, processor=Numericalizer(vocab))
 
     print("Splitting into training/validation sets")
-    split_list = text_list.split_by_rand_pct()
+    split_list = text_list.split_by_folder()
 
     print("Labeling for langmodeling")
     labelled_list = split_list.label_for_lm()
 
     print("Creating databunches")
-    databunched = labelled_list.databunch(
-        bs=lm_training_config.bs,
-        bptt=lm_training_config.bptt,
-        device=device)
+    databunched = labelled_list.databunch(bs=config.bs, bptt=config.bptt, device=device)
+    return databunched
 
-    check_data(databunched, vocab)
 
-    config = create_custom_config(lm_training_config)
-    arch_class = lm_training_config.get_arch_class()
-    learner = language_model_learner(databunched, arch_class,
-                                     # drop_mult=lm_training_config.arch.drop.multiplier,
-                                     config=config, pretrained=not config)
-    if use_pretrained_model and os.path.exists(f'{path_to_model}.pth'):
-        print(f"Using pretrained model: {path_to_model}.pth")
-        learner.load(path_to_model, device=device)
+def load_base_model_if_needed(learner: Learner, lm_training_config: LMTrainingConfig, device, model_file='best') -> None:
+    if lm_training_config.base_model:
+        model = os.path.join(lm_training_config.base_model, model_file)
+        print(f"Using pretrained model: {model}.pth")
+        # not setting purge to True raises a pickle serialization error
+        learner.load(model, device=device, purge=False)
     else:
         print("Training form scratch")
 
-    if sacred_exp:
-        exp_name = sacred_exp.get_experiment_info()['name']
-        tb_callback = TensorboardLogger(learner, f'{exp_name}', jsons.dumps(lm_training_config), del_existing=False)
 
-        sacred_callback = SacredCallback(sacred_exp, ["validation_loss"] + [m.__name__ for m in learner.metrics])
-
-        learner.callbacks.extend([tb_callback, sacred_callback])
-
-    learner.fit(epochs=lm_training_config.training_procedure.cycle.n,
-                lr=lm_training_config.training_procedure.base_lr,
-                wd=lm_training_config.training_procedure.weight_decay)
-    learner.save(path_to_model)
+VOCAB_FILE_NAME = 'vocab'
+CONFIG_FILE_NAME = 'config'
 
 
-def check_data(databunched, vocab):
+def save_experiment_input(learner: Learner, run: Run, vocab: Vocab, comet: bool):
+    vocab.save(os.path.join(run.path_to_trained_model, VOCAB_FILE_NAME))
+    dump_config(run.config, os.path.join(run.path_to_trained_model, CONFIG_FILE_NAME))
+    if comet:
+        log_to_comet(run.id, run.config, learner, vocab)
+
+
+def train(lm_training_config: LMTrainingConfig,
+          gpu: Gpu(),
+          tune=False, comet=True) -> TrainedModel:
+
+    run = Run.with_config(lm_training_config, gpu=gpu)
+
+    check_path_to_base_model(lm_training_config)
+    check_path_to_trained_model(run.path_to_trained_model)
+
+    prep_corpus: api.PreprocessedCorpus = lm_training_config.prep_function.apply(lm_training_config.corpus,
+                                                                                 output_path=PATH_TO_PREP_DATASETS)
+    vocab = create_vocab_for_lm(prep_corpus)
+
+
+    device = get_device(gpu)
+    databunch = create_databunch(prep_corpus, vocab, lm_training_config, device)
+
+    check_data(databunch, vocab)
+
+    config = create_custom_config(lm_training_config)
+    arch_class = lm_training_config.get_arch_class()
+    learner = language_model_learner(databunch, arch_class,
+                                     # drop_mult=lm_training_config.arch.drop.multiplier,
+                                     config=config, pretrained=not config, metrics=[accuracy, mrr],
+                                     callback_fns=[PeakMemMetric] if torch.cuda.is_available() else [],
+                                     path=PATH_TO_TRAINED_MODELS, model_dir=run.id)
+
+    save_experiment_input(learner, run, vocab, comet=comet)
+
+    add_callbacks(learner, tune=tune)
+
+    load_base_model_if_needed(learner, lm_training_config, device)
+
+    print(f"Starting training... Model will be saved to {run.path_to_trained_model}")
+    start_training(learner, lm_training_config.training_procedure)
+
+    # learner.export('learner.pkl')
+    # return load_learner(os.path.join(PATH_TO_TRAINED_MODELS, run.id), 'learner.pkl')
+    return TrainedModel.from_path(run.path_to_trained_model, force_use_cpu=True)
+    # return learner
+
+def check_data(databunched: DataBunch, vocab: Vocab) -> None:
     first_batch = databunched.one_batch()[0]
-    if not contains_no_value(first_batch, UNKNOWN_TOKEN_INDEX):
-        raise ValueError(f"Unknown is found in tensor: {first_batch}")
+
+#    if not contains_no_value(first_batch, UNKNOWN_TOKEN_INDEX):
+#        raise ValueError(f"Unknown is found in tensor: {first_batch}")
     print(f'Displaying the first batch:\n{first_batch}')
     token_seqs = [vocab.textify(seq) for seq in first_batch]
     pprint(token_seqs)
-
-
-def create_custom_lstm_config(arch: LstmArch):
-    config = awd_lstm_lm_config
-    config['emb_sz'] = arch.emb_sz
-    config['n_hid'] = arch.n_hid
-    config['n_layers'] = arch.n_layers
-    config['pad_token'] = PAD_TOKEN_INDEX
-    config['qrnn'] = arch.qrnn
-    config['bidir'] = arch.bidir
-    config['output_p'] = arch.drop.out
-    config['hidden_p'] = arch.drop.outh
-    config['input_p'] = arch.drop.outi
-    config['embed_p'] = arch.drop.oute
-    config['weight_p'] = arch.drop.w
-    config['tie_weights'] = arch.tie_weights
-    config['out_bias'] = arch.out_bias
-    return config
-
-
-def create_custom_transformer_config(arch: TransformerArch) -> Dict[str, Any]:
-    d = arch.__dict__
-    d['init'] = init_transformer
-    return d
-
-
-def create_custom_config(lm_training_config: LMTrainingConfig):
-    arch = lm_training_config.arch
-    if isinstance(arch, LstmArch):
-        return create_custom_lstm_config(arch)
-    elif isinstance(arch, TransformerArch):
-        return create_custom_transformer_config(arch)
-    else:
-        raise ValueError(f"Unknown architecture: {arch}")
-
-
-def encode_config(s: str) -> str:
-    return s

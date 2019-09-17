@@ -3,7 +3,7 @@ from typing import Optional, Dict, Type
 
 import jsons
 
-from langmodels.config.datamodel import PrepFunction, LMTrainingConfig
+from langmodels.lmconfig.datamodel import PrepFunction, LMTrainingConfig
 
 
 def prep_function_serializer(prep_function: PrepFunction, **kwargs):
@@ -44,4 +44,6 @@ def load_config_from_string(s: str) -> LMTrainingConfig:
 
 
 def load_config_from_file(file: str) -> LMTrainingConfig:
-    return jsons.load(file, LMTrainingConfig)
+    with open(file, 'r') as f:
+        s = f.read().replace('\n', '')
+    return load_config_from_string(s)

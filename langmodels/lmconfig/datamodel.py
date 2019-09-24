@@ -36,7 +36,7 @@ class TrainingSchedule(object):
 
 @dataclass(frozen=True)
 class RafaelsTrainingSchedule(TrainingSchedule):
-    init_lr: float = 0.01
+    init_lr: float
     mult_coeff: float = 0.5
     max_epochs: int = 50
     max_lr_reduction_times: int = 6
@@ -49,9 +49,9 @@ class EarlyStop(object):
 
 @dataclass(frozen=True)
 class CosineLRSchedule(TrainingSchedule):
-    max_lr: float = 1e-4
-    cyc_len: int = 5
-    max_epochs: int = 50
+    max_lr: float
+    cyc_len: int
+    max_epochs: int
     early_stop: EarlyStop = EarlyStop()
 
 
@@ -119,7 +119,7 @@ class TransformerArch(object):
 
 @dataclass(frozen=True)
 class TrainingProcedure(object):
-    schedule: RafaelsTrainingSchedule = RafaelsTrainingSchedule()
+    schedule: Union[CosineLRSchedule, RafaelsTrainingSchedule]
     weight_decay: float = 1e-6
 
 
@@ -137,7 +137,7 @@ class LMTrainingConfig(object):
     prep_function: PrepFunction
     arch: Union[LstmArch, TransformerArch]
     bptt: int
-    training_procedure: TrainingProcedure = TrainingProcedure()
+    training_procedure: TrainingProcedure
     config_version: str = CONFIG_VERSION
 
     def __post_init__(self):

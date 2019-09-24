@@ -17,6 +17,6 @@ lm_training_config = LMTrainingConfig(base_model=None,
                                                                   }),
                                       arch=LstmArch(n_layers=1, emb_sz=512, n_hid=512),
                                       bs=64, bptt=200, training_procedure=TrainingProcedure(
-        RafaelsTrainingSchedule(max_epochs=1)
+        CosineLRSchedule(max_epochs=30, cyc_len=3, max_lr=1e-4)
     )
                                       )

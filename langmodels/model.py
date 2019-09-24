@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 MODEL_ZOO_PATH_ENV_VAR = 'MODEL_ZOO_PATH'
 
 DEFAULT_MODEL_NAME = 'langmodel-small-split_10k_1_512_190906.154943'
+RANDOM_MODEL_NAME = 'dev_10k_1_10_190923.132328'
 
 PAD_TOKEN_INDEX = 1
 
@@ -100,7 +101,7 @@ class TrainedModel(object):
         self.model, self.vocab = self._load_model(path, term_vocab)
         to_test_mode(self.model)
 
-        # last_predicted_token_tensor is a rank to tensor!
+        # last_predicted_token_tensor is a rank-2 tensor!
         self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])], device=get_device())
         self.beam_size = DEFAULT_BEAM_SIZE
 
@@ -141,7 +142,15 @@ class TrainedModel(object):
 
     @classmethod
     def get_default_model(cls, force_use_cpu: bool = False) -> 'TrainedModel':
-        path = os.path.join(MODEL_ZOO_PATH, DEFAULT_MODEL_NAME)
+        return TrainedModel.load_model_by_name(DEFAULT_MODEL_NAME, force_use_cpu)
+
+    @classmethod
+    def get_random_model(cls, force_use_cpu: bool = False) -> 'TrainedModel':
+        return TrainedModel.load_model_by_name(RANDOM_MODEL_NAME, force_use_cpu)
+
+    @classmethod
+    def load_model_by_name(cls, name: str, force_use_cpu: bool = False) -> 'TrainedModel':
+        path = os.path.join(MODEL_ZOO_PATH, name)
         if not os.path.exists(path):
             raise FileNotFoundError(f'The path does not exist: {path}. ' 
                                     f'Did you set {MODEL_ZOO_PATH_ENV_VAR} env var correctly? '
@@ -168,14 +177,14 @@ class TrainedModel(object):
         '''
         prep_text, metadata = self.prep_text(input, return_metadata=True, force_reinit_bpe_data=False, extension=extension)
 
-        numericalized_input = torch.tensor([[self.vocab.numericalize(prep_text)]]).transpose(0,2)
+        numericalized_prep_text = torch.tensor([[self.vocab.numericalize(prep_text)]]).transpose(0, 2)
 
         losses: List[float] = []
-        for num_token in numericalized_input:
+        for numericalized_token in numericalized_prep_text:
             # TODO this loop can be avoided! Rnn returns all the hidden states!
-            last_layer = get_last_layer_activations(self.model, self.last_predicted_tokens)
-            loss = F.cross_entropy(last_layer, num_token).item()
-            self.last_predicted_tokens = num_token
+            last_layer = get_last_layer_activations(self.model, self.last_predicted_token_tensor)
+            loss = F.cross_entropy(last_layer, numericalized_token.squeeze(dim=0)).item()
+            self.last_predicted_token_tensor = numericalized_token
             losses.append(loss)
         return prep_text, losses, metadata.word_boundaries
 

@@ -1,4 +1,5 @@
 import logging
+import os
 
 import argparse
 from typing import List, Tuple, Callable, Union
@@ -17,9 +18,10 @@ def get_entropy_for_each_line(trained_model: TrainedModel,
                               verbose: bool = False) -> List[float]:
     prep_lines_and_entropies: List[Tuple[List[str], List[float], float]] = []
     with open(file, 'r') as f:
+        _, extension = os.path.splitext(file)
         for line in f:
             time_measurer.tick("Inference")
-            prep_line, entropies, word_boundaries = trained_model.get_entropies_for_text(line)
+            prep_line, entropies, word_boundaries = trained_model.get_entropies_for_text(line, extension)
             time_measurer.tock("Inference")
             line_entropy = entropy_aggregator(entropies, word_boundaries)
             prep_lines_and_entropies.append((line, prep_line, entropies, line_entropy))

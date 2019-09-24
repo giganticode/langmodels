@@ -162,11 +162,11 @@ class TrainedModel(object):
         _ = get_last_layer_activations(self.model, context_tensor[:,:-1])
         self.last_predicted_token_tensor = context_tensor[:,-1:]
 
-    def get_entropies_for_text(self, input: str) -> Tuple[List[str], List[float], List[int]]:
+    def get_entropies_for_text(self, input: str, extension: str) -> Tuple[List[str], List[float], List[int]]:
         '''
         changes hidden states of the model!!
         '''
-        prep_text, metadata = self.prep_text(input, return_metadata=True, force_reinit_bpe_data=False)
+        prep_text, metadata = self.prep_text(input, return_metadata=True, force_reinit_bpe_data=False, extension=extension)
 
         numericalized_input = torch.tensor([[self.vocab.numericalize(prep_text)]]).transpose(0,2)
 

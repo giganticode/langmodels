@@ -30,7 +30,7 @@ def get_entropy_for_each_line(trained_model: TrainedModel,
                 'entropies': entropies,
                 'line_entropy': line_entropy
             })
-        if not verbose:
+        if verbose:
             for line in prep_lines_and_entropies:
                 print(line['text'])
                 print(line['line_entropy'])

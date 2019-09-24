@@ -18,10 +18,10 @@ def get_entropy_for_each_line(trained_model: TrainedModel,
                               verbose: bool = False) -> List[float]:
     prep_lines_and_entropies: List[Tuple[List[str], List[float], float]] = []
     with open(file, 'r') as f:
-        _, extension = os.path.splitext(file)[1:]
+        _, extension = os.path.splitext(file)
         for line in f:
             time_measurer.tick("Preprocessing")
-            prep_line, metadata = trained_model.prep_text(line, return_metadata=True, force_reinit_bpe_data=False, extension=extension)
+            prep_line, metadata = trained_model.prep_text(line, return_metadata=True, force_reinit_bpe_data=False, extension=extension[1:])
             time_measurer.tock("Preprocessing")
             time_measurer.tick("Inference")
             entropies = trained_model.get_entropies_for_next(prep_line)

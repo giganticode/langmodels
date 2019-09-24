@@ -50,12 +50,13 @@ optional arguments:
 
 ### Python API
 
+```python
 from langmodels.model import TrainedModel
-from lamgmodels.entropies import get_entropy_for_each_line, word_average
+from langmodels.inference.entropies import get_entropy_for_each_line, word_average
 
 trained_model = TrainedModel.get_default_model()
 entropies = get_entropy_for_each_line(trained_model, '/path/to/file', entropy_aggregator=word_average)
-
+```
 
 # Autocompletion (Python API)
 

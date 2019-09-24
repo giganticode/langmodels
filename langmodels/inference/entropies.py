@@ -18,7 +18,7 @@ def get_entropy_for_each_line(trained_model: TrainedModel,
                               verbose: bool = False) -> Union[List[float], List[List[float]]]:
     prep_lines_and_entropies: List[Dict[str, Union[str, List[str], List[float], float]]] = []
     with open(file, 'r') as f:
-        _, extension = os.path.splitext(file)
+        _, extension = os.path.splitext(file)[1:]
         for line in f:
             time_measurer.tick("Inference")
             prep_line, entropies, word_boundaries = trained_model.get_entropies_for_text(line, extension[1:])

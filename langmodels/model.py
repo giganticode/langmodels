@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 
 MODEL_ZOO_PATH_ENV_VAR = 'MODEL_ZOO_PATH'
 
-DEFAULT_MODEL_NAME = 'langmodel-small-split_10k_1_512_190906.154943'
 RANDOM_MODEL_NAME = 'dev_10k_1_10_190923.132328'
+TINY_MODEL_NAME = 'langmodel-small-split_10k_1_512_190906.154943'
+SMALL_MODEL_NAME = 'langmodel-medium-split_10k_1_512_190924.154542_-_langmodel-medium-split_10k_1_512_190925.141033'
 
 PAD_TOKEN_INDEX = 1
 
@@ -142,11 +143,19 @@ class TrainedModel(object):
 
     @classmethod
     def get_default_model(cls, force_use_cpu: bool = False) -> 'TrainedModel':
-        return TrainedModel.load_model_by_name(DEFAULT_MODEL_NAME, force_use_cpu)
+        return TrainedModel.get_small_model(force_use_cpu)
 
     @classmethod
     def get_random_model(cls, force_use_cpu: bool = False) -> 'TrainedModel':
         return TrainedModel.load_model_by_name(RANDOM_MODEL_NAME, force_use_cpu)
+
+    @classmethod
+    def get_tiny_model(cls, force_use_cpu: bool = False) -> 'TrainedModel':
+        return TrainedModel.load_model_by_name(TINY_MODEL_NAME, force_use_cpu)
+
+    @classmethod
+    def get_small_model(cls, force_use_cpu: bool = False) -> 'TrainedModel':
+        return TrainedModel.load_model_by_name(SMALL_MODEL_NAME, force_use_cpu)
 
     @classmethod
     def load_model_by_name(cls, name: str, force_use_cpu: bool = False) -> 'TrainedModel':

@@ -137,7 +137,7 @@ class LMTrainingConfig(object):
     prep_function: PrepFunction
     arch: Union[LstmArch, TransformerArch]
     bptt: int
-    training_procedure: TrainingProcedure = TrainingProcedure()
+    training_procedure: TrainingProcedure
     config_version: str = CONFIG_VERSION
 
     def __post_init__(self):

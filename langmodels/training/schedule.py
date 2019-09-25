@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class ReduceLRCallback(TrackerCallback):
-    def __init__(self, learn: Learner, mult_coeff: float, max_times_lr_decrease: int, monitor: str = 'val_loss',
+    def __init__(self, learn: Learner, mult_coeff: float, max_times_lr_decrease: int, monitor: str = 'valid_loss',
                  mode: str = 'auto'):
         super().__init__(learn, monitor, mode)
         self.mult_coeff = mult_coeff

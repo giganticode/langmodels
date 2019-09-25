@@ -70,9 +70,10 @@ def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
     return Vocab(['`unk', '`pad'] + list(prep_corpus.load_vocab().keys()))
 
 
-def get_device(gpu: Gpu):
+def get_device(gpu: Gpu) -> str:
     if torch.cuda.is_available():
-        return gpu.non_default_device_to_use or torch.cuda.current_device()
+        device_id = gpu.non_default_device_to_use or torch.cuda.current_device()
+        torch.device('cuda', device_id)
     elif gpu.fallback_to_cpu:
         return "cpu"
     else:
@@ -138,12 +139,12 @@ def create_databunch(prep_corpus: PreprocessedCorpus, vocab: Vocab, config: LMTr
     return databunched
 
 
-def load_base_model_if_needed(learner: Learner, lm_training_config: LMTrainingConfig, device, model_file='best') -> None:
+def load_base_model_if_needed(learner: Learner, lm_training_config: LMTrainingConfig, model_file='best') -> None:
     if lm_training_config.base_model:
         model = os.path.join(lm_training_config.base_model, model_file)
         print(f"Using pretrained model: {model}.pth")
         # not setting purge to True raises a pickle serialization error
-        learner.load(model, device=device, purge=False)
+        learner.load(model, purge=False)
     else:
         print("Training form scratch")
 
@@ -190,7 +191,7 @@ def train(lm_training_config: LMTrainingConfig,
 
     add_callbacks(learner, tune=tune)
 
-    load_base_model_if_needed(learner, lm_training_config, device)
+    load_base_model_if_needed(learner, lm_training_config)
 
     print(f"Starting training... Model will be saved to {run.path_to_trained_model}")
     start_training(learner, lm_training_config.training_procedure)

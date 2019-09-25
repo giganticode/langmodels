@@ -1,23 +1,28 @@
 import logging
 import os
-from typing import List, Generator, Dict, Any
+from math import exp
+from typing import List, Dict, Any, Tuple, Optional
 
 import torch
 from dataprep.api.corpus import PreprocessedCorpus
 from dataprep.parse.model.placeholders import placeholders
-from fastai.text import AWD_LSTM, SequentialRNN, get_language_model, F, Vocab, awd_lstm_lm_config
+from fastai.text import AWD_LSTM, SequentialRNN, get_language_model, F, Vocab, awd_lstm_lm_config, convert_weights
 from fastai.text.models.transformer import init_transformer
 from torch import cuda
 
+from langmodels.beamsearch import beam_search
 from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig
 from langmodels.lmconfig.serialization import load_config_from_file
 from langmodels.migration import pth_to_torch
+from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
+from langmodels.gpuutil import get_device
 
 logger = logging.getLogger(__name__)
 
 MODEL_ZOO_PATH_ENV_VAR = 'MODEL_ZOO_PATH'
 
 DEFAULT_MODEL_NAME = 'langmodel-small-split_10k_1_512_190906.154943'
+RANDOM_MODEL_NAME = 'dev_10k_1_10_190923.132328'
 
 PAD_TOKEN_INDEX = 1
 
@@ -51,6 +56,7 @@ def create_custom_transformer_config(arch: TransformerArch) -> Dict[str, Any]:
     d['init'] = init_transformer
     return d
 
+
 def create_custom_config(lm_training_config: LMTrainingConfig):
     arch = lm_training_config.arch
     if isinstance(arch, LstmArch):
@@ -61,28 +67,53 @@ def create_custom_config(lm_training_config: LMTrainingConfig):
         raise ValueError(f"Unknown architecture: {arch}")
 
 
-def get_device(force_use_cpu: bool) -> int:
-    return cuda.current_device() if cuda.is_available() and not force_use_cpu else -1
+def _create_term_vocab(vocab: Vocab) -> Tuple[Vocab, int]:
+    terminal_token_indices = {i for i, k in enumerate(vocab.itos) if k.endswith(placeholders['compound_word_end'])}
+    term_vocab_list = [vocab.itos[i] for i in terminal_token_indices]
+    non_term_vocab_list = [vocab.itos[i] for i in range(len(vocab.itos)) if i not in terminal_token_indices]
+    term_vocab = Vocab(term_vocab_list + non_term_vocab_list)
+    return term_vocab, len(term_vocab_list)
+
+
+def _check_is_term_vocab(vocab: Vocab, first_non_term: int) -> None:
+    for token in vocab.itos[:first_non_term]:
+        if not token.endswith(placeholders['compound_word_end']):
+            raise ValueError(f"First non-terminal token in vocab has index {first_non_term}, "
+                             f"hovewer there's a non-terminal token {token} "
+                             f"that has index {vocab.itos.index(token)}")
+    for token in vocab.itos[first_non_term:]:
+        if token.endswith(placeholders['compound_word_end']):
+            raise ValueError(f"Starting from index {first_non_term} there should bb only non-term "
+                             f"tokens in the vocab, hovewer there's a terminal token {token} "
+                             f"that has index {vocab.itos.index(token)}")
+
+
+DEFAULT_BEAM_SIZE = 500
 
 
 class TrainedModel(object):
-    STARTING_TOKENS = [placeholders['ect']]
+    STARTING_TOKEN = placeholders['ect']
 
     def __init__(self, path: str, force_use_cpu: bool = False):
         self.force_use_cpu = force_use_cpu
-        self.vocab = Vocab.load(os.path.join(path, 'vocab'))
-        self.model = self._load_model(path)
-        self._to_test_mode()
-        self.last_predicted_tokens = torch.tensor([self.vocab.numericalize(self.STARTING_TOKENS)])
+        self.original_vocab = Vocab.load(os.path.join(path, 'vocab'))
+        term_vocab, self.first_nonterm_token = _create_term_vocab(self.original_vocab)
+        self.model, self.vocab = self._load_model(path, term_vocab)
+        to_test_mode(self.model)
 
-    def _load_model(self, path: str) -> SequentialRNN:
+        # last_predicted_token_tensor is a rank-2 tensor!
+        self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])], device=get_device())
+        self.beam_size = DEFAULT_BEAM_SIZE
+
+    def _load_model(self, path: str, custom_vocab: Optional[Vocab] = None) -> Tuple[SequentialRNN, Vocab]:
         path_to_model = os.path.join(path, 'best.pth')
         logger.debug(f"Loading model from: {path_to_model} ...")
 
         config = load_config_from_file(os.path.join(path, 'config'))
         self._prep_function = config.prep_function
 
-        model = get_language_model(AWD_LSTM, len(self.vocab.itos), create_custom_lstm_config(config.arch))
+        vocab = custom_vocab if custom_vocab else self.original_vocab
+        model = get_language_model(AWD_LSTM, len(vocab.itos), create_custom_lstm_config(config.arch))
         if self.force_use_cpu:
             map_location = lambda storage, loc: storage
             logger.debug("Using CPU for inference")
@@ -98,17 +129,12 @@ class TrainedModel(object):
 
         # a more simple solution is to use fastai's load_learner,
         # however it doesn't seem to work out of the box wiht customizations we've done
-        model.load_state_dict(pth_to_torch(state_dict), strict=True)
+        weights = pth_to_torch(state_dict)
+        if custom_vocab:
+            weights = convert_weights(weights, self.original_vocab.stoi, custom_vocab.itos)
+        model.load_state_dict(weights, strict=True)
 
-        return model
-
-    def _to_test_mode(self):
-        # Set batch size to 1
-        self.model[0].bs = 1
-        # Turn off dropout
-        self.model.eval()
-        # Reset hidden state
-        self.model.reset()
+        return model, vocab
 
     @classmethod
     def from_path(cls, path: str, force_use_cpu: bool = False) -> 'TrainedModel':
@@ -116,7 +142,15 @@ class TrainedModel(object):
 
     @classmethod
     def get_default_model(cls, force_use_cpu: bool = False) -> 'TrainedModel':
-        path = os.path.join(MODEL_ZOO_PATH, DEFAULT_MODEL_NAME)
+        return TrainedModel.load_model_by_name(DEFAULT_MODEL_NAME, force_use_cpu)
+
+    @classmethod
+    def get_random_model(cls, force_use_cpu: bool = False) -> 'TrainedModel':
+        return TrainedModel.load_model_by_name(RANDOM_MODEL_NAME, force_use_cpu)
+
+    @classmethod
+    def load_model_by_name(cls, name: str, force_use_cpu: bool = False) -> 'TrainedModel':
+        path = os.path.join(MODEL_ZOO_PATH, name)
         if not os.path.exists(path):
             raise FileNotFoundError(f'The path does not exist: {path}. ' 
                                     f'Did you set {MODEL_ZOO_PATH_ENV_VAR} env var correctly? '
@@ -131,29 +165,46 @@ class TrainedModel(object):
         text_callable = getattr(text_api, self._prep_function.callable.__name__)
         return text_callable(text, *self._prep_function.params, **self._prep_function.options, **kwargs)
 
-    def predict_next(self, how_many: int = 1) -> Generator[str, None, None]:
-        for i in range(how_many):
-            res, *_ = self.model(self.last_predicted_tokens)
-            n = torch.multinomial(res[-1].exp(), 1)
-            yield self.vocab.itos[n[0]]
-            self.last_predicted_tokens = n[0].unsqueeze(0)
+    def feed_text(self, text: str) -> None:
+        prep_text, metadata = self.prep_text(text, return_metadata=True, force_reinit_bpe_data=False)
+        context_tensor = torch.tensor([self.vocab.numericalize(prep_text)], device=get_device())
+        _ = get_last_layer_activations(self.model, context_tensor[:,:-1])
+        self.last_predicted_token_tensor = context_tensor[:,-1:]
 
-    def get_entropies_for_next(self, input: List[str]) -> List[float]:
-        numericalized_input = torch.tensor([self.vocab.numericalize(input)]).t()
-        assert len(numericalized_input.size()) == 2
+    def get_entropies_for_text(self, input: str, extension: str) -> Tuple[List[str], List[float], List[int]]:
+        '''
+        changes hidden states of the model!!
+        '''
+        prep_text, metadata = self.prep_text(input, return_metadata=True, force_reinit_bpe_data=False, extension=extension)
+
+        numericalized_prep_text = torch.tensor([[self.vocab.numericalize(prep_text)]]).transpose(0, 2)
+
         losses: List[float] = []
-        for _, num_token in zip(input, numericalized_input):
-            res, *_ = self.model(self.last_predicted_tokens)
-            last_layer = res[-1]
-            loss = F.cross_entropy(last_layer, num_token).item()
-            self.last_predicted_tokens = num_token.unsqueeze(0)
+        for numericalized_token in numericalized_prep_text:
+            # TODO this loop can be avoided! Rnn returns all the hidden states!
+            last_layer = get_last_layer_activations(self.model, self.last_predicted_token_tensor)
+            loss = F.cross_entropy(last_layer, numericalized_token.squeeze(dim=0)).item()
+            self.last_predicted_token_tensor = numericalized_token
             losses.append(loss)
-        return losses
+        return prep_text, losses, metadata.word_boundaries
 
-    # TODO
-    # def predict_next_full_token(self):
-    #     pass
-    #
-    # def test(self, corpus: Corpus):
-    #     prep_corpus = self.prep_corpus(corpus)
+    def reset(self) -> None:
+        self.model.reset()
+        self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
+                                                        device=get_device())
 
+    def predict_next_full_token(self, n_suggestions: int) -> List[Tuple[str, float]]:
+        subtokens, scores = beam_search(self.model, self.last_predicted_token_tensor[0], self.first_nonterm_token, n_suggestions, self.beam_size)
+        return [(self._to_full_token_string(st), 1 / exp(score.item())) for st, score in zip(subtokens, scores)]
+
+    def _to_full_token_string(self, subtokens_num: torch.LongTensor, include_debug_tokens=False) -> str:
+        try:
+            subtokens_num = subtokens_num[:subtokens_num.tolist().index(TORCH_LONG_MIN_VAL)]
+        except ValueError: pass
+
+        sep = '|' if include_debug_tokens else ''
+        textified = self.vocab.textify(subtokens_num, sep=sep)
+        cwe = placeholders['compound_word_end']
+        if not textified.endswith(cwe):
+            raise ValueError(f'{textified} ({subtokens_num}) is not a full token')
+        return textified if include_debug_tokens else textified[:-len(cwe)]

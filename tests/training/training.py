@@ -1,20 +1,14 @@
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import torch
 from fastai.text import Vocab, TextList
-from typing import List
 
 from langmodels.training.training import Numericalizer, contains_no_value
 import numpy as np
 
-
-def file_mock_with_lines(lines: List[str]):
-    file_mock = MagicMock(spec=['__enter__', '__exit__'])
-    handle1 = file_mock.__enter__.return_value
-    handle1.__iter__.return_value = iter(map(lambda l: l + '\n', lines))
-    return file_mock
+from tests.util import file_mock_with_lines
 
 
 def all_trues(bools):

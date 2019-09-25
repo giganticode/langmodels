@@ -1,22 +1,21 @@
 import logging
-
-from fastai.basic_train import Learner
 from typing import Any, Dict
 
+from fastai.basic_train import Learner
 from fastai.callbacks import TrackerCallback
-
 
 logger = logging.getLogger(__name__)
 
 
 class ReduceLRCallback(TrackerCallback):
-    def __init__(self, learn: Learner, mult_coeff: float, max_times_lr_decrease: int, monitor: str = 'val_loss', mode: str = 'auto'):
+    def __init__(self, learn: Learner, mult_coeff: float, max_times_lr_decrease: int, monitor: str = 'valid_loss',
+                 mode: str = 'auto'):
         super().__init__(learn, monitor, mode)
         self.mult_coeff = mult_coeff
         self.lr_decreased_times = 0
         self.max_lr_decrease_times = max_times_lr_decrease
 
-    def on_epoch_end(self, epoch:int, **kwargs: Any) -> Dict:
+    def on_epoch_end(self, epoch: int, **kwargs: Any) -> Dict:
         current = self.get_monitor_value()
         if current is not None and self.operator(current, self.best):
             self.best = current

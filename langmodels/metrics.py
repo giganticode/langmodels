@@ -1,6 +1,7 @@
 import torch
 from torch import Tensor
 
+
 def _find_sorted_array_position(tensor: Tensor, values_tensor: Tensor) -> Tensor:
     dim0, dim1, dim2 = tensor.shape
     expanded_values_tensor = values_tensor.resize_((dim0, dim1, 1)).expand(dim0, dim1, dim2)

@@ -1,16 +1,16 @@
 import logging
 
 from fastai.basic_train import Learner
-from retrying import retry
 from typing import Any
 
 from fastai.callbacks import SaveModelCallback
+from retrying import retry
 
 logger = logging.getLogger(__name__)
 
 
 class RetryingSaveModelCalback(SaveModelCallback):
-    def __init__(self, learn: Learner, monitor: str = 'val_loss', mode: str = 'auto', every: str = 'improvement',
+    def __init__(self, learn: Learner, monitor: str = 'valid_loss', mode: str = 'auto', every: str = 'improvement',
                  name: str = 'bestmodel'):
         super().__init__(learn, monitor, mode, every, name)
 

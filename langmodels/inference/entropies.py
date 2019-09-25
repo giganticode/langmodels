@@ -2,7 +2,7 @@ import logging
 import os
 
 import argparse
-from typing import List, Tuple, Callable, Union
+from typing import List, Tuple, Callable, Union, Dict
 
 from langmodels.model import TrainedModel
 from langmodels.profiling import TimeMeasurer
@@ -15,26 +15,28 @@ time_measurer = TimeMeasurer()
 def get_entropy_for_each_line(trained_model: TrainedModel,
                               file: str,
                               entropy_aggregator: Callable[[List[float], List[int]], Union[float, List[float]]],
-                              verbose: bool = False) -> List[float]:
-    prep_lines_and_entropies: List[Tuple[List[str], List[float], float]] = []
+                              verbose: bool = False) -> Union[List[float], List[List[float]]]:
+    prep_lines_and_entropies: List[Dict[str, Union[str, List[str], List[float], float]]] = []
     with open(file, 'r') as f:
         _, extension = os.path.splitext(file)
         for line in f:
-            time_measurer.tick("Preprocessing")
-            prep_line, metadata = trained_model.prep_text(line, return_metadata=True, force_reinit_bpe_data=False, extension=extension[1:])
-            time_measurer.tock("Preprocessing")
             time_measurer.tick("Inference")
-            entropies = trained_model.get_entropies_for_next(prep_line)
+            prep_line, entropies, word_boundaries = trained_model.get_entropies_for_text(line, extension[1:])
             time_measurer.tock("Inference")
-            line_entropy = entropy_aggregator(entropies, metadata.word_boundaries)
-            prep_lines_and_entropies.append((line, prep_line, entropies, line_entropy))
+            line_entropy = entropy_aggregator(entropies, word_boundaries)
+            prep_lines_and_entropies.append({
+                'text': line,
+                'prep_text': prep_line,
+                'entropies': entropies,
+                'line_entropy': line_entropy
+            })
         if verbose:
-            for line, prep_line, entropies, line_entropy in prep_lines_and_entropies:
-                print(line_entropy)
-                print(line)
-                print(f'{[(prep_token, token_entropy) for prep_token, token_entropy in zip(prep_line, entropies)]}')
+            for line in prep_lines_and_entropies:
+                print(line['text'])
+                print(line['line_entropy'])
+                print(f"{[(prep_token, token_entropy) for prep_token, token_entropy in zip(line['prep_text'], line['entropies'])]}")
                 print("=============")
-    return list(zip(*prep_lines_and_entropies))[2]
+    return list(map(lambda e: e['line_entropy'], prep_lines_and_entropies))
 
 
 def subword_average(subword_entropies: List[float], word_boundaries: List[int]) -> float:

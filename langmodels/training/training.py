@@ -70,16 +70,17 @@ def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
     return Vocab(['`unk', '`pad'] + list(prep_corpus.load_vocab().keys()))
 
 
-def get_device(gpu: Gpu):
+def get_device(gpu: Gpu) -> str:
     if torch.cuda.is_available():
-        return gpu.non_default_device_to_use or torch.cuda.current_device()
+        device_id = gpu.non_default_device_to_use or torch.cuda.current_device()
+        return torch.device('cuda', device_id)
     elif gpu.fallback_to_cpu:
         return "cpu"
     else:
         raise EnvironmentError("Cuda not available")
 
 
-def add_callbacks(learner: Learner, run: Run, tune: bool) -> None:
+def add_callbacks(learner: Learner, tune: bool) -> None:
 
     save_every_epoch_callback = RetryingSaveModelCalback(learner, every='epoch', name='epoch')
     learner.callbacks.append(save_every_epoch_callback)
@@ -138,10 +139,12 @@ def create_databunch(prep_corpus: PreprocessedCorpus, vocab: Vocab, config: LMTr
     return databunched
 
 
-def load_base_model_if_needed(learner: Learner, lm_training_config: LMTrainingConfig, device) -> None:
+def load_base_model_if_needed(learner: Learner, lm_training_config: LMTrainingConfig, model_file='best') -> None:
     if lm_training_config.base_model:
-        print(f"Using pretrained model: {lm_training_config.base_model}.pth")
-        learner.load(lm_training_config.base_model, device=device)
+        model = os.path.join(lm_training_config.base_model, model_file)
+        print(f"Using pretrained model: {model}.pth")
+        # not setting purge to True raises a pickle serialization error
+        learner.load(model, purge=False)
     else:
         print("Training form scratch")
 
@@ -186,17 +189,17 @@ def train(lm_training_config: LMTrainingConfig,
 
     save_experiment_input(learner, run, vocab, comet=comet)
 
-    add_callbacks(learner, run, tune=tune)
+    add_callbacks(learner, tune=tune)
 
-    load_base_model_if_needed(learner, lm_training_config, device)
+    load_base_model_if_needed(learner, lm_training_config)
 
     print(f"Starting training... Model will be saved to {run.path_to_trained_model}")
     start_training(learner, lm_training_config.training_procedure)
 
     # learner.export('learner.pkl')
     # return load_learner(os.path.join(PATH_TO_TRAINED_MODELS, run.id), 'learner.pkl')
-#    return TrainedModel.from_path(run.path_to_trained_model, force_use_cpu=True)
-    return None
+    return TrainedModel.from_path(run.path_to_trained_model, force_use_cpu=True)
+    # return learner
 
 def check_data(databunched: DataBunch, vocab: Vocab) -> None:
     first_batch = databunched.one_batch()[0]

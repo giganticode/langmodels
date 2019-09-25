@@ -12,33 +12,6 @@ logger = logging.getLogger(__name__)
 time_measurer = TimeMeasurer()
 
 
-def get_entropy_for_each_line(trained_model: TrainedModel,
-                              file: str,
-                              entropy_aggregator: Callable[[List[float], List[int]], Union[float, List[float]]],
-                              verbose: bool = False) -> Union[List[float], List[List[float]]]:
-    prep_lines_and_entropies: List[Dict[str, Union[str, List[str], List[float], float]]] = []
-    with open(file, 'r') as f:
-        _, extension = os.path.splitext(file)
-        for line in f:
-            time_measurer.tick("Inference")
-            prep_line, entropies, word_boundaries = trained_model.get_entropies_for_text(line, extension[1:])
-            time_measurer.tock("Inference")
-            line_entropy = entropy_aggregator(entropies, word_boundaries)
-            prep_lines_and_entropies.append({
-                'text': line,
-                'prep_text': prep_line,
-                'entropies': entropies,
-                'line_entropy': line_entropy
-            })
-        if verbose:
-            for line in prep_lines_and_entropies:
-                print(line['text'])
-                print(line['line_entropy'])
-                print(f"{[(prep_token, token_entropy) for prep_token, token_entropy in zip(line['prep_text'], line['entropies'])]}")
-                print("=============")
-    return list(map(lambda e: e['line_entropy'], prep_lines_and_entropies))
-
-
 def subword_average(subword_entropies: List[float], word_boundaries: List[int]) -> float:
     return sum(subword_entropies) / len(subword_entropies) if subword_entropies else .0
 
@@ -64,6 +37,33 @@ def word_average(subword_entropies: List[float], word_boundaries: List[int]) -> 
         return .0
 
     return sum(word_entropies) / len(word_entropies)
+
+
+def get_entropy_for_each_line(trained_model: TrainedModel,
+                              file: str,
+                              entropy_aggregator: Callable[[List[float], List[int]], Union[float, List[float]]] = word_average,
+                              verbose: bool = False) -> Union[List[float], List[List[float]]]:
+    prep_lines_and_entropies: List[Dict[str, Union[str, List[str], List[float], float]]] = []
+    with open(file, 'r') as f:
+        _, extension = os.path.splitext(file)
+        for line in f:
+            time_measurer.tick("Inference")
+            prep_line, entropies, word_boundaries = trained_model.get_entropies_for_text(line, extension[1:])
+            time_measurer.tock("Inference")
+            line_entropy = entropy_aggregator(entropies, word_boundaries)
+            prep_lines_and_entropies.append({
+                'text': line,
+                'prep_text': prep_line,
+                'entropies': entropies,
+                'line_entropy': line_entropy
+            })
+        if verbose:
+            for line in prep_lines_and_entropies:
+                print(line['text'])
+                print(line['line_entropy'])
+                print(f"{[(prep_token, token_entropy) for prep_token, token_entropy in zip(line['prep_text'], line['entropies'])]}")
+                print("=============")
+    return list(map(lambda e: e['line_entropy'], prep_lines_and_entropies))
 
 
 def parse_entropy_aggregator_value(entropy_aggregator_name: str) -> Callable[[List[float], List[int]], Union[float, List[float]]]:

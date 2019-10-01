@@ -27,7 +27,7 @@ RANDOM_MODEL_NAME = 'dev_10k_1_10_190923.132328'
 TINY_MODEL_NAME = 'langmodel-small-split_10k_1_512_190906.154943'
 SMALL_MODEL_NAME = 'langmodel-medium-split_10k_1_512_190924.154542_-_langmodel-medium-split_10k_1_512_190925.141033'
 SMALL_MODEL_1K = 'langmodel-medium-split_1k_1_512_190926.101149'
-MEDIUM_MODEL = 'langmodel-large-split_10k_1_512_190926.120146'
+MEDIUM_MODEL_NAME = 'langmodel-large-split_10k_1_512_190926.120146'
 
 PAD_TOKEN_INDEX = 1
 

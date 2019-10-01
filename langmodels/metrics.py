@@ -11,10 +11,15 @@ def _find_sorted_array_position(tensor: Tensor, values_tensor: Tensor) -> Tensor
 
 def mrr(preds: Tensor, targs: Tensor) -> Tensor:
     """
-    E.g.:
-    preds = torch.tensor([[[0.2, 0.55, 0.25], [0.005, 0.005, 0.99]]])
-    targs = torch.tensor([[1, 2]])
-    -> 1.0
+    >>> preds = torch.tensor([[[0.2, 0.55, 0.25], [0.005, 0.005, 0.99]]])
+    >>> targs = torch.tensor([[1, 2]])
+    >>> mrr(preds, targs)
+    tensor(1.)
+
+    >>> preds = torch.tensor([[[0.2, 0.55, 0.25], [0.006, 0.004, 0.99]]])
+    >>> targs = torch.tensor([[0, 0]])
+    >>> mrr(preds, targs)
+    tensor(0.4167)
     """
     pred_values = preds.gather(-1, targs.unsqueeze(-1))
     guessed_positions = _find_sorted_array_position(preds, pred_values).float()

@@ -77,8 +77,8 @@ def beam_search(model: SequentialRNN, context: torch.LongTensor, first_nonterm_t
             best_candidates_sorted = {k: all_candidates[k][idx_in_score_asc_order] for k in all_candidates.keys()}
 
             full_tokens_bitmap_sorted = best_candidates_sorted['num_tokens'] < first_nonterm_token
-            ready_candidate_idxs = full_tokens_bitmap_sorted.nonzero().squeeze()
-            pending_candidate_idxs = (full_tokens_bitmap_sorted == 0).nonzero().squeeze()
+            ready_candidate_idxs = full_tokens_bitmap_sorted.nonzero().squeeze(dim=1)
+            pending_candidate_idxs = (full_tokens_bitmap_sorted == 0).nonzero().squeeze(dim=1)
 
             ready_candidates = update_ready_candidates(
                 best_candidates_sorted['tokens'][ready_candidate_idxs],

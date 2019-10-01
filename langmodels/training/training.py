@@ -1,6 +1,8 @@
 import logging
 import os
 from concurrent.futures.process import ProcessPoolExecutor
+
+import psutil
 from pathlib import Path
 from pprint import pprint
 
@@ -137,6 +139,11 @@ def check_path_to_base_model(config: LMTrainingConfig) -> None:
             raise FileNotFoundError(path_to_best_model)
 
 
+def get_cpu_memory_used_mb():
+    process = psutil.Process(os.getpid())
+    return process.memory_info().rss / 2 ** 20
+
+
 def create_databunch(prep_corpus: PreprocessedCorpus, vocab: Vocab, config: LMTrainingConfig, device: str) -> DataBunch:
     print(f'Getting preprocessed corpus from {prep_corpus.path_to_prep_dataset}')
     file_path_list = [Path(os.fsdecode(p)) for p in prep_corpus.get_file_iterator()]
@@ -147,6 +154,9 @@ def create_databunch(prep_corpus: PreprocessedCorpus, vocab: Vocab, config: LMTr
 
     print("Labeling for langmodeling")
     labelled_list = split_list.label_for_lm()
+
+    cpu_memory_used_mb = get_cpu_memory_used_mb()
+    print(f"Cpu memory used: {cpu_memory_used_mb} MB")
 
     print("Creating databunches")
     databunched = labelled_list.databunch(bs=config.bs, bptt=config.bptt, device=device)
@@ -187,7 +197,6 @@ def train(lm_training_config: LMTrainingConfig,
                                                                                  output_path=PATH_TO_PREP_DATASETS)
     vocab = create_vocab_for_lm(prep_corpus)
 
-
     device = get_device(gpu)
     databunch = create_databunch(prep_corpus, vocab, lm_training_config, device)
 
@@ -214,6 +223,7 @@ def train(lm_training_config: LMTrainingConfig,
     # return load_learner(os.path.join(PATH_TO_TRAINED_MODELS, run.id), 'learner.pkl')
     return TrainedModel.from_path(run.path_to_trained_model, force_use_cpu=True)
     # return learner
+
 
 def check_data(databunched: DataBunch, vocab: Vocab) -> None:
     first_batch = databunched.one_batch()[0]

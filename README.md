@@ -40,10 +40,6 @@ positional arguments:
 
 optional arguments:
   --output-path, -o <output-path>                    Path to file to which entropies are to be written. If not specified, --verbose option is set to true. 
-  --entropy-aggregator, -e <entropy_aggregator>      Fuction to calculate entropy for the whole line from subtoken entropies. Possible values: 
-                                                     'subtoken-average': average over all subtokens' entropies 
-                                                     'full-token-average' (default): average over all full-tokens' entopies (entropy of a full token is a sum of entopies of its subtokens to which a token was split during pre-processing) 
-                                                     'full-token-entropies': a list of full-token entropies (gives freedom to library's clients to compute line-entropy in their own way)
   --cpu, -c                                          Forse cpu usage for inference even if cuda-supported GPU is available.
   --verbose, -v                                      Write preprocessed lines and their entropies to stdout.
 ```
@@ -52,10 +48,10 @@ optional arguments:
 
 ```python
 from langmodels.model import TrainedModel
-from langmodels.inference.entropies import get_entropy_for_each_line, word_average
+from langmodels.inference.entropies import get_entropy_for_each_line
 
 trained_model = TrainedModel.get_default_model()
-entropies = get_entropy_for_each_line(trained_model, '/path/to/file', entropy_aggregator=word_average)
+entropies = get_entropy_for_each_line(trained_model, '/path/to/file')
 ```
 
 # Autocompletion (Python API)
@@ -83,5 +79,20 @@ trained_model.feed_text('(')
 trained_model.reset()
 trained_model.predict_next_full_token(n_suggestions=5)
 >> [('/', 0.7209196484717589), ('package', 0.27093282656897594), ('import', 0.0007366385365522241), ('.', 0.0005714365190590807), ('public', 0.0003926736567296)]
+
+```
+
+# Evaluation of language models
+
+```python
+>>> from langmodels.model import TrainedModel
+>>> from langmodels.model import TrainedModel
+
+>>> medium = TrainedModel.load_model_by_name('langmodel-large-split_10k_1_512_190926.120146')
+>>> small = TrainedModel.get_small_model()
+>>> file = '/home/hlib/dev/langmodels/text.java'
+
+>>> evaluate(baseline_model=small, target_model=medium, file=file)
+Output file: /home/hlib/dev/langmodels/text.java.html
 
 ```

@@ -1,0 +1,141 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <title>Language model evaluation</title>
+  <meta name="description" content="Language model evaluation">
+  <meta name="author" content="Hlib Babii">
+    <style>
+        .code {
+            font-weight:bold;
+            font: 1rem 'Courier', monospace;}
+        #modes {
+            font: 1rem 'Fira Sans', sans-serif;
+            overflow: hidden;
+            margin-bottom: 1em;
+            padding-bottom: 1em;
+            border-bottom: 1px solid black;
+        }
+        #metrics {float: left; margin-right: 3em}
+        #models {float: left}
+        input {margin: .4rem;}
+    </style>
+</head>
+
+<body>
+    <div id="modes">
+        <div id="metrics">
+            <div>
+              <input type="radio" id="entropy_line" name="metric" value="entropy">
+              <label for="entropy_line">Entropy</label>
+            </div>
+            <div>
+              <input type="radio" id="entropy" name="metric" value="entropy-line">
+              <label for="entropy">Entropy (per line)</label>
+            </div>
+            <div>
+              <input type="radio" id="mrr" name="metric" value="mrr">
+              <label for="mrr">Mrr</label>
+            </div>
+        </div>
+        <div id="models">
+            <div>
+              <input type="radio" id="model-1" name="model" value="1">
+              <label for="mrr">Baseline model</label>
+            </div>
+            <div>
+              <input type="radio" id="model-2" name="model" value="2">
+              <label for="mrr">Target model</label>
+            </div>
+            <div>
+              <input type="radio" id="model-diff" name="model" value="diff">
+              <label for="mrr">Model comparison</label>
+            </div>
+        </div>
+    </div>
+    <div>
+        {% for line in evaluation_to_render %}
+            <div class="code" data-entropy-line-1-color="{{line.line_entropy1_color}}"
+                data-entropy-line-2-color="{{line.entropy2_color}}"
+                 data-entropy-line-diff-color="{{line.entropy_diff_color}}"
+            >
+              <span style="white-space: pre">{{line.leading_whitespace}}</span>
+                {% for token in line.tokens %}
+                <span class="code"
+                      data-mrr-1-color="{{token.mrr1_color}}"
+                      data-mrr-2-color="{{token.mrr2_color}}"
+                      data-mrr-diff-color="{{token.mrr_diff_color}}"
+                      data-mrr-1-tooltip="{{token.mrr1_tooltip}}"
+                      data-mrr-2-tooltip="{{token.mrr2_tooltip}}"
+                      data-mrr-diff-tooltip="{{token.mrr_diff_tooltip}}"
+                >
+                    {% for subtoken in token.subtokens %}<span class="code"
+                              data-entropy-1-color="{{subtoken.entropy1_color}}"
+                              data-entropy-2-color="{{subtoken.entropy2_color}}"
+                              data-entropy-diff-color="{{subtoken.entropy_diff_color}}"
+                              data-entropy-1-tooltip="{{subtoken.entropy1_tooltip}}"
+                              data-entropy-2-tooltip="{{subtoken.entropy2_tooltip}}"
+                              data-entropy-diff-tooltip="{{subtoken.entropy_diff_tooltip}}"
+                        >{{subtoken.text}}</span>{% endfor %}
+                </span>
+                {% endfor %}
+            </div>
+        {% endfor %}
+    </div>
+
+  <script>
+      function get_metric_radiobutton_value() {
+          return document.querySelector('input[name="metric"]:checked').value
+      }
+
+      function get_model_radiobutton_value() {
+          return document.querySelector('input[name="model"]:checked').value
+      }
+
+      function setup_radiobutton_handlers() {
+        const metric_radiobuttons = document.getElementsByName('metric');
+        for (let radiobutton of metric_radiobuttons) {
+            radiobutton.addEventListener('change', function() {
+                switch_to_mode(this.value, get_model_radiobutton_value())
+            });
+        }
+        const model_radiobuttons = document.getElementsByName('model');
+        for (let radiobutton of model_radiobuttons) {
+            radiobutton.addEventListener('change', function() {
+                switch_to_mode(get_metric_radiobutton_value(), this.value)
+            });
+        }
+      }
+
+      function discard_mode() {
+          const codeElements = document.getElementsByClassName("code")
+          for (let element of codeElements) {
+              element.removeAttribute('style')
+              element.removeAttribute('title')
+          }
+      }
+
+      function switch_to_mode(metric, model) {
+          discard_mode();
+          const colorAttr = `data-${metric}-${model}-color`;
+          let elements = document.querySelectorAll('[' + colorAttr + ']');
+          for (let element of elements) {
+              let color = element.getAttribute(colorAttr);
+              element.setAttribute('style', 'color: #' + color)
+          }
+          const tooltipAttr = `data-${metric}-${model}-tooltip`;
+          elements = document.querySelectorAll('[' + tooltipAttr + ']');
+          for (let element of elements) {
+              let tooltip = element.getAttribute(tooltipAttr);
+              element.setAttribute('title', tooltip)
+          }
+      }
+
+      document.addEventListener("DOMContentLoaded", function(event) {
+          setup_radiobutton_handlers();
+      });
+  </script>
+</body>
+</html>

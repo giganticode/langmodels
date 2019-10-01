@@ -1,9 +1,32 @@
+from math import log
+
 from typing import List, Tuple
 
 import torch
 from fastai.text import SequentialRNN
 
 TORCH_LONG_MIN_VAL = -2 ** 63
+
+
+def to_binary_entropy(entropy: float) -> float:
+    return entropy / log(2)
+
+
+def entropy_to_probability(entropy: float) -> float:
+    """
+    >>> entropy_to_probability(0.0)
+    1.0
+
+    >>> entropy_to_probability(1.0)
+    0.5
+
+    >>> entropy_to_probability(3.0)
+    0.125
+
+    >>> entropy_to_probability(100.0)
+    7.888609052210118e-31
+    """
+    return 2 ** -entropy
 
 
 def to_test_mode(model: SequentialRNN) -> None:

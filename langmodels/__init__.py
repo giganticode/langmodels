@@ -5,6 +5,7 @@ import yaml
 
 current_script_location = os.path.realpath(__file__)
 root_package_dir = os.path.dirname(current_script_location)
+project_dir = os.path.dirname(root_package_dir)
 
 
 def load_logging_config():

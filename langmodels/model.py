@@ -1,5 +1,7 @@
 import logging
 import os
+
+from dataprep.parse.model.metadata import PreprocessingMetadata
 from math import exp
 from typing import List, Dict, Any, Tuple, Optional
 
@@ -14,7 +16,7 @@ from langmodels.beamsearch import beam_search
 from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig
 from langmodels.lmconfig.serialization import load_config_from_file
 from langmodels.migration import pth_to_torch
-from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
+from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL, to_binary_entropy
 from langmodels.gpuutil import get_device
 
 logger = logging.getLogger(__name__)
@@ -169,7 +171,7 @@ class TrainedModel(object):
     def prep_corpus(self, corpus: Corpus, *kwargs) -> PreprocessedCorpus:
         return self._prep_function.apply(corpus, kwargs)
 
-    def prep_text(self, text, **kwargs):
+    def prep_text(self, text, **kwargs) -> Tuple[List[str], PreprocessingMetadata]:
         import dataprep.api.text as text_api
         text_callable = getattr(text_api, self._prep_function.callable.__name__)
         return text_callable(text, *self._prep_function.params, **self._prep_function.options, **kwargs)
@@ -180,12 +182,10 @@ class TrainedModel(object):
         _ = get_last_layer_activations(self.model, context_tensor[:,:-1])
         self.last_predicted_token_tensor = context_tensor[:,-1:]
 
-    def get_entropies_for_text(self, input: str, extension: str) -> Tuple[List[str], List[float], List[int]]:
-        '''
+    def get_entropies_for_prep_text(self, prep_text: List[str]) -> List[float]:
+        """
         changes hidden states of the model!!
-        '''
-        prep_text, metadata = self.prep_text(input, return_metadata=True, force_reinit_bpe_data=False, extension=extension)
-
+        """
         numericalized_prep_text = torch.tensor([[self.vocab.numericalize(prep_text)]]).transpose(0, 2)
 
         losses: List[float] = []
@@ -193,9 +193,10 @@ class TrainedModel(object):
             # TODO this loop can be avoided! Rnn returns all the hidden states!
             last_layer = get_last_layer_activations(self.model, self.last_predicted_token_tensor)
             loss = F.cross_entropy(last_layer, numericalized_token.squeeze(dim=0)).item()
+            binary_loss = to_binary_entropy(loss)
             self.last_predicted_token_tensor = numericalized_token
-            losses.append(loss)
-        return prep_text, losses, metadata.word_boundaries
+            losses.append(binary_loss)
+        return losses
 
     def reset(self) -> None:
         self.model.reset()
@@ -204,9 +205,9 @@ class TrainedModel(object):
 
     def predict_next_full_token(self, n_suggestions: int) -> List[Tuple[str, float]]:
         subtokens, scores = beam_search(self.model, self.last_predicted_token_tensor[0], self.first_nonterm_token, n_suggestions, self.beam_size)
-        return [(self._to_full_token_string(st), 1 / exp(score.item())) for st, score in zip(subtokens, scores)]
+        return [(self.to_full_token_string(st), 1 / exp(score.item())) for st, score in zip(subtokens, scores)]
 
-    def _to_full_token_string(self, subtokens_num: torch.LongTensor, include_debug_tokens=False) -> str:
+    def to_full_token_string(self, subtokens_num: torch.LongTensor, include_debug_tokens=False) -> str:
         try:
             subtokens_num = subtokens_num[:subtokens_num.tolist().index(TORCH_LONG_MIN_VAL)]
         except ValueError: pass

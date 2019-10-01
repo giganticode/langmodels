@@ -63,7 +63,21 @@ class Numericalizer(PreProcessor):
 
 
 def contains_no_value(tensor: Tensor, value: int) -> bool:
-    return (tensor == torch.full_like(tensor, value)).float().sum() == 0
+    """
+    >>> t = torch.full((100,100,), 2)
+    >>> contains_no_value(t, 0)
+    True
+
+    >>> t = torch.full((100,100,), 2)
+    >>> t[1,45] = 0
+    >>> contains_no_value(t, 0)
+    False
+
+    >>> t = torch.full((100,100,), 0)
+    >>> contains_no_value(t, 0)
+    False
+    """
+    return ((tensor == torch.full_like(tensor, value)).float().sum() == 0).item()
 
 
 def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:

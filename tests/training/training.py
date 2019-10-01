@@ -1,13 +1,11 @@
 import unittest
+
+import numpy as np
+from fastai.text import Vocab, TextList
 from pathlib import Path
 from unittest.mock import patch
 
-import torch
-from fastai.text import Vocab, TextList
-
-from langmodels.training.training import Numericalizer, contains_no_value
-import numpy as np
-
+from langmodels.training.training import Numericalizer
 from tests.util import file_mock_with_lines
 
 
@@ -41,21 +39,6 @@ class NumericalizerTest(unittest.TestCase):
         # then
         expected = np.array([np.array([2, 3, 4]), np.array([2, 5])])
         self.assertTrue(all_trues(np.equal(expected, text_list.items, dtype=np.object)))
-
-
-class ContainsNoValueTest(unittest.TestCase):
-    def test_not_contains(self):
-        t = torch.full((100,100,), 2)
-        self.assertTrue(contains_no_value(t, 0))
-
-    def test_contains(self):
-        t = torch.full((100,100,), 2)
-        t[1,45] = 0
-        self.assertFalse(contains_no_value(t, 0))
-
-    def test_all_values_are_target_values(self):
-        t = torch.full((100,100,), 0)
-        self.assertFalse(contains_no_value(t, 0))
 
 
 if __name__ == '__main__':

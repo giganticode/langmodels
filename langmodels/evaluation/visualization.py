@@ -84,7 +84,7 @@ def format_token(full_word1: List[str], entropies1: List[float],
     )
 
 
-def format_results(evaluation_results: Tuple[List[EvaluationResult]]) -> List[LineToRender]:
+def format_results(evaluation_results: List[List[EvaluationResult]]) -> List[LineToRender]:
     result_to_render: List[LineToRender] = []
     for line_result1, line_result2 in zip(*evaluation_results):
         leading_whitespace = re.match("^\\s*", line_result1.text)[0]
@@ -116,7 +116,10 @@ def format_results(evaluation_results: Tuple[List[EvaluationResult]]) -> List[Li
     return result_to_render
 
 
-def write_html(evaluation_result: Tuple[List[EvaluationResult]], output_file: str) -> None:
+def write_html(evaluation_result: List[List[EvaluationResult]], output_file: str) -> None:
+    if len(evaluation_result) != 2:
+        raise ValueError('Evaluation results for 2 models must be passed')
+
     with open(os.path.join(project_dir, 'templates', 'evaluation.jinja2')) as f:
         template = Template(f.read())
 

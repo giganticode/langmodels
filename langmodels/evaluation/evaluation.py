@@ -1,7 +1,8 @@
 from tqdm import tqdm
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Optional, Union
 
-from langmodels.evaluation.common import EvaluationResult, get_file_total_lines, get_file_extension, LMEvaluator
+from langmodels.evaluation.common import EvaluationResult, get_file_extension, LMEvaluator
+from langmodels.evaluation.metrics import bin_entropy, full_token_mrr
 from langmodels.model import TrainedModel
 
 ImprovementMetric = Callable[[float, float], float]
@@ -78,29 +79,59 @@ def zip_subwords(subwords: Tuple[List[str], List[str]],
     return res
 
 
-def run_evaluation(models: List[TrainedModel], file: str, evaluators: List[LMEvaluator]) -> Tuple[List[EvaluationResult]]:
-    lines_in_file = get_file_total_lines(file)
-    result: List[List[EvaluationResult]] = []
+def metrics_from_strings(_metrics: Union[List[str], List[Callable], None]) -> Optional[List[Callable]]:
+    """
+    >>> metrics_from_strings(None) is None
+    True
 
-    for model in models:
-        model_evaluation: List[EvaluationResult] = []
-        with open(file, 'r') as f:
-            t = tqdm(f, total=lines_in_file)
-            extension = get_file_extension(file)
-            for line in t:
-                prep_line, metadata = model.prep_text(line, return_metadata=True, force_reinit_bpe_data=False,
-                                                      extension=extension)
+    >>> metrics_from_strings(['full_token_mrr', 'nonexistent_metric'])
+    Traceback (most recent call last):
+    ...
+    AttributeError: module 'langmodels.evaluation.metrics' has no attribute 'nonexistent_metric'
 
-                metrics_dict = {}
-                agg_metrics_dict = {}
-                for evaluator in evaluators:
-                    metrics, agg_metrics = evaluator(model, prep_line, metadata)
-                    metrics_dict[evaluator.__name__] = metrics
-                    agg_metrics_dict[evaluator.__name__] = agg_metrics
+    >>> metrics_from_strings(['full_token_mrr', 'bin_entropy'])[1].__name__
+    'bin_entropy'
 
-                line_result = EvaluationResult(text=line, prep_text=prep_line, prep_metadata=metadata,
-                                               results=metrics_dict, aggregated_result=agg_metrics_dict)
+    >>> metrics_from_strings([full_token_mrr, bin_entropy])[1].__name__
+    'bin_entropy'
+    """
+    if _metrics is None:
+        return None
 
-                model_evaluation.append(line_result)
-        result.append(model_evaluation)
-    return tuple(result)
+    def load_metric(metric: str) -> Callable:
+        from langmodels.evaluation import metrics
+        return getattr(metrics, metric)
+
+    return list(map(lambda m: m if isinstance(m, Callable) else load_metric(m), _metrics))
+
+
+def evaluate_model_on_string(model: TrainedModel, text: str, extension='java', metrics: Optional[List[LMEvaluator]] = None) \
+        -> List[EvaluationResult]:
+    metrics = metrics_from_strings(metrics) or [bin_entropy, full_token_mrr]
+    text_lines = text.split('\n')
+    model_evaluation: List[EvaluationResult] = []
+
+    for line in tqdm(text_lines):
+        prep_line, metadata = model.prep_text(line, return_metadata=True, force_reinit_bpe_data=False,
+                                              extension=extension)
+        metrics_dict = {}
+        agg_metrics_dict = {}
+        for evaluator in metrics:
+            metric_values, agg_metric_values = evaluator(model, prep_line, metadata)
+            metrics_dict[evaluator.__name__] = metric_values
+            agg_metrics_dict[evaluator.__name__] = agg_metric_values
+
+        line_result = EvaluationResult(text=line, prep_text=prep_line, prep_metadata=metadata,
+                                       results=metrics_dict, aggregated_result=agg_metrics_dict)
+
+        model_evaluation.append(line_result)
+    return model_evaluation
+
+
+def evaluate_model_on_file(model: TrainedModel, file: str, metrics: Optional[List[LMEvaluator]] = None) \
+        -> List[EvaluationResult]:
+    metrics = metrics_from_strings(metrics) or [bin_entropy, full_token_mrr]
+    extension = get_file_extension(file)
+    with open(file, 'r') as f:
+        text = f.read()
+        return evaluate_model_on_string(model, text, extension, metrics)

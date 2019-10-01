@@ -47,11 +47,16 @@ optional arguments:
 ### Python API
 
 ```python
-from langmodels.model import TrainedModel
-from langmodels.inference.entropies import get_entropy_for_each_line
+>>> from langmodels.model import TrainedModel
+>>> from langmodels.evaluation import evaluate_model_on_string
 
-trained_model = TrainedModel.get_default_model()
-entropies = get_entropy_for_each_line(trained_model, '/path/to/file')
+>>> trained_model = TrainedModel.get_default_model(force_use_cpu=False)
+>>> entropies = evaluate_model_on_string(trained_model, 'large\ntext', metrics=['bin_entropy'])
+[EvaluationResult(text='large', prep_text=['l', 'arg', 'e</t>'], prep_metadata=(set(), [0, 3]), 
+results={'bin_entropy': [15.181015908834256, 7.079181519622688, 1.809404016295282]}, 
+aggregated_result={'bin_entropy': 24.069601444752227}), 
+EvaluationResult(text='text', prep_text=['text</t>'], prep_metadata=(set(), [0, 1]), 
+results={'bin_entropy': [13.33439828654528]}, aggregated_result={'bin_entropy': 13.33439828654528})]
 ```
 
 # Autocompletion (Python API)

@@ -184,6 +184,10 @@ def save_experiment_input(learner: Learner, run: Run, vocab: Vocab, comet: bool)
         log_to_comet(run.id, run.config, learner, vocab)
 
 
+class CudaNotAvailable(Exception):
+    pass
+
+
 def train(lm_training_config: LMTrainingConfig,
           gpu: Gpu(),
           tune=False, comet=True) -> TrainedModel:
@@ -197,7 +201,11 @@ def train(lm_training_config: LMTrainingConfig,
                                                                                  output_path=PATH_TO_PREP_DATASETS)
     vocab = create_vocab_for_lm(prep_corpus)
 
-    device = get_device(gpu)
+    try:
+        device = get_device(gpu)
+    except EnvironmentError:
+        raise CudaNotAvailable()
+
     databunch = create_databunch(prep_corpus, vocab, lm_training_config, device)
 
     check_data(databunch, vocab)

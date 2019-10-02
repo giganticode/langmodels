@@ -1,12 +1,14 @@
 import logging
 
 import argparse
+import deprecation
 from typing import List, Union
 
 from langmodels.evaluation.common import EvaluationResult, get_file_extension
 from langmodels.evaluation.metrics import bin_entropy
 from langmodels.model import TrainedModel
 from langmodels.profiling import TimeMeasurer
+from langmodels import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +16,9 @@ logger = logging.getLogger(__name__)
 time_measurer = TimeMeasurer()
 
 
+@deprecation.deprecated(deprecated_in="0.0.1",
+                        current_version=__version__,
+                        details="Use langmodels.evaluation.evaluate_model_on_file() function instead")
 def get_entropy_for_each_line(trained_model: TrainedModel,
                               file: str,
                               verbose: bool = False,

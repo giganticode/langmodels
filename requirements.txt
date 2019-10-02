@@ -11,3 +11,4 @@ tqdm==4.31.1
 torch>=1.0.0
 jsons==0.10.1
 numpy>=1.15
+deprecation==2.0.7

@@ -11,6 +11,7 @@ import docopt_subcommands as dsc
 from langmodels.training.training import train, CudaNotAvailable
 
 from langmodels.lmconfig.datamodel import Gpu
+from langmodels import __version__
 
 
 def get_option(args: Dict, option: str) -> Optional[Any]:
@@ -71,9 +72,7 @@ def handle_train(args):
 
 
 app_name = 'langmodels'
-with open(os.path.join(root_package_dir, 'VERSION')) as version_file:
-    version = version_file.read().strip()
 
 
 def run(args):
-    dsc.main(app_name, f'{app_name} {version}', argv=args, exit_at_end=False)
+    dsc.main(app_name, f'{app_name} {__version__}', argv=args, exit_at_end=False)

@@ -84,12 +84,12 @@ def _check_is_term_vocab(vocab: Vocab, first_non_term: int) -> None:
     for token in vocab.itos[:first_non_term]:
         if not token.endswith(placeholders['compound_word_end']):
             raise ValueError(f"First non-terminal token in vocab has index {first_non_term}, "
-                             f"hovewer there's a non-terminal token {token} "
+                             f"however there's a non-terminal token {token} "
                              f"that has index {vocab.itos.index(token)}")
     for token in vocab.itos[first_non_term:]:
         if token.endswith(placeholders['compound_word_end']):
             raise ValueError(f"Starting from index {first_non_term} there should bb only non-term "
-                             f"tokens in the vocab, hovewer there's a terminal token {token} "
+                             f"tokens in the vocab, however there's a terminal token {token} "
                              f"that has index {vocab.itos.index(token)}")
 
 
@@ -107,7 +107,8 @@ class TrainedModel(object):
         to_test_mode(self.model)
 
         # last_predicted_token_tensor is a rank-2 tensor!
-        self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])], device=get_device())
+        self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
+                                                        device=get_device(self.force_use_cpu))
         self.beam_size = DEFAULT_BEAM_SIZE
 
     def _load_model(self, path: str, custom_vocab: Optional[Vocab] = None) -> Tuple[SequentialRNN, Vocab]:
@@ -133,7 +134,7 @@ class TrainedModel(object):
         state_dict = torch.load(path_to_model, map_location=map_location)
 
         # a more simple solution is to use fastai's load_learner,
-        # however it doesn't seem to work out of the box wiht customizations we've done
+        # however it doesn't seem to work out of the box with customizations we've done
         weights = pth_to_torch(state_dict)
         if custom_vocab:
             weights = convert_weights(weights, self.original_vocab.stoi, custom_vocab.itos)
@@ -184,7 +185,7 @@ class TrainedModel(object):
 
     def feed_text(self, text: str) -> None:
         prep_text, metadata = self.prep_text(text, return_metadata=True, force_reinit_bpe_data=False)
-        context_tensor = torch.tensor([self.vocab.numericalize(prep_text)], device=get_device())
+        context_tensor = torch.tensor([self.vocab.numericalize(prep_text)], device=get_device(self.force_use_cpu))
         _ = get_last_layer_activations(self.model, context_tensor[:,:-1])
         self.last_predicted_token_tensor = context_tensor[:,-1:]
 
@@ -192,7 +193,8 @@ class TrainedModel(object):
         """
         changes hidden states of the model!!
         """
-        numericalized_prep_text = torch.tensor([[self.vocab.numericalize(prep_text)]], device=get_device()).transpose(0, 2)
+        numericalized_prep_text = torch.tensor([[self.vocab.numericalize(prep_text)]],
+                                               device=get_device(self.force_use_cpu)).transpose(0, 2)
 
         losses: List[float] = []
         for numericalized_token in numericalized_prep_text:
@@ -207,7 +209,7 @@ class TrainedModel(object):
     def reset(self) -> None:
         self.model.reset()
         self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
-                                                        device=get_device())
+                                                        device=get_device(self.force_use_cpu))
 
     def predict_next_full_token(self, n_suggestions: int) -> List[Tuple[str, float]]:
         subtokens, scores = beam_search(self.model, self.last_predicted_token_tensor[0], self.first_nonterm_token, n_suggestions, self.beam_size)

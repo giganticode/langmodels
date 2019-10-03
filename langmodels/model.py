@@ -192,7 +192,7 @@ class TrainedModel(object):
         """
         changes hidden states of the model!!
         """
-        numericalized_prep_text = torch.tensor([[self.vocab.numericalize(prep_text)]]).transpose(0, 2)
+        numericalized_prep_text = torch.tensor([[self.vocab.numericalize(prep_text)]], device=get_device()).transpose(0, 2)
 
         losses: List[float] = []
         for numericalized_token in numericalized_prep_text:

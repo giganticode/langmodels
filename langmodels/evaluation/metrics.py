@@ -1,5 +1,6 @@
 from sys import maxsize
 
+import numpy as np
 from typing import List, Tuple
 
 from dataprep.parse.model.metadata import PreprocessingMetadata
@@ -52,3 +53,29 @@ def full_token_mrr(model: TrainedModel, prep_line: List[str], metadata: Preproce
         count += 1
         model.feed_text(actual_token)
     return results, count / inverse_rank_sum if inverse_rank_sum != 0 else 0.
+
+
+def average_ranks(values: List[float], weights: List[int] = None) -> float:
+    """
+    >>> average_ranks([1, 5])
+    1.6666666666666667
+
+    >>> average_ranks([1, 5, 9])
+    2.2881355932203387
+
+    >>> average_ranks([1.6666666666666667, 9], weights=[2, 1])
+    2.2881355932203387
+    """
+    weights = weights or [1.0] * len(values)
+    return 1.0 / np.average(list(map(lambda x: 1 / x, values)), weights=weights)
+
+
+def average_entropy(values: List[float], weights: List[int] = None):
+    return np.average(values, weights=weights)
+
+
+agg_funcs = {
+    'subtoken_bin_entropy': average_entropy,
+    bin_entropy.__name__: average_entropy,
+    full_token_mrr.__name__: average_ranks
+}

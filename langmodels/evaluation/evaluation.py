@@ -1,11 +1,17 @@
-from tqdm import tqdm
-from typing import List, Tuple, Callable, Optional, Union
+import logging
+import random
 
-from langmodels.evaluation.common import EvaluationResult, get_file_extension, LMEvaluator
-from langmodels.evaluation.metrics import bin_entropy, full_token_mrr
+from tqdm import tqdm
+from typing import List, Tuple, Callable, Optional, Union, Dict, Generator
+
+from langmodels.evaluation.common import EvaluationResult, get_file_extension, LMEvaluator, read_file_contents, \
+    get_all_files
+from langmodels.evaluation.metrics import bin_entropy, full_token_mrr, agg_funcs
 from langmodels.model import TrainedModel
 
 ImprovementMetric = Callable[[float, float], float]
+
+logger = logging.getLogger(__name__)
 
 
 def zip_subwords(subwords: Tuple[List[str], List[str]],
@@ -105,13 +111,17 @@ def metrics_from_strings(_metrics: Union[List[str], List[Callable], None]) -> Op
     return list(map(lambda m: m if isinstance(m, Callable) else load_metric(m), _metrics))
 
 
-def evaluate_model_on_string(model: TrainedModel, text: str, extension='java', metrics: Optional[List[LMEvaluator]] = None) \
-        -> List[EvaluationResult]:
+def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
+                             metrics: Optional[List[LMEvaluator]] = None,
+                             show_progress=True) -> List[EvaluationResult]:
     metrics = metrics_from_strings(metrics) or [bin_entropy, full_token_mrr]
+    if full_token_mrr not in metrics:
+        show_progress = False
     text_lines = text.split('\n')
     model_evaluation: List[EvaluationResult] = []
 
-    for line in tqdm(text_lines):
+    line_iterable = tqdm(text_lines) if show_progress else text_lines
+    for line in line_iterable:
         prep_line, metadata = model.prep_text(line, return_metadata=True, force_reinit_bpe_data=False,
                                               extension=extension)
         metrics_dict = {}
@@ -128,10 +138,67 @@ def evaluate_model_on_string(model: TrainedModel, text: str, extension='java', m
     return model_evaluation
 
 
-def evaluate_model_on_file(model: TrainedModel, file: str, metrics: Optional[List[LMEvaluator]] = None) \
-        -> List[EvaluationResult]:
-    metrics = metrics_from_strings(metrics) or [bin_entropy, full_token_mrr]
+def evaluate_model_on_file(model: TrainedModel, file: str, metrics: Optional[List[LMEvaluator]] = None,
+                           result_per_line: bool = True) -> Union[List[EvaluationResult], EvaluationResult]:
     extension = get_file_extension(file)
-    with open(file, 'r') as f:
-        text = f.read()
+    text = read_file_contents(file)
+    if result_per_line:
         return evaluate_model_on_string(model, text, extension, metrics)
+    else:
+        result = evaluate_model_on_string(model, text.replace('\n', ' '), extension, metrics, show_progress=False)
+        assert len(result) == 1
+        return result[0]
+
+
+def _format_postfix(current_metrics: Dict[str, Tuple[float, int]],
+                   current_full_words: int, current_subwords: int) -> Dict[str, str]:
+    if current_metrics:
+        postfix = {metric: f'{value:.2f}' for metric, (value, _) in current_metrics.items()}
+        postfix['tokens'] = current_full_words
+        postfix['subtokens'] = current_subwords
+    else:
+        postfix = {}
+    return postfix
+
+
+def evaluate_model_on_path(model: TrainedModel, path: str,
+                           metrics: Optional[List[LMEvaluator]] = None) -> Dict[str, Tuple[float, int]]:
+    logger.info("Counting total file number ...")
+    all_files = [f for f in get_all_files(path)]
+    random.shuffle(all_files)
+
+    current_metrics: Dict[str, Tuple[float, int]] = {}
+    current_full_words = 0
+    current_subwords = 0
+    t = tqdm(all_files)
+    for file in t:
+        postfix = _format_postfix(current_metrics, current_full_words, current_subwords)
+        t.set_postfix(postfix)
+        evaluation_result = evaluate_model_on_file(model, file, metrics, result_per_line=False)
+        latest_full_words = len(evaluation_result.prep_metadata.word_boundaries) - 1
+        latest_subwords = evaluation_result.prep_metadata.word_boundaries[-1]
+        latest_file_metrics = {metric: (val, latest_full_words)
+                               for metric, val in evaluation_result.aggregated_result.items()}
+        if bin_entropy.__name__ in latest_file_metrics:
+            latest_file_metrics['subtoken_bin_entropy'] = (
+                sum(evaluation_result.results['bin_entropy']) / latest_subwords,
+                latest_subwords
+            )
+
+        current_full_words += latest_full_words
+        current_subwords += latest_subwords
+        if current_metrics:
+            new_current_file_metric_values: Dict[str, Tuple[float, int]] = {}
+            for metric, (current_value, current_n_samples) in current_metrics.items():
+                latest_file_value, n_samples_in_latest_file = latest_file_metrics[metric]
+                new_metric_value = agg_funcs[metric]([current_value, latest_file_value],
+                                                     [current_n_samples, n_samples_in_latest_file])
+                new_current_file_metric_values[metric] = (new_metric_value,
+                                                          current_n_samples + n_samples_in_latest_file)
+            current_metrics = new_current_file_metric_values
+        else:
+            current_metrics = latest_file_metrics
+    if not current_metrics:
+        raise Exception(f"No files to evaluate are found in {path}")
+
+    return current_metrics

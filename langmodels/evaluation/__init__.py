@@ -1,4 +1,4 @@
-from langmodels.evaluation.evaluation import evaluate_model_on_file, evaluate_model_on_string
+from langmodels.evaluation.evaluation import evaluate_model_on_file, evaluate_model_on_string, evaluate_model_on_path
 from langmodels.evaluation.visualization import write_html
 from langmodels.model import TrainedModel
 
@@ -10,4 +10,4 @@ def evaluate(baseline_model: TrainedModel, target_model: TrainedModel, file: str
     write_html([evaluation_result_baseline, evaluation_result_target], output_file)
 
 
-__all__ = [evaluate_model_on_file, evaluate_model_on_string, evaluate]
+__all__ = [evaluate_model_on_file, evaluate_model_on_string, evaluate_model_on_path, evaluate]

@@ -1,10 +1,14 @@
+import logging
 import os
 from dataclasses import dataclass
-from typing import List, Callable, Dict, Any, Tuple
+from typing import List, Callable, Dict, Any, Tuple, Generator
 
 from dataprep.parse.model.metadata import PreprocessingMetadata
 from dataprep.parse.model.placeholders import placeholders
 from langmodels.model import TrainedModel
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -100,3 +104,28 @@ def to_full_token_string(subtokens: List[str], include_debug_tokens: bool = Fals
     if not joined.endswith(cwe) and joined != placeholders['olc_end']:
         raise ValueError(f'{joined} ({subtokens}) is not a full token')
     return joined if include_debug_tokens else joined[:-len(cwe)]
+
+
+def read_file_contents(file_path: str) -> str:
+    try:
+        return read_file_with_encoding(file_path, 'utf-8')
+    except UnicodeDecodeError:
+        try:
+            return read_file_with_encoding(file_path, 'ISO-8859-1')
+        except UnicodeDecodeError:
+            logger.error(f"Unicode decode error in file: {file_path}")
+
+
+def read_file_with_encoding(file_path: str, encoding: str) -> str:
+    with open(file_path, 'r', encoding=encoding) as f:
+        return f.read()
+
+
+def get_all_files(path: str) -> Generator[str, None, None]:
+    if os.path.isfile(path):
+        yield path
+    else:
+        for root, dirs, files in os.walk(path, followlinks=True):
+            for file in files:
+                if file.endswith('.java'):
+                    yield os.path.join(root, file)

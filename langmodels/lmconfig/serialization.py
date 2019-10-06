@@ -40,7 +40,7 @@ def dump_config(config: LMTrainingConfig, file: Optional[str]=None) -> str:
 
 
 def load_config_from_string(s: str) -> LMTrainingConfig:
-    return jsons.loads(s, LMTrainingConfig)
+    return jsons.loads(s, LMTrainingConfig, strict=True)
 
 
 def load_config_from_file(file: str) -> LMTrainingConfig:

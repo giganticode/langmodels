@@ -5,6 +5,7 @@ from typing import Optional, Callable, Tuple, Union, Any, List, Dict
 from dataprep.api.corpus import PreprocessedCorpus
 from fastai.text import AWD_LSTM, Transformer, TransformerXL, Activation
 
+from langmodels.nn import AWD_GRU
 
 CONFIG_VERSION = '1.0.0'
 
@@ -93,6 +94,22 @@ class LstmArch(object):
     drop: Dropouts = Dropouts()
     tie_weights: bool = True
     out_bias: bool = True
+    lstm: bool = True
+
+
+@dataclass(frozen=True)
+class GruArch(object):
+    bidir: bool = False
+    emb_sz: int = 300
+    n_hid: int = 650
+    n_layers: int = 3
+    adam_betas: Tuple[float, float] = (0.7, 0.99)
+    clip: float = 0.3
+    reg_fn: RegFn = RegFn()
+    drop: Dropouts = Dropouts()
+    tie_weights: bool = True
+    out_bias: bool = True
+    gru: bool = True
 
 
 @dataclass(frozen=True)
@@ -135,7 +152,7 @@ class LMTrainingConfig(object):
     bs: int
     corpus: Corpus
     prep_function: PrepFunction
-    arch: Union[LstmArch, TransformerArch]
+    arch: Union[LstmArch, GruArch, TransformerArch]
     bptt: int
     training_procedure: TrainingProcedure
     config_version: str = CONFIG_VERSION
@@ -149,6 +166,8 @@ class LMTrainingConfig(object):
     def get_arch_class(self) -> Union[AWD_LSTM, Transformer, TransformerXL]:
         if isinstance(self.arch, LstmArch):
             return AWD_LSTM
+        elif isinstance(self.arch, GruArch):
+            return AWD_GRU
         elif isinstance(self.arch, TransformerArch):
             return Transformer
         else:

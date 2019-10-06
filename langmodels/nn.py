@@ -1,9 +1,13 @@
 from math import log
+from torch import nn
+from torch.nn import GRU
 
 from typing import List, Tuple
 
 import torch
-from fastai.text import SequentialRNN
+from torch import Tensor
+from fastai.text import SequentialRNN, AWD_LSTM, WeightDropout, EmbeddingDropout, RNNDropout, one_param, to_detach, \
+    Module
 
 TORCH_LONG_MIN_VAL = -2 ** 63
 
@@ -60,3 +64,61 @@ def get_last_layer_activations(model: SequentialRNN, input: torch.FloatTensor) -
     last_layer_activations, *_ = model(input)
     last_token_predictions = last_layer_activations[:, -1]
     return last_token_predictions
+
+
+class AWD_GRU(Module):
+    "AWD-LSTM/QRNN inspired by https://arxiv.org/abs/1708.02182."
+
+    initrange=0.1
+
+    def __init__(self, vocab_sz:int, emb_sz:int, n_hid:int, n_layers:int, pad_token:int=1, hidden_p:float=0.2,
+                 input_p:float=0.6, embed_p:float=0.1, weight_p:float=0.5, qrnn:bool=False, bidir:bool=False):
+        self.bs,self.qrnn,self.emb_sz,self.n_hid,self.n_layers = 1,qrnn,emb_sz,n_hid,n_layers
+        self.n_dir = 2 if bidir else 1
+        self.encoder = nn.Embedding(vocab_sz, emb_sz, padding_idx=pad_token)
+        self.encoder_dp = EmbeddingDropout(self.encoder, embed_p)
+
+        self.rnns = [GRU(emb_sz if l == 0 else n_hid, (n_hid if l != n_layers - 1 else emb_sz)//self.n_dir, 1,
+                             batch_first=True, bidirectional=bidir) for l in range(n_layers)]
+        self.rnns = [WeightDropout(rnn, weight_p) for rnn in self.rnns]
+        self.rnns = nn.ModuleList(self.rnns)
+        self.encoder.weight.data.uniform_(-self.initrange, self.initrange)
+        self.input_dp = RNNDropout(input_p)
+        self.hidden_dps = nn.ModuleList([RNNDropout(hidden_p) for l in range(n_layers)])
+
+    def forward(self, input:Tensor, from_embeddings:bool=False)->Tuple[Tensor,Tensor]:
+        if from_embeddings: bs,sl,es = input.size()
+        else: bs,sl = input.size()
+        if bs!=self.bs:
+            self.bs=bs
+            self.reset()
+        raw_output = self.input_dp(input if from_embeddings else self.encoder_dp(input))
+        new_hidden,raw_outputs,outputs = [],[],[]
+        for l, (rnn,hid_dp) in enumerate(zip(self.rnns, self.hidden_dps)):
+            raw_output, new_h = rnn(raw_output, self.hidden[l])
+            new_hidden.append(new_h)
+            raw_outputs.append(raw_output)
+            if l != self.n_layers - 1: raw_output = hid_dp(raw_output)
+            outputs.append(raw_output)
+        self.hidden = to_detach(new_hidden, cpu=False)
+        return raw_outputs, outputs
+
+    def _one_hidden(self, l:int)->Tensor:
+        "Return one hidden state."
+        nh = (self.n_hid if l != self.n_layers - 1 else self.emb_sz) // self.n_dir
+        return one_param(self).new(self.n_dir, self.bs, nh).zero_()
+
+    def select_hidden(self, idxs):
+        self.hidden = [h[:,idxs,:] for h in self.hidden]
+        self.bs = len(idxs)
+
+    def reset(self):
+        "Reset the hidden states."
+        [r.reset() for r in self.rnns if hasattr(r, 'reset')]
+        self.hidden = [self._one_hidden(l) for l in range(self.n_layers)]
+
+
+def add_gru_to_model_data():
+    from fastai.text.learner import _model_meta
+    gru_meta_data = {k:v for k, v in _model_meta[AWD_LSTM].items()}
+    _model_meta[AWD_GRU] = gru_meta_data

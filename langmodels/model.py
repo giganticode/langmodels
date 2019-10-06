@@ -3,7 +3,7 @@ import os
 
 from dataprep.parse.model.metadata import PreprocessingMetadata
 from math import exp
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Optional, Union
 
 import torch
 from dataprep.api.corpus import PreprocessedCorpus
@@ -13,7 +13,7 @@ from fastai.text.models.transformer import init_transformer
 from torch import cuda
 
 from langmodels.beamsearch import beam_search
-from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig
+from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig, GruArch
 from langmodels.lmconfig.serialization import load_config_from_file
 from langmodels.migration import pth_to_torch
 from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL, to_binary_entropy
@@ -38,13 +38,14 @@ else:
     MODEL_ZOO_PATH = os.path.join(os.environ['HOME'], 'modelzoo')
 
 
-def create_custom_lstm_config(arch: LstmArch):
+def create_custom_lstm_or_gru_config(arch: Union[GruArch, LstmArch]):
     config = awd_lstm_lm_config
     config['emb_sz'] = arch.emb_sz
     config['n_hid'] = arch.n_hid
     config['n_layers'] = arch.n_layers
     config['pad_token'] = PAD_TOKEN_INDEX
-    config['qrnn'] = arch.qrnn
+    if isinstance(arch, LstmArch):
+        config['qrnn'] = arch.qrnn
     config['bidir'] = arch.bidir
     config['output_p'] = arch.drop.out
     config['hidden_p'] = arch.drop.outh
@@ -64,8 +65,8 @@ def create_custom_transformer_config(arch: TransformerArch) -> Dict[str, Any]:
 
 def create_custom_config(lm_training_config: LMTrainingConfig):
     arch = lm_training_config.arch
-    if isinstance(arch, LstmArch):
-        return create_custom_lstm_config(arch)
+    if isinstance(arch, LstmArch) or isinstance(arch, GruArch):
+        return create_custom_lstm_or_gru_config(arch)
     elif isinstance(arch, TransformerArch):
         return create_custom_transformer_config(arch)
     else:
@@ -119,7 +120,7 @@ class TrainedModel(object):
         self._prep_function = config.prep_function
 
         vocab = custom_vocab if custom_vocab else self.original_vocab
-        model = get_language_model(AWD_LSTM, len(vocab.itos), create_custom_lstm_config(config.arch))
+        model = get_language_model(config.get_arch_class(), len(vocab.itos), create_custom_config(config))
         if self.force_use_cpu:
             map_location = lambda storage, loc: storage
             logger.debug("Using CPU for inference")

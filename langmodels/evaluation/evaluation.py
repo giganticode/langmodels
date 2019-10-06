@@ -90,19 +90,27 @@ def metrics_from_strings(_metrics: Union[List[str], List[Callable], None]) -> Op
     >>> metrics_from_strings(None) is None
     True
 
-    >>> metrics_from_strings(['full_token_mrr', 'nonexistent_metric'])
+    >>> metrics_from_strings(['nonexistent_metric'])
     Traceback (most recent call last):
     ...
     AttributeError: module 'langmodels.evaluation.metrics' has no attribute 'nonexistent_metric'
 
-    >>> metrics_from_strings(['full_token_mrr', 'bin_entropy'])[1].__name__
+    >>> metrics_from_strings(['full_token_mrr', 'bin_entropy'])
+    Traceback (most recent call last):
+    ...
+    ValueError: For now passing only 1 metric is supported. You passed 2: ['full_token_mrr', 'bin_entropy']
+
+    >>> metrics_from_strings(['bin_entropy'])[0].__name__
     'bin_entropy'
 
-    >>> metrics_from_strings([full_token_mrr, bin_entropy])[1].__name__
+    >>> metrics_from_strings([bin_entropy])[0].__name__
     'bin_entropy'
     """
     if _metrics is None:
         return None
+
+    if len(_metrics) > 1:
+        raise ValueError(f"For now passing only 1 metric is supported. You passed {len(_metrics)}: {_metrics}")
 
     def load_metric(metric: str) -> Callable:
         from langmodels.evaluation import metrics
@@ -111,10 +119,14 @@ def metrics_from_strings(_metrics: Union[List[str], List[Callable], None]) -> Op
     return list(map(lambda m: m if isinstance(m, Callable) else load_metric(m), _metrics))
 
 
+DEFAULT_METRIC = bin_entropy
+
+
 def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
                              metrics: Optional[List[LMEvaluator]] = None,
                              show_progress=True) -> List[EvaluationResult]:
-    metrics = metrics_from_strings(metrics) or [bin_entropy, full_token_mrr]
+    metrics = metrics_from_strings(metrics) or [DEFAULT_METRIC]
+
     if full_token_mrr not in metrics:
         show_progress = False
     text_lines = text.split('\n')

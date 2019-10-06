@@ -28,7 +28,9 @@ def word_average(subword_entropies: List[float], word_boundaries: List[int]) -> 
 def bin_entropy(model: TrainedModel,
                 prep_line: List[str],
                 prep_metadata: PreprocessingMetadata) -> Tuple[List[float], float]:
-
+    """
+    Changes the state of the model!
+    """
     entropies = model.get_entropies_for_prep_text(prep_line)
     aggregated_entropy = word_average(entropies, prep_metadata.word_boundaries)
     return entropies, aggregated_entropy
@@ -36,6 +38,9 @@ def bin_entropy(model: TrainedModel,
 
 def full_token_mrr(model: TrainedModel, prep_line: List[str], metadata: PreprocessingMetadata) \
         -> Tuple[List[int], float]:
+    """
+    Changes the state of the model!
+    """
     inverse_rank_sum = .0
     count = 0
     results = []

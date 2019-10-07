@@ -64,33 +64,33 @@ results={'bin_entropy': [13.33439828654528]}, aggregated_result={'bin_entropy': 
 Example
 
 ```python
-from langmodels.model import TrainedModel
+>>> from langmodels.model import TrainedModel
 
-trained_model = TrainedModel.get_default_model()
-trained_model.feed_text('public static main() { if')
+>>> trained_model = TrainedModel.get_default_model()
+>>> trained_model.feed_text('public static main() { if')
 
 # this does not change the state of the model:
-predictions = trained_model.predict_next_full_token(n_suggestions=5)
-print(predictions)
->> [('(', 0.9334765834402862), ('.', 0.01540983953864937), ('=', 0.008939018331858162), (',', 0.005372771784601065), ('the', 0.00309070517292041)]
+>>> predictions = trained_model.predict_next_full_token(n_suggestions=5)
+>>> print(predictions)
+[('(', 0.9334765834402862), ('.', 0.01540983953864937), ('=', 0.008939018331858162), (',', 0.005372771784601065), ('the', 0.00309070517292041)]
 
 # adding more context, if the user types '(':
-trained_model.feed_text('(')
->> [('(', 0.14554535082422237), ('c', 0.018005003646104294), ('!', 0.01614662429123089)]
+>>> trained_model.feed_text('(')
+[('(', 0.14554535082422237), ('c', 0.018005003646104294), ('!', 0.01614662429123089)]
 
 
 # if the cursor has been moved to the beginning of the file, 
 # we need to reset the state of the model (make it forget the context)
-trained_model.reset()
-trained_model.predict_next_full_token(n_suggestions=5)
->> [('/', 0.7209196484717589), ('package', 0.27093282656897594), ('import', 0.0007366385365522241), ('.', 0.0005714365190590807), ('public', 0.0003926736567296)]
+>>> trained_model.reset()
+>>> trained_model.predict_next_full_token(n_suggestions=5)
+[('/', 0.7209196484717589), ('package', 0.27093282656897594), ('import', 0.0007366385365522241), ('.', 0.0005714365190590807), ('public', 0.0003926736567296)]
 
 ```
 
 # Evaluation of language models
 
 ```python
->>> from langmodels.model import TrainedModel
+>>> from langmodels.evaluation import evaluate
 >>> from langmodels.model import TrainedModel
 
 >>> medium = TrainedModel.load_model_by_name('langmodel-large-split_10k_1_512_190926.120146')

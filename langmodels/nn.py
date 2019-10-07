@@ -2,17 +2,17 @@ from math import log
 from torch import nn
 from torch.nn import GRU
 
-from typing import List, Tuple
+from typing import List, Tuple, Union, Optional
 
 import torch
-from torch import Tensor
+from torch import Tensor, FloatTensor
 from fastai.text import SequentialRNN, AWD_LSTM, WeightDropout, EmbeddingDropout, RNNDropout, one_param, to_detach, \
     Module
 
 TORCH_LONG_MIN_VAL = -2 ** 63
 
 
-def to_binary_entropy(entropy: float) -> float:
+def to_binary_entropy(entropy: Union[float, FloatTensor]) -> Union[float, FloatTensor]:
     return entropy / log(2)
 
 
@@ -46,7 +46,7 @@ def save_hidden_states(model: SequentialRNN) -> List[Tuple[torch.Tensor, torch.T
     return [(hl[0].clone(), hl[1].clone()) for hl in model[0].hidden]
 
 
-def get_last_layer_activations(model: SequentialRNN, input: torch.FloatTensor) -> torch.FloatTensor:
+def get_last_layer_activations(model: SequentialRNN, input: torch.FloatTensor) -> Optional[torch.FloatTensor]:
     tensor_rank = len(input.size())
     if tensor_rank != 2:
         if tensor_rank == 0:
@@ -62,8 +62,7 @@ def get_last_layer_activations(model: SequentialRNN, input: torch.FloatTensor) -
         return None
 
     last_layer_activations, *_ = model(input)
-    last_token_predictions = last_layer_activations[:, -1]
-    return last_token_predictions
+    return last_layer_activations
 
 
 class AWD_GRU(Module):

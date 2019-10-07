@@ -12,8 +12,8 @@ DEVICE = get_device()
 
 def get_topk_predictions(model: SequentialRNN, context: torch.FloatTensor, top_k: int) -> Tuple[
     torch.FloatTensor, torch.LongTensor]:
-    last_token_predictions = get_last_layer_activations(model, context)
-    predictions = log_softmax(last_token_predictions, dim=-1)  # log_softmax not really needed
+    last_token_activations = get_last_layer_activations(model, context)
+    predictions = log_softmax(last_token_activations[:, -1], dim=-1)  # TODO log_softmax not really needed
     return predictions.topk(top_k, dim=-1)
 
 

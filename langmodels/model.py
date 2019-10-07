@@ -194,18 +194,16 @@ class TrainedModel(object):
         """
         changes hidden states of the model!!
         """
-        numericalized_prep_text = torch.tensor([[self.vocab.numericalize(prep_text)]],
-                                               device=get_device(self.force_use_cpu)).transpose(0, 2)
+        numericalized_prep_text = torch.tensor([self.vocab.numericalize(prep_text)],
+                                               device=get_device(self.force_use_cpu))
 
-        losses: List[float] = []
-        for numericalized_token in numericalized_prep_text:
-            # TODO this loop can be avoided! Rnn returns all the hidden states!
-            last_layer = get_last_layer_activations(self.model, self.last_predicted_token_tensor)
-            loss = F.cross_entropy(last_layer, numericalized_token.squeeze(dim=0)).item()
-            binary_loss = to_binary_entropy(loss)
-            self.last_predicted_token_tensor = numericalized_token
-            losses.append(binary_loss)
-        return losses
+        last_layer = get_last_layer_activations(self.model, torch.cat([self.last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))
+        loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
+                               numericalized_prep_text.view(-1),
+                               reduction='none')
+        binary_loss = to_binary_entropy(loss)
+        self.last_predicted_token_tensor = numericalized_prep_text[:, -1:]
+        return binary_loss.tolist()
 
     def reset(self) -> None:
         self.model.reset()

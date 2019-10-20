@@ -73,8 +73,17 @@ def create_custom_config(lm_training_config: LMTrainingConfig):
         raise ValueError(f"Unknown architecture: {arch}")
 
 
+def get_terminal_placeholders() -> List[str]:
+    return [placeholders['comment'], placeholders['string_literal'],
+            placeholders['ect'], placeholders['non_eng'], placeholders['olc_end']]
+
+
+def is_terminal_subtoken(subtoken: str) -> bool:
+    return subtoken.endswith(placeholders['compound_word_end']) or subtoken in get_terminal_placeholders()
+
+
 def _create_term_vocab(vocab: Vocab) -> Tuple[Vocab, int]:
-    terminal_token_indices = {i for i, k in enumerate(vocab.itos) if k.endswith(placeholders['compound_word_end'])}
+    terminal_token_indices = {i for i, k in enumerate(vocab.itos) if is_terminal_subtoken(k)}
     term_vocab_list = [vocab.itos[i] for i in terminal_token_indices]
     non_term_vocab_list = [vocab.itos[i] for i in range(len(vocab.itos)) if i not in terminal_token_indices]
     term_vocab = Vocab(term_vocab_list + non_term_vocab_list)
@@ -83,18 +92,32 @@ def _create_term_vocab(vocab: Vocab) -> Tuple[Vocab, int]:
 
 def _check_is_term_vocab(vocab: Vocab, first_non_term: int) -> None:
     for token in vocab.itos[:first_non_term]:
-        if not token.endswith(placeholders['compound_word_end']):
+        if not is_terminal_subtoken(token):
             raise ValueError(f"First non-terminal token in vocab has index {first_non_term}, "
                              f"however there's a non-terminal token {token} "
                              f"that has index {vocab.itos.index(token)}")
     for token in vocab.itos[first_non_term:]:
-        if token.endswith(placeholders['compound_word_end']):
+        if is_terminal_subtoken(token):
             raise ValueError(f"Starting from index {first_non_term} there should bb only non-term "
                              f"tokens in the vocab, however there's a terminal token {token} "
                              f"that has index {vocab.itos.index(token)}")
 
 
 DEFAULT_BEAM_SIZE = 500
+
+
+def check_metadata_validity(prep_text: List[str], metadata: PreprocessingMetadata):
+    if 0 not in metadata.word_boundaries:
+        raise AssertionError('')
+
+    for idx, token in enumerate(prep_text):
+        end_according_to_data = is_terminal_subtoken(token)
+        end_according_to_metadata = (idx + 1) in metadata.word_boundaries
+        if end_according_to_data != end_according_to_metadata:
+            error_context_start_index = idx - 20 if idx - 20 > 0 else 0
+            raise AssertionError(f'Token {token} according to metadata is'
+                                 f'{" " if end_according_to_metadata else " NOT"} end-token. '
+                                 f'Showing context: {prep_text[error_context_start_index:idx+1]}')
 
 
 class TrainedModel(object):
@@ -182,7 +205,9 @@ class TrainedModel(object):
     def prep_text(self, text, **kwargs) -> Tuple[List[str], PreprocessingMetadata]:
         import dataprep.api.text as text_api
         text_callable = getattr(text_api, self._prep_function.callable.__name__)
-        return text_callable(text, *self._prep_function.params, **self._prep_function.options, **kwargs)
+        prep_text, metadata = text_callable(text, *self._prep_function.params, **self._prep_function.options, **kwargs)
+        check_metadata_validity(prep_text, metadata)
+        return prep_text, metadata
 
     def feed_text(self, text: str) -> None:
         prep_text, metadata = self.prep_text(text, return_metadata=True, force_reinit_bpe_data=False)
@@ -222,6 +247,9 @@ class TrainedModel(object):
         sep = '|' if include_debug_tokens else ''
         textified = self.vocab.textify(subtokens_num, sep=sep)
         cwe = placeholders['compound_word_end']
+        if textified in placeholders.values():
+            return textified
+
         if not textified.endswith(cwe):
             raise ValueError(f'{textified} ({subtokens_num}) is not a full token')
         return textified if include_debug_tokens else textified[:-len(cwe)]

@@ -97,11 +97,17 @@ def to_full_token_string(subtokens: List[str], include_debug_tokens: bool = Fals
 
     >>> to_full_token_string(['re', 'vol', 'v', 'er</t>'])
     'revolver'
+
+    >>> to_full_token_string([placeholders['olc_end']])
+    '<EOL>'
     """
+    if len(subtokens) == 1 and subtokens[0] in placeholders.values():
+        return subtokens[0]
+
     sep = '|' if include_debug_tokens else ''
     joined = sep.join(subtokens)
     cwe = placeholders['compound_word_end']
-    if not joined.endswith(cwe) and joined != placeholders['olc_end']:
+    if not joined.endswith(cwe):
         raise ValueError(f'{joined} ({subtokens}) is not a full token')
     return joined if include_debug_tokens else joined[:-len(cwe)]
 

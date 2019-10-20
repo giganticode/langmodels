@@ -4,10 +4,12 @@ import torch
 
 from langmodels.model import TrainedModel
 
+DEFAULT_TEST_MODEL = 'langmodel-small-split_10k_1_512_190906.154943'
+
 
 class TestBeamSearch(unittest.TestCase):
     def test_hidden_state_not_changed_after_beam_search(self):
-        trained_model = TrainedModel.get_default_model()
+        trained_model = TrainedModel.load_model_by_name(DEFAULT_TEST_MODEL)
         trained_model.feed_text("Hi there, it's")
         before = trained_model.model[0].hidden
         trained_model.predict_next_full_token(n_suggestions=10)

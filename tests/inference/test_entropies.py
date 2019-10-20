@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from langmodels.inference.entropies import get_entropy_for_each_line
 from langmodels.model import TrainedModel
+from tests.test_beamsearch import DEFAULT_TEST_MODEL
 from tests.util import file_mock_with_lines
 
 
@@ -10,7 +11,7 @@ class GetEntropiesForEachFileIntegrationTest(unittest.TestCase):
     @patch('langmodels.inference.entropies.open')
     def test_simple(self, open_mock):
         # given
-        test_trained_model = TrainedModel.get_default_model()
+        test_trained_model = TrainedModel.load_model_by_name(DEFAULT_TEST_MODEL)
         mocked_file = file_mock_with_lines(['//button', 'class Button {'])
         open_mock.side_effect = [mocked_file]
 

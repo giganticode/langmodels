@@ -148,7 +148,7 @@ class TrainedModel(object):
             map_location = lambda storage, loc: storage
             logger.debug("Using CPU for inference")
         elif cuda.is_available():
-            map_location = None
+            map_location = torch.device('cuda:0')
             model.cuda()
             logger.debug("Using GPU for inference")
         else:

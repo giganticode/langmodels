@@ -219,16 +219,26 @@ class TrainedModel(object):
         """
         changes hidden states of the model!!
         """
-        numericalized_prep_text = torch.tensor([self.vocab.numericalize(prep_text)],
-                                               device=get_device(self.force_use_cpu))
+        if not prep_text:
+            return []
 
-        last_layer = get_last_layer_activations(self.model, torch.cat([self.last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))
-        loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
-                               numericalized_prep_text.view(-1),
-                               reduction='none')
-        binary_loss = to_binary_entropy(loss)
-        self.last_predicted_token_tensor = numericalized_prep_text[:, -1:]
-        return binary_loss.tolist()
+        loss_list = []
+        max_subtokens_per_chunk = 1000
+        # if the line is too big, we break it down to chunks to fit it into gpu memory
+        # big chunks require more memory, small chunks require more time
+        n_chunks = (len(prep_text)-1) // max_subtokens_per_chunk + 1
+        for i in range(n_chunks):
+            numericalized_prep_text = torch.tensor([self.vocab.numericalize(prep_text[i*max_subtokens_per_chunk:(i+1)*max_subtokens_per_chunk])],
+                                                   device=get_device(self.force_use_cpu))
+
+            last_layer = get_last_layer_activations(self.model, torch.cat([self.last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))
+            loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
+                                   numericalized_prep_text.view(-1),
+                                   reduction='none')
+            binary_loss = to_binary_entropy(loss)
+            loss_list.extend(binary_loss.tolist())
+            self.last_predicted_token_tensor = numericalized_prep_text[:, -1:]
+        return loss_list
 
     def reset(self) -> None:
         self.model.reset()

@@ -1,5 +1,4 @@
 import logging
-import random
 
 from tqdm import tqdm
 from typing import List, Tuple, Callable, Optional, Union, Dict, Generator
@@ -177,7 +176,6 @@ def evaluate_model_on_path(model: TrainedModel, path: str,
                            metrics: Optional[List[LMEvaluator]] = None) -> Dict[str, Tuple[float, int]]:
     logger.info("Counting total file number ...")
     all_files = [f for f in get_all_files(path)]
-    random.shuffle(all_files)
 
     current_metrics: Dict[str, Tuple[float, int]] = {}
     current_full_words = 0

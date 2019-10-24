@@ -53,7 +53,7 @@ class FullWordIterator(object):
     [3, 4]
 
     >>> [token for token in FullWordIterator([], [])]
-    Traceback (most recent call last):word_average
+    Traceback (most recent call last):
     ...
     ValueError: Word boundaries list should contain at least 0!
 

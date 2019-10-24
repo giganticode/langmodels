@@ -185,6 +185,8 @@ def evaluate_model_on_path(model: TrainedModel, path: str,
         postfix = _format_postfix(current_metrics, current_full_words, current_subwords)
         t.set_postfix(postfix)
         evaluation_result = evaluate_model_on_file(model, file, metrics, result_per_line=False)
+        if not evaluation_result.prep_text:
+            continue
         latest_full_words = len(evaluation_result.prep_metadata.word_boundaries) - 1
         latest_subwords = evaluation_result.prep_metadata.word_boundaries[-1]
         latest_file_metrics = {metric: (val, latest_full_words)

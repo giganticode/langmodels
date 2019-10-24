@@ -1,5 +1,5 @@
 fastai==1.0.57
-git+https://github.com/giganticode/dataprep.git@v1.0.0-alpha.8
+git+https://github.com/giganticode/dataprep
 torchtext==0.2.3
 future==0.17.1
 comet-ml==2.0.11

@@ -47,10 +47,10 @@ optional arguments:
 ### Python API
 
 ```python
->>> from langmodels.model import TrainedModel
+>>> from langmodels.modelregistry import get_default_model
 >>> from langmodels.evaluation import evaluate_model_on_string
 
->>> trained_model = TrainedModel.get_default_model(force_use_cpu=False)
+>>> trained_model = get_default_model(force_use_cpu=False)
 >>> entropies = evaluate_model_on_string(trained_model, 'large\ntext', metrics=['bin_entropy'])
 [EvaluationResult(text='large', prep_text=['l', 'arg', 'e</t>'], prep_metadata=(set(), [0, 3]), 
 results={'bin_entropy': [15.181015908834256, 7.079181519622688, 1.809404016295282]}, 
@@ -64,9 +64,9 @@ results={'bin_entropy': [13.33439828654528]}, aggregated_result={'bin_entropy': 
 Example
 
 ```python
->>> from langmodels.model import TrainedModel
+>>> from langmodels.modelregistry import get_default_model
 
->>> trained_model = TrainedModel.get_default_model()
+>>> trained_model = get_default_model()
 >>> trained_model.feed_text('public static main() { if')
 
 # this does not change the state of the model:
@@ -91,10 +91,10 @@ Example
 
 ```python
 >>> from langmodels.evaluation import evaluate
->>> from langmodels.model import TrainedModel
+>>> from langmodels.modelregistry import load_model_by_name, get_small_model     
 
->>> medium = TrainedModel.load_model_by_name('langmodel-large-split_10k_1_512_190926.120146')
->>> small = TrainedModel.get_small_model()
+>>> medium = load_model_by_name('langmodel-large-split_10k_1_512_190926.120146')
+>>> small = get_small_model()
 >>> file = '/home/hlib/dev/langmodels/text.java'
 
 >>> evaluate(baseline_model=small, target_model=medium, file=file)

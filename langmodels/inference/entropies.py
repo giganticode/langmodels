@@ -25,8 +25,9 @@ def get_entropy_for_each_line(trained_model: TrainedModel,
                               only_aggregated_entropies: bool = True) -> Union[List[List[float]],
                                                                                List[EvaluationResult]]:
     prep_lines_and_entropies: List[EvaluationResult] = []
+    extension = get_file_extension(file)
+    trained_model.check_inference_possible_for_file_type(extension)
     with open(file, 'r') as f:
-        extension = get_file_extension(file)
         for line in f:
             prep_line, metadata = trained_model.prep_text(line, return_metadata=True, force_reinit_bpe_data=False,
                                                           extension=extension)

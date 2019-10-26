@@ -2,6 +2,8 @@ import logging
 import os
 from dataclasses import dataclass
 
+from dataprep.infrastructure.dataset import normalize_extension_string
+
 from dataprep.parse.model.metadata import PreprocessingMetadata
 from math import exp
 from typing import List, Dict, Any, Tuple, Optional, Union
@@ -221,9 +223,9 @@ class TrainedModel(object):
         self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
                                                         device=get_device(self.force_use_cpu))
 
-    def predict_next_full_token(self, n_suggestions: int) -> List[Tuple[str, float]]:
+    def predict_next_full_token(self, n_suggestions: int, include_debug_tokens: bool = False) -> List[Tuple[str, float]]:
         subtokens, scores = beam_search(self.model, self.last_predicted_token_tensor[0], self.first_nonterm_token, n_suggestions, self.beam_size)
-        return [(self.to_full_token_string(st), 1 / exp(score.item())) for st, score in zip(subtokens, scores)]
+        return [(self.to_full_token_string(st, include_debug_tokens=include_debug_tokens), 1 / exp(score.item())) for st, score in zip(subtokens, scores)]
 
     def to_full_token_string(self, subtokens_num: torch.LongTensor, include_debug_tokens=False) -> str:
         try:
@@ -255,4 +257,8 @@ class TrainedModel(object):
                                 training_time_minutes_per_epoch=self.training_time_minutes_per_epoch,
                                 n_epochs=self.n_epochs,
                                 best_epoch=self.best_epoch)
+
+    def check_inference_possible_for_file_type(self, extension):
+        if extension not in normalize_extension_string(self.config.corpus.extensions):
+            raise ValueError(f'The model was not trained on .{extension} files. Cannot do inference.')
 

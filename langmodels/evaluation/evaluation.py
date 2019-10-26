@@ -156,6 +156,7 @@ def evaluate_model_on_file(model: TrainedModel, file: str,
                            metrics: Optional[List[LMEvaluator]] = None,
                            result_per_line: bool = True) -> Union[List[EvaluationResult], EvaluationResult]:
     extension = get_file_extension(file)
+    model.check_inference_possible_for_file_type(extension)
     text = read_file_contents(file)
     if result_per_line:
         return evaluate_model_on_string(model, text, extension, filter_options, metrics)

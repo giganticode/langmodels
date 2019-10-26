@@ -47,3 +47,9 @@ def load_config_from_file(file: str) -> LMTrainingConfig:
     with open(file, 'r') as f:
         s = f.read().replace('\n', '')
     return load_config_from_string(s)
+
+
+def read_value_from_file(file: str, value_type):
+    with open(file, 'r') as f:
+        res = f.read().rsplit('\n')
+    return value_type(res)

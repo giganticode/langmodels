@@ -20,7 +20,12 @@ class EvaluationResult(object):
     aggregated_result: Dict[str, float]
 
 
-LMEvaluator = Callable[[TrainedModel, List[str], PreprocessingMetadata], Tuple[List, float]]
+class CorpusFilterOptions(object):
+    def __init__(self, with_comments: bool = True):
+        self.with_comments = with_comments
+
+
+LMEvaluator = Callable[[TrainedModel, List[str], PreprocessingMetadata, CorpusFilterOptions], Tuple[List, float]]
 
 
 def get_file_total_lines(file):
@@ -36,7 +41,7 @@ def get_file_extension(file: str) -> str:
     return os.path.splitext(file)[1][1:]
 
 # TODO this class should be included in dataprep lib
-class FullWordIterator:
+class FullWordIterator(object):
     """
     >>> [token for token in FullWordIterator(['hi', 'the', 're'], [0, 1, 3])]
     ['hi', 'there']
@@ -63,7 +68,7 @@ class FullWordIterator:
     ...
     ValueError: Word boundaries list must start with 0!
     """
-    def __init__(self, subwords: List[Any], word_boundaries: List[int], agg=lambda s: ''.join(s)):
+    def __init__(self, subwords: List[Any], word_boundaries: List[int], agg:Callable[[List[str]], Any]=lambda s: ''.join(s)):
         if len(word_boundaries) == 0:
             raise ValueError("Word boundaries list should contain at least 0!")
         if len(subwords) != word_boundaries[-1]:
@@ -76,9 +81,9 @@ class FullWordIterator:
         self.subwords = subwords
         self.word_boundaries = word_boundaries
         self.agg = agg
+        self.current_full_word = 0
 
     def __iter__(self):
-        self.current_full_word = 0
         return self
 
     def __next__(self):
@@ -110,6 +115,28 @@ def to_full_token_string(subtokens: List[str], include_debug_tokens: bool = Fals
     if not joined.endswith(cwe):
         raise ValueError(f'{joined} ({subtokens}) is not a full token')
     return joined if include_debug_tokens else joined[:-len(cwe)]
+
+
+class FilteringTokenIterator(object):
+    def __init__(self, subwords: List[Any], metadata: PreprocessingMetadata,
+                 filter_options: CorpusFilterOptions = CorpusFilterOptions(),
+                 agg:Callable[[List[str]], Any]=lambda s: ''.join(s)):
+        self.full_token_iterator = FullWordIterator(subwords, metadata.word_boundaries, agg=lambda s: (s, len(s)))
+        self.filter_options = filter_options
+        self.metadata = metadata
+        self.agg = agg
+        self.current_index = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        while True:
+            next_full_token, n_subtokens = next(self.full_token_iterator)
+            current_index = self.current_index
+            self.current_index += n_subtokens
+            if self.filter_options.with_comments or not self.metadata.is_comment_at_index(current_index):
+                return self.agg(next_full_token)
 
 
 def read_file_contents(file_path: str) -> str:

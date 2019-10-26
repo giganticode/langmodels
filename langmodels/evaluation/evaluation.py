@@ -1,11 +1,11 @@
 import logging
-import random
+import os
 
 from tqdm import tqdm
 from typing import List, Tuple, Callable, Optional, Union, Dict, Generator
 
 from langmodels.evaluation.common import EvaluationResult, get_file_extension, LMEvaluator, read_file_contents, \
-    get_all_files
+    get_all_files, CorpusFilterOptions
 from langmodels.evaluation.metrics import bin_entropy, full_token_mrr, agg_funcs
 from langmodels.model import TrainedModel
 
@@ -123,6 +123,7 @@ DEFAULT_METRIC = bin_entropy
 
 
 def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
+                             filter_options: CorpusFilterOptions = CorpusFilterOptions(),
                              metrics: Optional[List[LMEvaluator]] = None,
                              show_progress=True) -> List[EvaluationResult]:
     metrics = metrics_from_strings(metrics) or [DEFAULT_METRIC]
@@ -139,7 +140,7 @@ def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
         metrics_dict = {}
         agg_metrics_dict = {}
         for evaluator in metrics:
-            metric_values, agg_metric_values = evaluator(model, prep_line, metadata)
+            metric_values, agg_metric_values = evaluator(model, prep_line, metadata, filter_options)
             metrics_dict[evaluator.__name__] = metric_values
             agg_metrics_dict[evaluator.__name__] = agg_metric_values
 
@@ -150,14 +151,16 @@ def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
     return model_evaluation
 
 
-def evaluate_model_on_file(model: TrainedModel, file: str, metrics: Optional[List[LMEvaluator]] = None,
+def evaluate_model_on_file(model: TrainedModel, file: str,
+                           filter_options: CorpusFilterOptions = CorpusFilterOptions(),
+                           metrics: Optional[List[LMEvaluator]] = None,
                            result_per_line: bool = True) -> Union[List[EvaluationResult], EvaluationResult]:
     extension = get_file_extension(file)
     text = read_file_contents(file)
     if result_per_line:
-        return evaluate_model_on_string(model, text, extension, metrics)
+        return evaluate_model_on_string(model, text, extension, filter_options, metrics)
     else:
-        result = evaluate_model_on_string(model, text.replace('\n', ' '), extension, metrics, show_progress=False)
+        result = evaluate_model_on_string(model, text.replace('\n', ' '), extension, filter_options, metrics, show_progress=False)
         assert len(result) == 1
         return result[0]
 
@@ -173,11 +176,23 @@ def _format_postfix(current_metrics: Dict[str, Tuple[float, int]],
     return postfix
 
 
+def evaluate_model_on_project_set(model: TrainedModel, path: str,
+                                  filter_options: CorpusFilterOptions = CorpusFilterOptions(),
+                                  metrics: Optional[List[LMEvaluator]] = None) -> Dict[str, Dict[str, Tuple[float, int]]]:
+    result = {}
+    root, dirs, files = next(os.walk(path, followlinks=True))
+    for dir in dirs:
+        logger.info(f'Evaluating {dir} ...')
+        project_results = evaluate_model_on_path(model, os.path.join(root, dir), filter_options, metrics)
+        result[dir] = project_results
+    return result
+
+
 def evaluate_model_on_path(model: TrainedModel, path: str,
+                           filter_options: CorpusFilterOptions = CorpusFilterOptions(),
                            metrics: Optional[List[LMEvaluator]] = None) -> Dict[str, Tuple[float, int]]:
     logger.info("Counting total file number ...")
     all_files = [f for f in get_all_files(path)]
-    random.shuffle(all_files)
 
     current_metrics: Dict[str, Tuple[float, int]] = {}
     current_full_words = 0
@@ -186,7 +201,9 @@ def evaluate_model_on_path(model: TrainedModel, path: str,
     for file in t:
         postfix = _format_postfix(current_metrics, current_full_words, current_subwords)
         t.set_postfix(postfix)
-        evaluation_result = evaluate_model_on_file(model, file, metrics, result_per_line=False)
+        evaluation_result = evaluate_model_on_file(model, file, filter_options, metrics, result_per_line=False)
+        if not evaluation_result.prep_text:
+            continue
         latest_full_words = len(evaluation_result.prep_metadata.word_boundaries) - 1
         latest_subwords = evaluation_result.prep_metadata.word_boundaries[-1]
         latest_file_metrics = {metric: (val, latest_full_words)

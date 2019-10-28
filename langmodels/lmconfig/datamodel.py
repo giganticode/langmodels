@@ -205,3 +205,11 @@ class Run:
     @property
     def path_to_trained_model(self):
         return os.path.join(PATH_TO_TRAINED_MODELS, self.id)
+
+
+@dataclass
+class LMTrainingMetrics(object):
+    bin_entropy: float
+    training_time_minutes_per_epoch: int
+    n_epochs: int
+    best_epoch: int

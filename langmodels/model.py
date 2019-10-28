@@ -16,7 +16,8 @@ from fastai.text.models.transformer import init_transformer
 from torch import cuda
 
 from langmodels.beamsearch import beam_search
-from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig, GruArch
+from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig, GruArch, \
+    LMTrainingMetrics
 from langmodels.lmconfig.serialization import load_config_from_file, read_value_from_file
 from langmodels.migration import pth_to_torch
 from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL, to_binary_entropy
@@ -125,33 +126,38 @@ class ModelDescription(object):
         return f'{self.name}\t{self.bpe_merges}\t{self.layers_config}\t{self.arch}' \
                f'\t{self.bin_entropy}\t{self.training_time_minutes_per_epoch}\t{self.n_epochs}(best: {self.best_epoch})'
 
+    def __repr__(self):
+        return str(self)
+
 
 class TrainedModel(object):
     STARTING_TOKEN = placeholders['ect']
 
-    def __init__(self, path: str, force_use_cpu: bool = False):
+    def __init__(self, path: str, force_use_cpu: bool = False, load_only_description: bool = False):
         self.force_use_cpu = force_use_cpu
         self.model_name = os.path.basename(path)
-        self.original_vocab = Vocab.load(os.path.join(path, 'vocab'))
-        term_vocab, self.first_nonterm_token = _create_term_vocab(self.original_vocab)
-        self.model, self.vocab = self._load_model(path, term_vocab)
-        to_test_mode(self.model)
+        self.config: LMTrainingConfig = load_config_from_file(os.path.join(path, 'config'))
+        self.metrics: LMTrainingMetrics = load_config_from_file(os.path.join(path, 'metrics'))
+        self._prep_function = self.config.prep_function
 
-        # last_predicted_token_tensor is a rank-2 tensor!
-        self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
-                                                        device=get_device(self.force_use_cpu))
-        self.beam_size = DEFAULT_BEAM_SIZE
+        self.load_only_description = load_only_description
+        if not load_only_description:
+            # we might want to load only description without loading actual weights when we want
+            # to save time when loading multiple models to choose one of them to work with
+
+            self.original_vocab = Vocab.load(os.path.join(path, 'vocab'))
+            term_vocab, self.first_nonterm_token = _create_term_vocab(self.original_vocab)
+            self.model, self.vocab = self._load_model(path, term_vocab)
+            to_test_mode(self.model)
+
+            # last_predicted_token_tensor is a rank-2 tensor!
+            self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
+                                                            device=get_device(self.force_use_cpu))
+            self.beam_size = DEFAULT_BEAM_SIZE
 
     def _load_model(self, path: str, custom_vocab: Optional[Vocab] = None) -> Tuple[SequentialRNN, Vocab]:
         path_to_model = os.path.join(path, 'best.pth')
         logger.debug(f"Loading model from: {path_to_model} ...")
-
-        self.config = load_config_from_file(os.path.join(path, 'config'))
-        self._prep_function = self.config.prep_function
-        # self.bin_entropy = read_value_from_file(os.path.join(path, 'binentropy'), value_type=float)
-        # self.training_time_minutes_per_epoch = read_value_from_file(os.path.join(path, 'ttime'), value_type=int)
-        # self.n_epochs = read_value_from_file(os.path.join(path, 'epochs'), value_type=int)
-        # self.best_epoch = read_value_from_file(os.path.join(path, 'epoch.best'), value_type=int)
 
         vocab = custom_vocab if custom_vocab else self.original_vocab
         model = get_language_model(self.config.get_arch_class(), len(vocab.itos), create_custom_config(self.config))
@@ -187,7 +193,14 @@ class TrainedModel(object):
         check_metadata_validity(prep_text, metadata)
         return prep_text, metadata
 
+    def _check_loaded_description_only(self):
+        if self.load_only_description:
+            raise RuntimeError("Operation not supported. Only model's description is loaded. "
+                               "Prease reload the model with param load_only_description set to False.")
+
     def feed_text(self, text: str) -> None:
+        self._check_loaded_description_only()
+
         prep_text, metadata = self.prep_text(text, return_metadata=True, force_reinit_bpe_data=False)
         context_tensor = torch.tensor([self.vocab.numericalize(prep_text)], device=get_device(self.force_use_cpu))
         _ = get_last_layer_activations(self.model, context_tensor[:,:-1])
@@ -197,6 +210,8 @@ class TrainedModel(object):
         """
         changes hidden states of the model!!
         """
+        self._check_loaded_description_only()
+
         if not prep_text:
             return []
 
@@ -219,15 +234,21 @@ class TrainedModel(object):
         return loss_list
 
     def reset(self) -> None:
+        self._check_loaded_description_only()
+
         self.model.reset()
         self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
                                                         device=get_device(self.force_use_cpu))
 
     def predict_next_full_token(self, n_suggestions: int, include_debug_tokens: bool = False) -> List[Tuple[str, float]]:
+        self._check_loaded_description_only()
+
         subtokens, scores = beam_search(self.model, self.last_predicted_token_tensor[0], self.first_nonterm_token, n_suggestions, self.beam_size)
         return [(self.to_full_token_string(st, include_debug_tokens=include_debug_tokens), 1 / exp(score.item())) for st, score in zip(subtokens, scores)]
 
     def to_full_token_string(self, subtokens_num: torch.LongTensor, include_debug_tokens=False) -> str:
+        self._check_loaded_description_only()
+
         try:
             subtokens_num = subtokens_num[:subtokens_num.tolist().index(TORCH_LONG_MIN_VAL)]
         except ValueError: pass
@@ -252,11 +273,11 @@ class TrainedModel(object):
         return ModelDescription(name=self.model_name,
                                 bpe_merges=self.config.prep_function.params[0],
                                 layers_config=self._format_layers_config(),
-                                arch=str(self.config.get_arch_class()),
-                                bin_entropy=self.bin_entropy,
-                                training_time_minutes_per_epoch=self.training_time_minutes_per_epoch,
-                                n_epochs=self.n_epochs,
-                                best_epoch=self.best_epoch)
+                                arch=str(self.config.get_arch_class().__name__),
+                                bin_entropy=self.metrics.bin_entropy,
+                                training_time_minutes_per_epoch=self.metrics.training_time_minutes_per_epoch,
+                                n_epochs=self.metrics.n_epochs,
+                                best_epoch=self.metrics.best_epoch)
 
     def check_inference_possible_for_file_type(self, extension):
         if extension not in normalize_extension_string(self.config.corpus.extensions):

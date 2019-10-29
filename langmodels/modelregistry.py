@@ -36,10 +36,15 @@ def _download_file(url: str, path: str, check_md5: bool = False):
     os.rename(path + '.tmp', path)
 
 
-def _get_all_models():
+def _get_all_model_ids() -> List[str]:
     content = requests.get(MODEL_LIST_URL).content.decode(encoding='utf8')
     model_list = content.rstrip('\n').split('\n')
-    loaded_models = [load_model_by_id(model, load_description_only=True).get_model_description() for model in model_list]
+    return model_list
+
+
+def _get_all_models():
+    model_ids = _get_all_model_ids()
+    loaded_models = [load_model_by_id(model_id, load_description_only=True).get_model_description() for model_id in model_ids]
     return loaded_models
 
 
@@ -95,6 +100,8 @@ def load_from_path(path: str, force_use_cpu: bool = False, load_description_only
 def load_model_by_id(id: str, force_use_cpu: bool = False, load_description_only: bool = False) -> TrainedModel:
     path = os.path.join(MODEL_ZOO_PATH, id)
     if not os.path.exists(os.path.join(path, 'best.pth')):
+        if id not in _get_all_model_ids():
+            raise ValueError(f'Model with id {id} is not found on the server.')
         url_to_model_dir = os.path.join(MODEL_DIR_URL, id)
         if not os.path.exists(path):
             os.makedirs(path)

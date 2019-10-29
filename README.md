@@ -80,6 +80,7 @@ trained_model = reg.load_from_path('/home/hlib/.local/share/langmodels/0.0.1/mod
 ### Computing entropies for each line of a file
 
 #### CLI API  
+In this case the default model is used.
 ```
 ~/dev/langmodels$ python langmodels/inference/entropies.py <file> [-o <output-path>] [-e <entropy_aggregator>] [-c] [-v]
 
@@ -139,13 +140,13 @@ Example
 
 ```python
 >>> from langmodels.evaluation import evaluate
->>> from langmodels.modelregistry import load_model_by_id, get_small_model     
+>>> from langmodels.modelregistry import load_model_by_id, load_default_model     
 
->>> medium = load_model_by_id('langmodel-large-split_10k_1_512_190926.120146')
->>> small = get_small_model()
+>>> baseline = load_model_by_id('langmodel-large-split_10k_1_512_190926.120146')
+>>> target = load_default_model()
 >>> file = '/home/hlib/dev/langmodels/text.java'
 
->>> evaluate(baseline_model=small, target_model=medium, file=file)
+>>> evaluate(baseline_model=baselline, target_model=target, file=file)
 Output file: /home/hlib/dev/langmodels/text.java.html
 
 ```

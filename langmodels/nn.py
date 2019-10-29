@@ -65,8 +65,7 @@ def get_last_layer_activations(model: SequentialRNN, input: torch.FloatTensor) -
     return last_layer_activations
 
 
-class AWD_GRU(Module):
-    "AWD-LSTM/QRNN inspired by https://arxiv.org/abs/1708.02182."
+class GRU(Module):
 
     initrange=0.1
 
@@ -120,4 +119,4 @@ class AWD_GRU(Module):
 def add_gru_to_model_data():
     from fastai.text.learner import _model_meta
     gru_meta_data = {k:v for k, v in _model_meta[AWD_LSTM].items()}
-    _model_meta[AWD_GRU] = gru_meta_data
+    _model_meta[GRU] = gru_meta_data

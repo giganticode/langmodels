@@ -5,7 +5,7 @@ from typing import Optional, Callable, Tuple, Union, Any, List, Dict
 from dataprep.api.corpus import PreprocessedCorpus
 from fastai.text import AWD_LSTM, Transformer, TransformerXL, Activation
 
-from langmodels.nn import AWD_GRU
+from langmodels.nn import GRU
 
 CONFIG_VERSION = '1.0.0'
 
@@ -167,7 +167,7 @@ class LMTrainingConfig(object):
         if isinstance(self.arch, LstmArch):
             return AWD_LSTM
         elif isinstance(self.arch, GruArch):
-            return AWD_GRU
+            return GRU
         elif isinstance(self.arch, TransformerArch):
             return Transformer
         else:

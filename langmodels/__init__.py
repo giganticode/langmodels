@@ -24,6 +24,9 @@ logging.getLogger('everett').setLevel(logging.INFO)
 logging.getLogger('urllib3.connectionpool').setLevel(logging.INFO)
 
 
+app_name = 'langmodels'
+
+
 def _get_version():
     with open(os.path.join(root_package_dir, 'VERSION')) as version_file:
         return version_file.read().strip()

@@ -26,6 +26,7 @@ from langmodels.lmconfig.datamodel import RafaelsTrainingSchedule, CosineLRSched
 from langmodels.lmconfig.serialization import dump_config
 from langmodels.metrics import mrr
 from langmodels.model import TrainedModel, create_custom_config
+from langmodels.modelregistry import load_from_path
 from langmodels.nn import add_gru_to_model_data
 from langmodels.retrier import RetryingSaveModelCalback
 from langmodels.training.schedule import ReduceLRCallback
@@ -231,7 +232,7 @@ def train(lm_training_config: LMTrainingConfig,
 
     # learner.export('learner.pkl')
     # return load_learner(os.path.join(PATH_TO_TRAINED_MODELS, run.id), 'learner.pkl')
-    return TrainedModel.from_path(run.path_to_trained_model, force_use_cpu=True)
+    load_from_path(run.path_to_trained_model, force_use_cpu=True)
     # return learner
 
 

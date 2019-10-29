@@ -113,7 +113,7 @@ def check_metadata_validity(prep_text: List[str], metadata: PreprocessingMetadat
 
 @dataclass
 class ModelDescription(object):
-    name: str
+    id: str
     bpe_merges: str
     layers_config: str
     arch: str
@@ -121,13 +121,17 @@ class ModelDescription(object):
     training_time_minutes_per_epoch: int
     n_epochs: int
     best_epoch: int
+    tags: List[str]
 
-    def __str__(self):
-        return f'{self.name}\t{self.bpe_merges}\t{self.layers_config}\t{self.arch}' \
-               f'\t{self.bin_entropy}\t{self.training_time_minutes_per_epoch}\t{self.n_epochs}(best: {self.best_epoch})'
+    def is_tagged_by(self, tag: str) -> bool:
+        return tag in self.tags
 
-    def __repr__(self):
-        return str(self)
+    @staticmethod
+    def get_attribute_list() -> List[str]:
+        return [k for k in ModelDescription.__annotations__.keys()]
+
+    def get_value_list(self) -> List[str]:
+        return list(map(lambda a: self.__getattribute__(a), ModelDescription.get_attribute_list()))
 
 
 class TrainedModel(object):
@@ -135,9 +139,25 @@ class TrainedModel(object):
 
     def __init__(self, path: str, force_use_cpu: bool = False, load_only_description: bool = False):
         self.force_use_cpu = force_use_cpu
-        self.model_name = os.path.basename(path)
-        self.config: LMTrainingConfig = load_config_from_file(os.path.join(path, 'config'))
-        self.metrics: LMTrainingMetrics = load_config_from_file(os.path.join(path, 'metrics'))
+        self.id = os.path.basename(path)
+        path_to_config_file = os.path.join(path, 'config')
+        path_to_metrics_file = os.path.join(path, 'metrics')
+        path_to_tags_file = os.path.join(path, 'tags')
+        self.metrics = None
+        self.config = None
+        self.tags = []
+        try:
+            self.config: LMTrainingConfig = load_config_from_file(path_to_config_file)
+        except FileNotFoundError:
+            logger.warning(f'Config file not found: {path_to_config_file}')
+        try:
+            self.metrics: LMTrainingMetrics = load_config_from_file(os.path.join(path, 'metrics'))
+        except FileNotFoundError:
+            logger.warning(f'File with metrics not found: {path_to_metrics_file}')
+        if os.path.exists(path_to_tags_file):
+            value = read_value_from_file(path_to_tags_file, value_type=str)
+            if value != '':
+                self.tags = value.split(',')
         self._prep_function = self.config.prep_function
 
         self.load_only_description = load_only_description
@@ -270,16 +290,20 @@ class TrainedModel(object):
         return f'{emb_size}/{n_layers}/{n_hid}'
 
     def get_model_description(self) -> ModelDescription:
-        return ModelDescription(name=self.model_name,
+        return ModelDescription(id=self.id,
                                 bpe_merges=self.config.prep_function.params[0],
                                 layers_config=self._format_layers_config(),
                                 arch=str(self.config.get_arch_class().__name__),
-                                bin_entropy=self.metrics.bin_entropy,
-                                training_time_minutes_per_epoch=self.metrics.training_time_minutes_per_epoch,
-                                n_epochs=self.metrics.n_epochs,
-                                best_epoch=self.metrics.best_epoch)
+                                bin_entropy=self.metrics.bin_entropy if self.metrics else 1e+6,
+                                training_time_minutes_per_epoch=self.metrics.training_time_minutes_per_epoch
+                                if self.metrics else 0,
+                                n_epochs=self.metrics.n_epochs if self.metrics else 0,
+                                best_epoch=self.metrics.best_epoch if self.metrics else -1,
+                                tags=self.tags)
 
     def check_inference_possible_for_file_type(self, extension):
         if extension not in normalize_extension_string(self.config.corpus.extensions):
             raise ValueError(f'The model was not trained on .{extension} files. Cannot do inference.')
 
+    def __str__(self) -> str:
+        return str(self.get_model_description())

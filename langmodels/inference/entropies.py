@@ -7,6 +7,7 @@ from typing import List, Union
 from langmodels.evaluation.common import EvaluationResult, get_file_extension
 from langmodels.evaluation.metrics import bin_entropy
 from langmodels.model import TrainedModel
+from langmodels.modelregistry import load_default_model
 from langmodels.profiling import TimeMeasurer
 from langmodels import __version__
 
@@ -59,7 +60,7 @@ if __name__ == '__main__':
     verbose = args.verbose or not args.output_path
 
     time_measurer.tick('Model loading')
-    model = TrainedModel.get_default_model(force_use_cpu=args.cpu)
+    model = load_default_model(force_use_cpu=args.cpu)
     time_measurer.tock('Model loading')
     results = get_entropy_for_each_line(model, args.file, verbose)
     if args.output_path:

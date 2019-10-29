@@ -1,9 +1,9 @@
 from inspect import signature
-from typing import Optional, Dict, Type
+from typing import Optional, Dict, Type, Union
 
 import jsons
 
-from langmodels.lmconfig.datamodel import PrepFunction, LMTrainingConfig
+from langmodels.lmconfig.datamodel import PrepFunction, LMTrainingConfig, LMTrainingMetrics
 
 
 def prep_function_serializer(prep_function: PrepFunction, **kwargs):
@@ -39,11 +39,11 @@ def dump_config(config: LMTrainingConfig, file: Optional[str]=None) -> str:
     return str
 
 
-def load_config_from_string(s: str) -> LMTrainingConfig:
-    return jsons.loads(s, LMTrainingConfig, strict=True)
+def load_config_from_string(s: str) -> Union[LMTrainingConfig, LMTrainingMetrics]:
+    return jsons.loads(s, Union[LMTrainingConfig, LMTrainingMetrics], strict=True)
 
 
-def load_config_from_file(file: str) -> LMTrainingConfig:
+def load_config_from_file(file: str) -> Union[LMTrainingConfig, LMTrainingMetrics]:
     with open(file, 'r') as f:
         s = f.read().replace('\n', '')
     return load_config_from_string(s)
@@ -51,5 +51,5 @@ def load_config_from_file(file: str) -> LMTrainingConfig:
 
 def read_value_from_file(file: str, value_type):
     with open(file, 'r') as f:
-        res = f.read().rsplit('\n')
+        res = f.read().rstrip('\n')
     return value_type(res)

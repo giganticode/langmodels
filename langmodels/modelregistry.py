@@ -36,15 +36,20 @@ def _download_file(url: str, path: str, check_md5: bool = False):
     os.rename(path + '.tmp', path)
 
 
-def _get_all_model_ids() -> List[str]:
-    content = requests.get(MODEL_LIST_URL).content.decode(encoding='utf8')
-    model_list = content.rstrip('\n').split('\n')
-    return model_list
+def _get_all_model_ids(cached: bool = False) -> List[str]:
+    if cached:
+        root, dirs, files = next(os.walk(MODEL_ZOO_PATH))
+        return [d for d in dirs if os.path.exists(os.path.join(root, d, 'best.pth'))]
+    else:
+        content = requests.get(MODEL_LIST_URL).content.decode(encoding='utf8')
+        model_list = content.rstrip('\n').split('\n')
+        return model_list
 
 
-def _get_all_models():
-    model_ids = _get_all_model_ids()
-    loaded_models = [load_model_by_id(model_id, load_description_only=True).get_model_description() for model_id in model_ids]
+def _get_all_models(cached: bool):
+    model_ids = _get_all_model_ids(cached=cached)
+    loaded_models = [load_model_by_id(model_id, load_description_only=True).get_model_description()
+                     for model_id in model_ids]
     return loaded_models
 
 
@@ -74,23 +79,24 @@ class _SortByEntropyQuery(_ModelQuery):
 
 
 class _GetAllModelsQuery(_ModelQuery):
-    def __init__(self):
+    def __init__(self, cached: bool):
         super().__init__(None)
+        self.cached = cached
 
     def execute(self) -> List[ModelDescription]:
-        return _get_all_models()
+        return _get_all_models(cached=self.cached)
 
 
-def _get_all_models_query() -> _ModelQuery:
-    return _GetAllModelsQuery()
+def _get_all_models_query(cached: bool) -> _ModelQuery:
+    return _GetAllModelsQuery(cached=cached)
 
 
-def query_all_models() -> List[ModelDescription]:
-    return _get_all_models_query().sorted_by_entropy().execute()
+def query_all_models(cached: bool = False) -> List[ModelDescription]:
+    return _get_all_models_query(cached=cached).sorted_by_entropy().execute()
 
 
-def list_pretrained_models() -> None:
-    print(_get_all_models_query().sorted_by_entropy())
+def list_pretrained_models(cached: bool = False) -> None:
+    print(_get_all_models_query(cached=cached).sorted_by_entropy())
 
 
 def load_from_path(path: str, force_use_cpu: bool = False, load_description_only: bool = False) -> TrainedModel:
@@ -117,9 +123,10 @@ def load_model_by_id(id: str, force_use_cpu: bool = False, load_description_only
 
 
 def load_model_with_tag(tag: str, force_use_cpu: bool = False):
-    for model in query_all_models():
-        if model.is_tagged_by(tag):
-            return load_model_by_id(model.id, force_use_cpu=force_use_cpu)
+    for cached in [True, False]:  # first checking tags of cached models
+        for model in query_all_models(cached=cached):
+            if model.is_tagged_by(tag):
+                return load_model_by_id(model.id, force_use_cpu=force_use_cpu)
     raise ValueError(f'Model tagged with {tag} not found.')
 
 

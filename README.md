@@ -31,9 +31,11 @@ pip install -r requirements.txt
 # More model loading options
 
 **First, all available pre-trained LMs can be listed**
+
+Set `cached` parameter to `False` (defaults to `True`) to display only cached projects (e.g. if offline) 
 ```python
 >>> import langmodels.modelregistry as reg
->>> reg.list_pretrained_models()
+>>> reg.list_pretrained_models(cached=False)
 
   ID                                                                    BPE_MERGES  LAYERS_CONFIG  ARCH      BIN_ENTROPY    TRAINING_TIME_MINUTES_PER_EPOCH  N_EPOCHS  BEST_EPOCH  TAGS                 
     
@@ -146,7 +148,7 @@ Example
 >>> target = load_default_model()
 >>> file = '/home/hlib/dev/langmodels/text.java'
 
->>> evaluate(baseline_model=baselline, target_model=target, file=file)
+>>> evaluate(baseline_model=baseline, target_model=target, file=file)
 Output file: /home/hlib/dev/langmodels/text.java.html
 
 ```

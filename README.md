@@ -32,7 +32,7 @@ pip install -r requirements.txt
 
 **First, all available pre-trained LMs can be listed**
 
-Set `cached` parameter to `False` (defaults to `True`) to display only cached projects (e.g. if offline) 
+Set `cached` parameter to `True` (defaults to `False`) to display only cached projects (e.g. if offline) 
 ```python
 >>> import langmodels.modelregistry as reg
 >>> reg.list_pretrained_models(cached=False)

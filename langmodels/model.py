@@ -69,8 +69,16 @@ def get_terminal_placeholders() -> List[str]:
             placeholders['ect'], placeholders['non_eng'], placeholders['olc_end']]
 
 
+def ends_with_terminal_placeholder(subtoken: str) -> bool:
+    for tp in get_terminal_placeholders():
+        if subtoken.endswith(tp):
+            return True
+    return False
+
+
 def is_terminal_subtoken(subtoken: str) -> bool:
-    return subtoken.endswith(placeholders['compound_word_end']) or subtoken in get_terminal_placeholders()
+    return subtoken.endswith(placeholders['compound_word_end']) \
+           or ends_with_terminal_placeholder(subtoken)
 
 
 def _create_term_vocab(vocab: Vocab) -> Tuple[Vocab, int]:
@@ -279,7 +287,7 @@ class TrainedModel(object):
         if textified in placeholders.values():
             return textified
 
-        if not textified.endswith(cwe):
+        if not is_terminal_subtoken(textified):
             raise ValueError(f'{textified} ({subtokens_num}) is not a full token')
         return textified if include_debug_tokens else textified[:-len(cwe)]
 

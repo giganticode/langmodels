@@ -16,11 +16,8 @@ jobs:
         - pip install -r requirements.txt -f https://download.pytorch.org/whl/torch_stable.html
 install:
   - pip install -r requirements.txt
-env:
-  - MODEL_ZOO_PATH="$TRAVIS_BUILD_DIR/modelzoo"
 script:
   - cd $TRAVIS_BUILD_DIR
-  - git clone https://github.com/giganticode/modelzoo
   - echo "Current directory is $(pwd)"
   - coverage run -m pytest --doctest-modules
   - coverage report -m

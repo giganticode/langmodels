@@ -3,6 +3,10 @@ language: python
 python:
   - "3.6"
   - "3.7"
+jobs:
+  include:
+    python: "3.7"
+    os: windows
 install:
   - pip install -r requirements.txt
 env:

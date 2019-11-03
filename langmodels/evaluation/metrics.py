@@ -104,10 +104,11 @@ def mrr(model: TrainedModel,
             if incl_func(metadata, len(inverse_ranks)):
                 try:
                     rank = predicted_tokens.index(actual_token) + 1
-                    inverse_rank_sum += 1. / rank
+                    inverse_rank = 1. / rank
                 except ValueError:  # actual token is not in prediction list
-                    inverse_rank_sum += 0.
-                inverse_ranks.append(inverse_rank_sum)
+                    inverse_rank = 0.
+                inverse_rank_sum += inverse_rank
+                inverse_ranks.append(inverse_rank)
                 inverse_ranks.extend([None for i in range(len(full_token) - 1)])
                 count += 1
             else:

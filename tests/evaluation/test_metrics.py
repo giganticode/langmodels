@@ -3,11 +3,13 @@ from langmodels.evaluation.common import EvaluationScenario, TokenTypes, Evaluat
     SubtokenIterator
 
 from langmodels.evaluation.metrics import bin_entropy, mrr
-from unittest.mock import MagicMock
+from unittest.mock import Mock
+
+from langmodels.model import TrainedModel
 
 
 def test_bin_entropy_empty():
-    trained_model_mock = MagicMock()
+    trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.get_entropies_for_prep_text.return_value = []
 
     expected = {EvaluationScenario('full_token_entropy', TokenTypes.ALL): EvaluationResult([], 0.0, 0)}
@@ -17,7 +19,7 @@ def test_bin_entropy_empty():
 
 
 def test_bin_entropy_simple_args():
-    trained_model_mock = MagicMock()
+    trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.get_entropies_for_prep_text.return_value = [1.0, 2.0]
 
     expected = {EvaluationScenario('full_token_entropy', TokenTypes.ALL): EvaluationResult([1.0, 2.0], 3.0, 1)}
@@ -27,7 +29,7 @@ def test_bin_entropy_simple_args():
 
 
 def test_bin_entropy_with_comment():
-    trained_model_mock = MagicMock()
+    trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.get_entropies_for_prep_text.return_value = [1.0, 2.0, 3.0, 6.0]
 
     expected = {
@@ -59,7 +61,7 @@ def test_bin_entropy_with_comment():
 
 
 def test_mrr_default_args():
-    trained_model_mock = MagicMock()
+    trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.predict_next_full_token.side_effect = [[('a1', 0.), ('b1', 0.)],
                                                               [('a2', 0.), ('b2', 0.)]]
 
@@ -70,7 +72,7 @@ def test_mrr_default_args():
 
 
 def test_mrr_default_all_token_types():
-    trained_model_mock = MagicMock()
+    trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.predict_next_full_token.side_effect = [[('a1', 0.), ('b1', 0.)],
                                                               [('a2', 0.), ('b2', 0.)],
                                                               [('a3', 0.), ('b3', 0.)],

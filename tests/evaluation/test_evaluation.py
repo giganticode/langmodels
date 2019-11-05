@@ -8,10 +8,11 @@ from unittest.mock import MagicMock, Mock
 
 from langmodels.evaluation import evaluate_model_on_string
 from langmodels.evaluation.common import Evaluation, EvaluationScenario, TokenTypes, EvaluationResult
+from langmodels.model import TrainedModel
 
 
 def test_evaluate_model_on_string_empty():
-    trained_model_mock = MagicMock()
+    trained_model_mock = MagicMock(spec=TrainedModel)
     trained_model_mock.prep_text.return_value = ([], PreprocessingMetadata())
 
     expected = [Evaluation(
@@ -30,10 +31,10 @@ def test_evaluate_on_string_default_args(mocker: MockFixture):
     metadata = PreprocessingMetadata(word_boundaries=[0, 2])
     scenarios = {EvaluationScenario('full_token_entropy', TokenTypes.ALL): EvaluationResult([1.0, 2.0], 3.0, 1)}
 
-    trained_model_mock = MagicMock()
+    trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.prep_text.return_value = (prep_line, metadata)
 
-    mocked_metric = MagicMock(return_value=scenarios)
+    mocked_metric = Mock(spec=callable, return_value=scenarios)
     mocker.patch('langmodels.evaluation.evaluation.DEFAULT_METRIC', new=mocked_metric)
 
     # when
@@ -50,13 +51,13 @@ def test_evaluate_on_string_default_args_not_result_per_line(mocker: MockFixture
     # given
     text = 'MyClass\n{'
     prep_line = ['My', 'Class</t>']
-    metadata = Mock()
-    scenarios = {EvaluationScenario('full_token_entropy', TokenTypes.ALL): Mock()}
+    metadata = Mock(spec=PreprocessingMetadata)
+    scenarios = {EvaluationScenario('full_token_entropy', TokenTypes.ALL): Mock(spec=EvaluationResult)}
 
-    trained_model_mock = MagicMock()
+    trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.prep_text.return_value = (prep_line, metadata)
 
-    mocked_metric = MagicMock(return_value=scenarios)
+    mocked_metric = Mock(spec=callable, return_value=scenarios)
     mocker.patch('langmodels.evaluation.evaluation.DEFAULT_METRIC', new=mocked_metric)
 
     # when
@@ -73,17 +74,17 @@ def test_evaluate_on_string_non_default_token_types_and_metrics_multiline(mocker
     # given
     text = 'MyClass\n{'
     prep_lines = [['My', 'Class</t>'], ['{']]
-    metadata_list = [Mock() for i in range(len(prep_lines))]
+    metadata_list = [Mock(spec=PreprocessingMetadata) for i in range(len(prep_lines))]
     metrics = {'full_token_entropy', 'mrr'}
     token_types_list = {TokenTypes.ALL, TokenTypes.ALL_BUT_COMMENTS}
-    scenarios = [[{EvaluationScenario(metric, token_types): Mock()
+    scenarios = [[{EvaluationScenario(metric, token_types): Mock(spec=EvaluationResult)
                    for token_types in token_types_list} for i in range(len(prep_lines))] for metric in metrics]
-    mocked_metrics = [Mock(side_effect=scenario) for scenario in scenarios]
+    mocked_metrics = [Mock(spec=callable, side_effect=scenario) for scenario in scenarios]
 
-    trained_model_mock = MagicMock()
+    trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.prep_text.side_effect = list(zip(prep_lines, metadata_list))
 
-    mocked_metrics_from_strings = MagicMock(return_value=mocked_metrics)
+    mocked_metrics_from_strings = Mock(spec=callable, return_value=mocked_metrics)
     mocker.patch('langmodels.evaluation.evaluation.metrics_from_strings', new=mocked_metrics_from_strings)
 
     # when

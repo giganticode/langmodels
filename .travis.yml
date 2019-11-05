@@ -16,8 +16,10 @@ jobs:
         - pip install -r requirements.txt
         - pip install torch===1.3.0 torchvision===0.4.1 -f https://download.pytorch.org/whl/torch_stable.html
 install:
-  - pip install -r requirements.txt
+  - pip install freetype-py
+  - pip install pypng
   - pip3 install torch==1.3.0
+  - pip install -r requirements.txt
 script:
   - cd $TRAVIS_BUILD_DIR
   - echo "Current directory is $(pwd)"

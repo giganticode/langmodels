@@ -2,6 +2,8 @@ import logging
 import logging.config
 import os
 import yaml
+import matplotlib
+matplotlib.use('PS')  # to avoid error on OSX
 
 current_script_location = os.path.realpath(__file__)
 root_package_dir = os.path.dirname(current_script_location)

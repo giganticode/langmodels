@@ -2,14 +2,14 @@ import logging
 import os
 
 from tqdm import tqdm
-from typing import List, Tuple, Callable, Optional, Union, Dict, Generator
+from typing import List, Tuple, Callable, Optional, Union, Dict, Set
 
-from langmodels.evaluation.common import EvaluationResult, get_file_extension, LMEvaluator, read_file_contents, \
-    get_all_files, CorpusFilterOptions
-from langmodels.evaluation.metrics import bin_entropy, full_token_mrr, agg_funcs
+from langmodels import modelregistry
+from langmodels.evaluation.common import Evaluation, get_file_extension, read_file_contents, \
+    get_all_files, TokenTypes, EvaluationScenario
+from langmodels.evaluation.metrics import bin_entropy, mrr, get_metric_aggregator_by_name, Metric, \
+    get_metric_func_by_name
 from langmodels.model import TrainedModel
-
-ImprovementMetric = Callable[[float, float], float]
 
 logger = logging.getLogger(__name__)
 
@@ -85,150 +85,94 @@ def zip_subwords(subwords: Tuple[List[str], List[str]],
     return res
 
 
-def metrics_from_strings(_metrics: Union[List[str], List[Callable], None]) -> Optional[List[Callable]]:
-    """
-    >>> metrics_from_strings(None) is None
-    True
-
-    >>> metrics_from_strings(['nonexistent_metric'])
-    Traceback (most recent call last):
-    ...
-    AttributeError: module 'langmodels.evaluation.metrics' has no attribute 'nonexistent_metric'
-
-    >>> metrics_from_strings(['full_token_mrr', 'bin_entropy'])
-    Traceback (most recent call last):
-    ...
-    ValueError: For now passing only 1 metric is supported. You passed 2: ['full_token_mrr', 'bin_entropy']
-
-    >>> metrics_from_strings(['bin_entropy'])[0].__name__
-    'bin_entropy'
-
-    >>> metrics_from_strings([bin_entropy])[0].__name__
-    'bin_entropy'
-    """
+def metrics_from_strings(_metrics: Union[Set[str], Set[Callable], None]) -> Optional[Set[Callable]]:
     if _metrics is None:
         return None
 
-    if len(_metrics) > 1:
-        raise ValueError(f"For now passing only 1 metric is supported. You passed {len(_metrics)}: {_metrics}")
-
-    def load_metric(metric: str) -> Callable:
-        from langmodels.evaluation import metrics
-        return getattr(metrics, metric)
-
-    return list(map(lambda m: m if isinstance(m, Callable) else load_metric(m), _metrics))
+    return set(map(lambda m: m if isinstance(m, Callable) else get_metric_func_by_name(m), _metrics))
 
 
 DEFAULT_METRIC = bin_entropy
 
 
 def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
-                             filter_options: CorpusFilterOptions = CorpusFilterOptions(),
-                             metrics: Optional[List[LMEvaluator]] = None,
-                             show_progress=True) -> List[EvaluationResult]:
-    metrics = metrics_from_strings(metrics) or [DEFAULT_METRIC]
+                             token_types: Optional[Set[TokenTypes]] = None,
+                             metrics: Optional[Union[Set[Metric], Set[str]]] = None,
+                             result_per_line=True) -> List[Evaluation]:
+    metrics = metrics_from_strings(metrics) or {DEFAULT_METRIC}
 
-    if full_token_mrr not in metrics:
-        show_progress = False
-    text_lines = text.split('\n')
-    model_evaluation: List[EvaluationResult] = []
+    show_progress = result_per_line and mrr in metrics
 
+    text_lines = text.split('\n') if result_per_line else [text]
+    model_evaluation: List[Evaluation] = []
     line_iterable = tqdm(text_lines) if show_progress else text_lines
     for line in line_iterable:
-        prep_line, metadata = model.prep_text(line, return_metadata=True, force_reinit_bpe_data=False,
+        prep_line, metadata = model.prep_text(line, return_metadata=True,
+                                              force_reinit_bpe_data=False,
                                               extension=extension)
-        metrics_dict = {}
-        agg_metrics_dict = {}
-        for evaluator in metrics:
-            metric_values, agg_metric_values = evaluator(model, prep_line, metadata, filter_options)
-            metrics_dict[evaluator.__name__] = metric_values
-            agg_metrics_dict[evaluator.__name__] = agg_metric_values
-
-        line_result = EvaluationResult(text=line, prep_text=prep_line, prep_metadata=metadata,
-                                       results=metrics_dict, aggregated_result=agg_metrics_dict)
-
-        model_evaluation.append(line_result)
+        scenarios = {k: v for metric in metrics for k, v in metric(model, prep_line, metadata, token_types).items()}
+        line_evaluation = Evaluation(text=line, prep_text=prep_line, prep_metadata=metadata, scenarios=scenarios)
+        model_evaluation.append(line_evaluation)
     return model_evaluation
 
 
 def evaluate_model_on_file(model: TrainedModel, file: str,
-                           filter_options: CorpusFilterOptions = CorpusFilterOptions(),
-                           metrics: Optional[List[LMEvaluator]] = None,
-                           result_per_line: bool = True) -> Union[List[EvaluationResult], EvaluationResult]:
+                           token_types: Optional[Set[TokenTypes]] = None,
+                           metrics: Optional[Union[Set[Metric], Set[str]]] = None,
+                           result_per_line: bool = True) -> Union[List[Evaluation], Evaluation]:
     extension = get_file_extension(file)
     model.check_inference_possible_for_file_type(extension)
     text = read_file_contents(file)
-    if result_per_line:
-        return evaluate_model_on_string(model, text, extension, filter_options, metrics)
-    else:
-        result = evaluate_model_on_string(model, text.replace('\n', ' '), extension, filter_options, metrics, show_progress=False)
-        assert len(result) == 1
-        return result[0]
+    result = evaluate_model_on_string(model, text, extension, token_types, metrics, result_per_line=result_per_line)
+    return result if result_per_line else result[0]
 
 
-def _format_postfix(current_metrics: Dict[str, Tuple[float, int]],
-                   current_full_words: int, current_subwords: int) -> Dict[str, str]:
+def _format_postfix(current_metrics: Dict[EvaluationScenario, Tuple[float, int]]) -> Dict[str, str]:
     if current_metrics:
-        postfix = {metric: f'{value:.2f}' for metric, (value, _) in current_metrics.items()}
-        postfix['tokens'] = current_full_words
-        postfix['subtokens'] = current_subwords
+        postfix = {str(eval_scenario): f'{value:.2f} (n={n_samples})'
+                   for eval_scenario, (value, n_samples) in current_metrics.items()}
     else:
         postfix = {}
     return postfix
 
 
 def evaluate_model_on_project_set(model: TrainedModel, path: str,
-                                  filter_options: CorpusFilterOptions = CorpusFilterOptions(),
-                                  metrics: Optional[List[LMEvaluator]] = None) -> Dict[str, Dict[str, Tuple[float, int]]]:
-    result = {}
+                                  token_types: Optional[Set[TokenTypes]] = None,
+                                  metrics: Optional[List[Metric]] = None) \
+        -> Dict[str, Dict[EvaluationScenario, Tuple[float, int]]]:
+    result: Dict[str, Dict[EvaluationScenario, Tuple[float, int]]] = {}
     root, dirs, files = next(os.walk(path, followlinks=True))
-    for dir in dirs:
-        logger.info(f'Evaluating {dir} ...')
-        project_results = evaluate_model_on_path(model, os.path.join(root, dir), filter_options, metrics)
-        result[dir] = project_results
+    for directory in dirs:
+        logger.info(f'Evaluating {directory} ...')
+        result[directory] = evaluate_model_on_path(model, os.path.join(root, directory), token_types, metrics)
     return result
 
 
-def evaluate_model_on_path(model: TrainedModel, path: str,
-                           filter_options: CorpusFilterOptions = CorpusFilterOptions(),
-                           metrics: Optional[List[LMEvaluator]] = None) -> Dict[str, Tuple[float, int]]:
+def evaluate_model_on_path(model: TrainedModel, path: str, token_types: Optional[Set[TokenTypes]] = None,
+                           metrics: Optional[Union[Set[Metric], Set[str]]] = None) \
+        -> Dict[EvaluationScenario, Tuple[float, int]]:
+    token_types = token_types or {TokenTypes.ALL}
+
     logger.info("Counting total file number ...")
     all_files = [f for f in get_all_files(path)]
 
-    current_metrics: Dict[str, Tuple[float, int]] = {}
-    current_full_words = 0
-    current_subwords = 0
+    cumulative_metrics: Dict[EvaluationScenario, Tuple[float, int]] = {}
     t = tqdm(all_files)
     for file in t:
-        postfix = _format_postfix(current_metrics, current_full_words, current_subwords)
+        postfix = _format_postfix(cumulative_metrics)
         t.set_postfix(postfix)
-        evaluation_result = evaluate_model_on_file(model, file, filter_options, metrics, result_per_line=False)
-        if not evaluation_result.prep_text:
-            continue
-        latest_full_words = len(evaluation_result.prep_metadata.word_boundaries) - 1
-        latest_subwords = evaluation_result.prep_metadata.word_boundaries[-1]
-        latest_file_metrics = {metric: (val, latest_full_words)
-                               for metric, val in evaluation_result.aggregated_result.items()}
-        if bin_entropy.__name__ in latest_file_metrics:
-            latest_file_metrics['subtoken_bin_entropy'] = (
-                sum(evaluation_result.results['bin_entropy']) / latest_subwords,
-                latest_subwords
-            )
+        evaluation: Evaluation = evaluate_model_on_file(model, file, token_types, metrics, result_per_line=False)
 
-        current_full_words += latest_full_words
-        current_subwords += latest_subwords
-        if current_metrics:
-            new_current_file_metric_values: Dict[str, Tuple[float, int]] = {}
-            for metric, (current_value, current_n_samples) in current_metrics.items():
-                latest_file_value, n_samples_in_latest_file = latest_file_metrics[metric]
-                new_metric_value = agg_funcs[metric]([current_value, latest_file_value],
-                                                     [current_n_samples, n_samples_in_latest_file])
-                new_current_file_metric_values[metric] = (new_metric_value,
-                                                          current_n_samples + n_samples_in_latest_file)
-            current_metrics = new_current_file_metric_values
+        current_file_metrics = {scenario: (eval_result.average, eval_result.n_samples)
+                                for scenario, eval_result in evaluation.scenarios.items()}
+
+        if cumulative_metrics:
+            for scenario, cumulative_eval_result in cumulative_metrics.items():
+                metric_agg = get_metric_aggregator_by_name(scenario.metric_name)
+                cumulative_metrics[scenario] = metric_agg(*zip(cumulative_eval_result, current_file_metrics[scenario]))
         else:
-            current_metrics = latest_file_metrics
-    if not current_metrics:
+            cumulative_metrics = current_file_metrics
+    if not cumulative_metrics:
         raise Exception(f"No files to evaluate are found in {path}")
 
-    return current_metrics
+    return cumulative_metrics

@@ -4,7 +4,6 @@ import os
 from tqdm import tqdm
 from typing import List, Tuple, Callable, Optional, Union, Dict, Set
 
-from langmodels import modelregistry
 from langmodels.evaluation.common import Evaluation, get_file_extension, read_file_contents, \
     get_all_files, TokenTypes, EvaluationScenario
 from langmodels.evaluation.metrics import bin_entropy, mrr, get_metric_aggregator_by_name, Metric, \
@@ -98,7 +97,7 @@ DEFAULT_METRIC = bin_entropy
 def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
                              token_types: Optional[Set[TokenTypes]] = None,
                              metrics: Optional[Union[Set[Metric], Set[str]]] = None,
-                             result_per_line=True) -> List[Evaluation]:
+                             result_per_line=True, append_eof: bool = False) -> List[Evaluation]:
     metrics = metrics_from_strings(metrics) or {DEFAULT_METRIC}
 
     show_progress = result_per_line and mrr in metrics
@@ -106,10 +105,11 @@ def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
     text_lines = text.split('\n') if result_per_line else [text]
     model_evaluation: List[Evaluation] = []
     line_iterable = tqdm(text_lines) if show_progress else text_lines
-    for line in line_iterable:
+    for i, line in enumerate(line_iterable):
         prep_line, metadata = model.prep_text(line, return_metadata=True,
                                               force_reinit_bpe_data=False,
-                                              extension=extension)
+                                              extension=extension,
+                                              append_eof=append_eof and i == len(line_iterable) - 1)
         scenarios = {k: v for metric in metrics for k, v in metric(model, prep_line, metadata, token_types).items()}
         line_evaluation = Evaluation(text=line, prep_text=prep_line, prep_metadata=metadata, scenarios=scenarios)
         model_evaluation.append(line_evaluation)
@@ -123,7 +123,8 @@ def evaluate_model_on_file(model: TrainedModel, file: str,
     extension = get_file_extension(file)
     model.check_inference_possible_for_file_type(extension)
     text = read_file_contents(file)
-    result = evaluate_model_on_string(model, text, extension, token_types, metrics, result_per_line=result_per_line)
+    result = evaluate_model_on_string(model, text, extension, token_types, metrics,
+                                      result_per_line=result_per_line, append_eof=True)
     return result if result_per_line else result[0]
 
 

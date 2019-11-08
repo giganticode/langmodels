@@ -2,7 +2,6 @@ from unittest import mock
 
 from pytest_mock import MockFixture
 
-import langmodels
 from dataprep.parse.model.metadata import PreprocessingMetadata
 from unittest.mock import MagicMock, Mock
 
@@ -42,7 +41,8 @@ def test_evaluate_on_string_default_args(mocker: MockFixture):
 
     # then
     trained_model_mock.prep_text.assert_has_calls([mock.call('MyClass', extension='java',
-                                                             force_reinit_bpe_data=False, return_metadata=True)])
+                                                             force_reinit_bpe_data=False,
+                                                             return_metadata=True, append_eof=False)])
     mocked_metric.assert_called_with(trained_model_mock, prep_line, metadata, None)
     assert actual == [Evaluation(text, prep_line, metadata, scenarios)]
 
@@ -65,7 +65,8 @@ def test_evaluate_on_string_default_args_not_result_per_line(mocker: MockFixture
 
     # then
     trained_model_mock.prep_text.assert_has_calls([mock.call('MyClass\n{', extension='java',
-                                                             force_reinit_bpe_data=False, return_metadata=True)])
+                                                             force_reinit_bpe_data=False,
+                                                             return_metadata=True, append_eof=False)])
     mocked_metric.assert_called_with(trained_model_mock, prep_line, metadata, None)
     assert actual == [Evaluation(text, prep_line, metadata, scenarios)]
 
@@ -91,13 +92,15 @@ def test_evaluate_on_string_non_default_token_types_and_metrics_multiline(mocker
     actual = evaluate_model_on_string(trained_model_mock, text,
                                       token_types=token_types_list,
                                       metrics=metrics,
-                                      result_per_line=True)
+                                      result_per_line=True, append_eof=True)
 
     # then
     trained_model_mock.prep_text.assert_has_calls([mock.call('MyClass', extension='java',
-                                                             force_reinit_bpe_data=False, return_metadata=True)])
+                                                             force_reinit_bpe_data=False,
+                                                             return_metadata=True, append_eof=False)])
     trained_model_mock.prep_text.assert_has_calls([mock.call('{', extension='java',
-                                                             force_reinit_bpe_data=False, return_metadata=True)])
+                                                             force_reinit_bpe_data=False,
+                                                             return_metadata=True, append_eof=True)])
 
     for mocked_metric in mocked_metrics:
         for prep_line, metadata in zip(prep_lines, metadata_list):

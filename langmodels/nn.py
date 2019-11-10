@@ -1,6 +1,5 @@
 from math import log
-from torch import nn
-from torch.nn import GRU
+from torch.nn import Embedding, ModuleList
 
 from typing import List, Tuple, Union, Optional
 
@@ -43,7 +42,7 @@ def to_test_mode(model: SequentialRNN) -> None:
 
 
 def save_hidden_states(model: SequentialRNN) -> List[Tuple[torch.Tensor, torch.Tensor]]:
-    return [(hl[0].clone(), hl[1].clone()) for hl in model[0].hidden]
+    return [(hl[0].clone(), hl[1].clone()) if isinstance(hl, Tuple) else hl.clone() for hl in model[0].hidden]
 
 
 def get_last_layer_activations(model: SequentialRNN, input: torch.FloatTensor) -> Optional[torch.FloatTensor]:
@@ -73,16 +72,16 @@ class GRU(Module):
                  input_p:float=0.6, embed_p:float=0.1, weight_p:float=0.5, qrnn:bool=False, bidir:bool=False):
         self.bs,self.qrnn,self.emb_sz,self.n_hid,self.n_layers = 1,qrnn,emb_sz,n_hid,n_layers
         self.n_dir = 2 if bidir else 1
-        self.encoder = nn.Embedding(vocab_sz, emb_sz, padding_idx=pad_token)
+        self.encoder = Embedding(vocab_sz, emb_sz, padding_idx=pad_token)
         self.encoder_dp = EmbeddingDropout(self.encoder, embed_p)
 
-        self.rnns = [GRU(emb_sz if l == 0 else n_hid, (n_hid if l != n_layers - 1 else emb_sz)//self.n_dir, 1,
+        self.rnns = [torch.nn.GRU(emb_sz if l == 0 else n_hid, (n_hid if l != n_layers - 1 else emb_sz)//self.n_dir, 1,
                              batch_first=True, bidirectional=bidir) for l in range(n_layers)]
         self.rnns = [WeightDropout(rnn, weight_p) for rnn in self.rnns]
-        self.rnns = nn.ModuleList(self.rnns)
+        self.rnns = ModuleList(self.rnns)
         self.encoder.weight.data.uniform_(-self.initrange, self.initrange)
         self.input_dp = RNNDropout(input_p)
-        self.hidden_dps = nn.ModuleList([RNNDropout(hidden_p) for l in range(n_layers)])
+        self.hidden_dps = ModuleList([RNNDropout(hidden_p) for l in range(n_layers)])
 
     def forward(self, input:Tensor, from_embeddings:bool=False)->Tuple[Tensor,Tensor]:
         if from_embeddings: bs,sl,es = input.size()

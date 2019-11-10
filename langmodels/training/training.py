@@ -27,7 +27,6 @@ from langmodels.lmconfig.serialization import dump_config
 from langmodels.metrics import mrr
 from langmodels.model import TrainedModel, create_custom_config
 from langmodels.modelregistry import load_from_path
-from langmodels.nn import add_gru_to_model_data
 from langmodels.retrier import RetryingSaveModelCalback
 from langmodels.training.schedule import ReduceLRCallback
 from langmodels.training.tracking.comet import log_to_comet
@@ -38,7 +37,6 @@ UNKNOWN_TOKEN_INDEX = 0
 
 HOME = os.environ['HOME']
 PATH_TO_PREP_DATASETS = os.environ['PATH_TO_PREP_DATASETS'] if 'PATH_TO_PREP_DATASETS' in os.environ else os.path.join(HOME, 'prep-datasets')
-add_gru_to_model_data()
 
 
 class Numericalizer(PreProcessor):

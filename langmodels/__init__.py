@@ -3,6 +3,9 @@ import logging.config
 import os
 import yaml
 import matplotlib
+
+from langmodels.nn import add_gru_to_model_data
+
 matplotlib.use('PS')  # to avoid error on OSX
 
 current_script_location = os.path.realpath(__file__)
@@ -35,3 +38,5 @@ def _get_version():
 
 
 __version__ = _get_version()
+
+add_gru_to_model_data()

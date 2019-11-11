@@ -249,7 +249,10 @@ class TrainedModel(object):
         # big chunks require more memory, small chunks require more time
         n_chunks = (len(prep_text)-1) // max_subtokens_per_chunk + 1
         for i in range(n_chunks):
-            numericalized_prep_text = torch.tensor([self.vocab.numericalize(prep_text[i*max_subtokens_per_chunk:(i+1)*max_subtokens_per_chunk])],
+            pt = prep_text[i*max_subtokens_per_chunk:(i+1)*max_subtokens_per_chunk]
+            #TODO XXX this is a hack to temporarily fix \xa0 issue
+            pt = ['`unk' if t == '\xa0' else t for t in pt]
+            numericalized_prep_text = torch.tensor([self.vocab.numericalize(pt)],
                                                    device=get_device(self.force_use_cpu))
 
             last_layer = get_last_layer_activations(self.model, torch.cat([self.last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))

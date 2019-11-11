@@ -53,6 +53,8 @@ class Numericalizer(PreProcessor):
     def process_one(self, item: str):
         with open(item, 'r') as f:
             prep_tokens = [token for line in f for token in line.rstrip('\n').split(' ')]
+            #TODO XXX temp hack to fix \xa0 issue
+            prep_tokens = ['`unk' if t == '\\xa0' else t for t in prep_tokens]
             return np.array(self.vocab.numericalize(prep_tokens), dtype=np.int64)
 
     def process(self, ds: Collection):

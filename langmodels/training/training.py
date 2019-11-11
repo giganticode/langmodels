@@ -1,27 +1,32 @@
 import logging
 import os
 from concurrent.futures.process import ProcessPoolExecutor
-
-import psutil
-from pathlib import Path
 from pprint import pprint
 
-import dataprep.api.corpus as api
 import numpy as np
+import psutil
 import torch
-from dataprep.api.corpus import PreprocessedCorpus
 from fastai.basic_data import DataBunch
+from fastai.basic_train import validate
+from fastai.callback import CallbackHandler, Callback
 from fastai.callbacks.mem import PeakMemMetric
 from fastai.callbacks.misc import StopAfterNBatches
-from fastai.callbacks.tracker import EarlyStoppingCallback
+from fastai.layers import FlattenedLoss
 from fastai.metrics import accuracy
 from fastai.text import Vocab, TextList, language_model_learner, PreProcessor, Collection, partition_by_cores, \
     List
-from fastai.train import fit_one_cycle, Learner
+from fastai.train import fit_one_cycle, Learner, EarlyStoppingCallback
+from math import log
+from pathlib import Path
 from torch import Tensor
+from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
+from typing import Tuple
 
-from langmodels.lmconfig.datamodel import LMTrainingConfig, Gpu, Run, PATH_TO_TRAINED_MODELS
+import dataprep.api.corpus as api
+from dataprep.api.corpus import PreprocessedCorpus
+from langmodels import modelregistry
+from langmodels.lmconfig.datamodel import LMTrainingConfig, Gpu, Run, PATH_TO_TRAINED_MODELS, Corpus
 from langmodels.lmconfig.datamodel import RafaelsTrainingSchedule, CosineLRSchedule, TrainingProcedure
 from langmodels.lmconfig.serialization import dump_config
 from langmodels.metrics import mrr
@@ -145,13 +150,17 @@ def get_cpu_memory_used_mb():
     return process.memory_info().rss / 2 ** 20
 
 
-def create_databunch(prep_corpus: PreprocessedCorpus, vocab: Vocab, config: LMTrainingConfig, device: str) -> DataBunch:
+def create_databunch(prep_corpus: PreprocessedCorpus, vocab: Vocab, bs: int, bptt: int, device: str,
+                     only_validation_files: bool = False) -> DataBunch:
     print(f'Getting preprocessed corpus from {prep_corpus.path_to_prep_dataset}')
     file_path_list = [Path(os.fsdecode(p)) for p in prep_corpus.get_file_iterator()]
     text_list = TextList(file_path_list, path=prep_corpus.path_to_prep_dataset, processor=Numericalizer(vocab))
 
     print("Splitting into training/validation sets")
-    split_list = text_list.split_by_folder()
+    if only_validation_files:
+        split_list = text_list.split_by_valid_func(lambda f: True)
+    else:
+        split_list = text_list.split_by_folder()
 
     print("Labeling for langmodeling")
     labelled_list = split_list.label_for_lm()
@@ -160,7 +169,7 @@ def create_databunch(prep_corpus: PreprocessedCorpus, vocab: Vocab, config: LMTr
     print(f"Cpu memory used: {cpu_memory_used_mb} MB")
 
     print("Creating databunches")
-    databunched = labelled_list.databunch(bs=config.bs, bptt=config.bptt, device=device)
+    databunched = labelled_list.databunch(bs=bs, bptt=bptt, device=device)
     return databunched
 
 
@@ -189,6 +198,25 @@ class CudaNotAvailable(Exception):
     pass
 
 
+def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_files: bool=False):
+    prep_corpus: api.PreprocessedCorpus = trained_model.prep_corpus(corpus)
+    try:
+        device = get_device(Gpu(fallback_to_cpu=True))
+    except EnvironmentError:
+        raise CudaNotAvailable()
+
+    databunch = create_databunch(prep_corpus, trained_model.vocab, bs=64, bptt=1, device=device,
+                                 only_validation_files=only_validation_files)
+
+    class DetupleCallback(Callback):
+        def on_loss_begin(self, last_output: Tuple[Tensor, Tensor, Tensor], **kwargs):
+            "Save the extra outputs for later and only returns the true output."
+            return {'last_output': last_output[0]}
+
+    return validate(trained_model.model, databunch.valid_dl, loss_func=FlattenedLoss(CrossEntropyLoss),
+             cb_handler=CallbackHandler([DetupleCallback()]))
+
+
 def train(lm_training_config: LMTrainingConfig,
           gpu: Gpu(),
           tune=False, comet=True) -> TrainedModel:
@@ -207,7 +235,8 @@ def train(lm_training_config: LMTrainingConfig,
     except EnvironmentError:
         raise CudaNotAvailable()
 
-    databunch = create_databunch(prep_corpus, vocab, lm_training_config, device)
+    databunch = create_databunch(prep_corpus, vocab, bs=lm_training_config.bs, bptt=lm_training_config.bptt,
+                                 device=device)
 
     check_data(databunch, vocab)
 
@@ -230,7 +259,7 @@ def train(lm_training_config: LMTrainingConfig,
 
     # learner.export('learner.pkl')
     # return load_learner(os.path.join(PATH_TO_TRAINED_MODELS, run.id), 'learner.pkl')
-    load_from_path(run.path_to_trained_model, force_use_cpu=True)
+    return load_from_path(run.path_to_trained_model, force_use_cpu=True)
     # return learner
 
 

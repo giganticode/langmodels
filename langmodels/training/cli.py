@@ -10,7 +10,7 @@ from langmodels import root_package_dir
 import docopt_subcommands as dsc
 from langmodels.training.training import train, CudaNotAvailable
 
-from langmodels.lmconfig.datamodel import Gpu
+from langmodels.lmconfig.datamodel import DeviceOptions
 from langmodels import __version__
 
 
@@ -61,10 +61,10 @@ def handle_train(args):
         print(f'Config module must contain {CONFIG_VAR_NAME} variable')
         exit(3)
 
-    gpu = Gpu(fallback_to_cpu=fallback_to_cpu, non_default_device_to_use=device)
+    device_options = DeviceOptions(fallback_to_cpu=fallback_to_cpu, non_default_device_to_use=device)
 
     try:
-        train(lm_training_config=lm_training_config, gpu=gpu, tune=tune, comet=comet)
+        train(lm_training_config=lm_training_config, device_options=device_options, tune=tune, comet=comet)
     except CudaNotAvailable:
         print('Gpu with CUDA-support is not available on this machine. '
               'Use --fallback-to-cpu  switch if you want to train on gpu')

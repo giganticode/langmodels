@@ -141,7 +141,7 @@ class TrainingProcedure(object):
 
 
 @dataclass(frozen=True)
-class Gpu(object):
+class DeviceOptions(object):
     fallback_to_cpu: bool = False
     non_default_device_to_use: Optional[int] = None
 
@@ -175,14 +175,14 @@ class LMTrainingConfig(object):
 
 
 class Run:
-    def __init__(self, config: LMTrainingConfig, gpu: Gpu):
+    def __init__(self, config: LMTrainingConfig, device_options: DeviceOptions):
         self.config = config
-        self.gpu = gpu
+        self.gpu = device_options
         self.id = self._generate_run_id()
 
     @classmethod
-    def with_config(cls, config: LMTrainingConfig, gpu: Gpu = Gpu()):
-        return cls(config, gpu)
+    def with_config(cls, config: LMTrainingConfig, device_options: DeviceOptions = DeviceOptions()):
+        return cls(config, device_options)
 
     def _generate_run_id(self) -> str:
         name_parts = []

@@ -26,7 +26,7 @@ from typing import Tuple
 import dataprep.api.corpus as api
 from dataprep.api.corpus import PreprocessedCorpus
 from langmodels import modelregistry
-from langmodels.lmconfig.datamodel import LMTrainingConfig, Gpu, Run, PATH_TO_TRAINED_MODELS, Corpus
+from langmodels.lmconfig.datamodel import LMTrainingConfig, DeviceOptions, Run, PATH_TO_TRAINED_MODELS, Corpus
 from langmodels.lmconfig.datamodel import RafaelsTrainingSchedule, CosineLRSchedule, TrainingProcedure
 from langmodels.lmconfig.serialization import dump_config
 from langmodels.metrics import mrr
@@ -94,11 +94,11 @@ def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
     return Vocab(['`unk', '`pad'] + list(prep_corpus.load_vocab().keys()))
 
 
-def get_device(gpu: Gpu) -> str:
+def get_device_id(device_options: DeviceOptions) -> str:
     if torch.cuda.is_available():
-        device_id = gpu.non_default_device_to_use or torch.cuda.current_device()
+        device_id = device_options.non_default_device_to_use or torch.cuda.current_device()
         return torch.device('cuda', device_id)
-    elif gpu.fallback_to_cpu:
+    elif device_options.fallback_to_cpu:
         return "cpu"
     else:
         raise EnvironmentError("Cuda not available")
@@ -203,11 +203,11 @@ class CudaNotAvailable(Exception):
 def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_files: bool=False):
     prep_corpus: api.PreprocessedCorpus = trained_model.prep_corpus(corpus)
     try:
-        device = get_device(Gpu(fallback_to_cpu=True))
+        device_id = get_device_id(DeviceOptions(fallback_to_cpu=True))
     except EnvironmentError:
         raise CudaNotAvailable()
 
-    databunch = create_databunch(prep_corpus, trained_model.vocab, bs=64, bptt=1, device=device,
+    databunch = create_databunch(prep_corpus, trained_model.vocab, bs=64, bptt=1, device=device_id,
                                  only_validation_files=only_validation_files)
 
     class DetupleCallback(Callback):
@@ -220,10 +220,10 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
 
 
 def train(lm_training_config: LMTrainingConfig,
-          gpu: Gpu(),
+          device_options: DeviceOptions(),
           tune=False, comet=True) -> TrainedModel:
 
-    run = Run.with_config(lm_training_config, gpu=gpu)
+    run = Run.with_config(lm_training_config, device_options=device_options)
 
     check_path_to_base_model(lm_training_config)
     check_path_to_trained_model(run.path_to_trained_model)
@@ -233,7 +233,7 @@ def train(lm_training_config: LMTrainingConfig,
     vocab = create_vocab_for_lm(prep_corpus)
 
     try:
-        device = get_device(gpu)
+        device = get_device_id(device_options)
     except EnvironmentError:
         raise CudaNotAvailable()
 

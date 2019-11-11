@@ -211,15 +211,15 @@ class TrainedModel(object):
 
         return model, vocab
 
-    def prep_corpus(self, corpus: Corpus, *kwargs) -> PreprocessedCorpus:
-        return self._prep_function.apply(corpus, kwargs)
+    def prep_corpus(self, corpus: Corpus, **kwargs) -> PreprocessedCorpus:
+        return self._prep_function.apply(corpus, **kwargs)
 
-    def prep_text(self, text, **kwargs) -> Tuple[List[str], PreprocessingMetadata]:
+    def prep_text(self, text, **kwargs) -> Union[Tuple[List[str], PreprocessingMetadata], List[str]]:
         import dataprep.api.text as text_api
         text_callable = getattr(text_api, self._prep_function.callable.__name__)
         prep_text, metadata = text_callable(text, *self._prep_function.params, **self._prep_function.options, **kwargs)
         check_metadata_validity(prep_text, metadata)
-        return prep_text, metadata
+        return (prep_text, metadata) if 'return_metadata' in kwargs and kwargs['return_metadata'] else prep_text
 
     def _check_loaded_description_only(self):
         if self.load_only_description:

@@ -42,7 +42,7 @@ def to_test_mode(model: SequentialRNN) -> None:
 
 
 def save_hidden_states(model: SequentialRNN) -> List[Tuple[torch.Tensor, torch.Tensor]]:
-    return [(hl[0].clone(), hl[1].clone()) if isinstance(hl, Tuple) else hl.clone() for hl in model[0].hidden]
+    return [(hl[0].clone(), hl[1].clone()) if isinstance(hl, (tuple, list)) else hl.clone() for hl in model[0].hidden]
 
 
 def get_last_layer_activations(model: SequentialRNN, input: torch.FloatTensor) -> Optional[torch.FloatTensor]:

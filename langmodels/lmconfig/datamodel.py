@@ -174,7 +174,7 @@ class LMTrainingConfig(object):
             raise ValueError(f"Unknown architecture: {self.arch}")
 
 
-class Run:
+class ExperimentRun:
     def __init__(self, config: LMTrainingConfig, device_options: DeviceOptions):
         self.config = config
         self.gpu = device_options

@@ -26,7 +26,7 @@ from typing import Tuple
 import dataprep.api.corpus as api
 from dataprep.api.corpus import PreprocessedCorpus
 from langmodels import modelregistry
-from langmodels.lmconfig.datamodel import LMTrainingConfig, DeviceOptions, Run, PATH_TO_TRAINED_MODELS, Corpus
+from langmodels.lmconfig.datamodel import LMTrainingConfig, DeviceOptions, ExperimentRun, PATH_TO_TRAINED_MODELS, Corpus
 from langmodels.lmconfig.datamodel import RafaelsTrainingSchedule, CosineLRSchedule, TrainingProcedure
 from langmodels.lmconfig.serialization import dump_config
 from langmodels.metrics import mrr
@@ -189,7 +189,7 @@ VOCAB_FILE_NAME = 'vocab'
 CONFIG_FILE_NAME = 'config'
 
 
-def save_experiment_input(learner: Learner, run: Run, vocab: Vocab, comet: bool):
+def save_experiment_input(learner: Learner, run: ExperimentRun, vocab: Vocab, comet: bool):
     vocab.save(os.path.join(run.path_to_trained_model, VOCAB_FILE_NAME))
     dump_config(run.config, os.path.join(run.path_to_trained_model, CONFIG_FILE_NAME))
     if comet:
@@ -223,10 +223,10 @@ def train(lm_training_config: LMTrainingConfig,
           device_options: DeviceOptions(),
           tune=False, comet=True) -> TrainedModel:
 
-    run = Run.with_config(lm_training_config, device_options=device_options)
+    experiment_run = ExperimentRun.with_config(lm_training_config, device_options=device_options)
 
     check_path_to_base_model(lm_training_config)
-    check_path_to_trained_model(run.path_to_trained_model)
+    check_path_to_trained_model(experiment_run.path_to_trained_model)
 
     prep_corpus: api.PreprocessedCorpus = lm_training_config.prep_function.apply(lm_training_config.corpus,
                                                                                  output_path=PATH_TO_PREP_DATASETS)
@@ -248,20 +248,20 @@ def train(lm_training_config: LMTrainingConfig,
                                      # drop_mult=lm_training_config.arch.drop.multiplier,
                                      config=config, pretrained=not config, metrics=[accuracy, mrr],
                                      callback_fns=[PeakMemMetric] if torch.cuda.is_available() else [],
-                                     path=PATH_TO_TRAINED_MODELS, model_dir=run.id)
+                                     path=PATH_TO_TRAINED_MODELS, model_dir=experiment_run.id)
 
-    save_experiment_input(learner, run, vocab, comet=comet)
+    save_experiment_input(learner, experiment_run, vocab, comet=comet)
 
     add_callbacks(learner, tune=tune)
 
     load_base_model_if_needed(learner, lm_training_config)
 
-    print(f"Starting training... Model will be saved to {run.path_to_trained_model}")
+    print(f"Starting training... Model will be saved to {experiment_run.path_to_trained_model}")
     start_training(learner, lm_training_config.training_procedure)
 
     # learner.export('learner.pkl')
-    # return load_learner(os.path.join(PATH_TO_TRAINED_MODELS, run.id), 'learner.pkl')
-    return load_from_path(run.path_to_trained_model, force_use_cpu=True)
+    # return load_learner(os.path.join(PATH_TO_TRAINED_MODELS, experiment_run.id), 'learner.pkl')
+    return load_from_path(experiment_run.path_to_trained_model, force_use_cpu=True)
     # return learner
 
 

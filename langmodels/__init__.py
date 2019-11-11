@@ -3,10 +3,9 @@ import logging.config
 import os
 import yaml
 import matplotlib
+matplotlib.use('PS')  # to avoid error on OSX - this should go here, before other imports
 
 from langmodels.nn import add_gru_to_model_data
-
-matplotlib.use('PS')  # to avoid error on OSX
 
 current_script_location = os.path.realpath(__file__)
 root_package_dir = os.path.dirname(current_script_location)

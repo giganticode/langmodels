@@ -6,15 +6,17 @@
 
 # Quick start
 
-Python version >= 3.6 required!
+### Prerequisites
 
-### Building from source
+* Python version >= 3.6 required! 
+
+### Installation
 
 ```
 git clone https://github.com//giganticode/langmodels
 cd langmodels
-python -m venv <venv_name>
-source <venv_name>/bin/activate
+python -m venv langmodels-venv
+source langmodels-venv/bin/activate
 pip install -r requirements.txt
 ```
 

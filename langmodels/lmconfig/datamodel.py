@@ -1,17 +1,18 @@
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Tuple, Union, Any, List, Dict
 
+import dataprep.api.corpus as corpus_api
 from dataprep.api.corpus import PreprocessedCorpus
 from fastai.text import AWD_LSTM, Transformer, TransformerXL, Activation
 
+from langmodels import MODEL_ZOO_PATH
 from langmodels.nn import GRU
 
 CONFIG_VERSION = '1.0.0'
 
 HOME = os.environ['HOME']
-
-PATH_TO_TRAINED_MODELS = os.environ['PATH_TO_TRAINED_MODELS'] if 'PATH_TO_TRAINED_MODELS' in os.environ else os.path.join(HOME, 'modelzoo')
 
 
 @dataclass(frozen=True)
@@ -37,7 +38,7 @@ class TrainingSchedule(object):
 
 @dataclass(frozen=True)
 class RafaelsTrainingSchedule(TrainingSchedule):
-    init_lr: float
+    init_lr: float = 1e-4
     mult_coeff: float = 0.5
     max_epochs: int = 50
     max_lr_reduction_times: int = 6
@@ -50,16 +51,16 @@ class EarlyStop(object):
 
 @dataclass(frozen=True)
 class CosineLRSchedule(TrainingSchedule):
-    max_lr: float
-    cyc_len: int
-    max_epochs: int
+    max_lr: float = 1e-4
+    cyc_len: int = 3
+    max_epochs: int = 30
     early_stop: EarlyStop = EarlyStop()
 
 
 @dataclass(frozen=True)
 class Corpus(object):
-    path: str
-    extensions: str  # in format "py" or "java|c|py"
+    path: str = os.path.join(HOME, 'dev/raw_datasets/allamanis/langmodel-large-split')
+    extensions: str = 'java'  # in format "py" or "java|c|py"
 
 
 PrepCallable = Callable[..., PreprocessedCorpus]
@@ -68,9 +69,15 @@ ParametrizedPrepCallable = Callable[[Corpus], PreprocessedCorpus]
 
 @dataclass(frozen=True)
 class PrepFunction(object):
-    callable: PrepCallable
-    params: List = field(default_factory=list)
-    options: Dict[str, Any] = field(default_factory=dict)
+    callable: PrepCallable = corpus_api.bpe
+    params: List = field(default_factory=lambda: ['10k'])
+    options: Dict[str, Any] = field(default_factory=lambda: {
+        'no_unicode': True,
+        'no_spaces': True,
+        'no_com': False,
+        'no_str': False,
+        'max_str_length': sys.maxsize
+    })
 
     @property
     def apply(self) -> ParametrizedPrepCallable:
@@ -96,12 +103,16 @@ class LstmArch(object):
     out_bias: bool = True
     lstm: bool = True
 
+    def __post_init__(self):
+        if not self.lstm:
+            raise TypeError(f'Value of lstm field in LstmArch must be set to True')
+
 
 @dataclass(frozen=True)
 class GruArch(object):
     bidir: bool = False
-    emb_sz: int = 300
-    n_hid: int = 650
+    emb_sz: int = 1024
+    n_hid: int = 1024
     n_layers: int = 3
     adam_betas: Tuple[float, float] = (0.7, 0.99)
     clip: float = 0.3
@@ -111,15 +122,19 @@ class GruArch(object):
     out_bias: bool = True
     gru: bool = True
 
+    def __post_init__(self):
+        if not self.gru:
+            raise TypeError(f'Value of gru field in GruArch must be set to True')
+
 
 @dataclass(frozen=True)
 class TransformerArch(object):
-    ctx_len: int = 512
-    n_layers: int = 12
-    n_heads: int = 12
-    d_model: int = 768
-    d_head: int = 64
-    d_inner: int = 3072
+    ctx_len: int = 256
+    n_layers: int = 3
+    n_heads: int = 6
+    d_model: int = 512
+    d_head: int = 16
+    d_inner: int = 2048
     resid_p: float = 0.1
     attn_p: float = 0.1
     ff_p: float = 0.1
@@ -136,7 +151,7 @@ class TransformerArch(object):
 
 @dataclass(frozen=True)
 class TrainingProcedure(object):
-    schedule: Union[CosineLRSchedule, RafaelsTrainingSchedule]
+    schedule: Union[CosineLRSchedule, RafaelsTrainingSchedule] = RafaelsTrainingSchedule()
     weight_decay: float = 1e-6
 
 
@@ -148,13 +163,13 @@ class DeviceOptions(object):
 
 @dataclass(frozen=True)
 class LMTrainingConfig(object):
-    base_model: Optional[str]
-    bs: int
-    corpus: Corpus
-    prep_function: PrepFunction
-    arch: Union[LstmArch, GruArch, TransformerArch]
-    bptt: int
-    training_procedure: TrainingProcedure
+    base_model: Optional[str] = None
+    bs: int = 32
+    corpus: Corpus = Corpus()
+    prep_function: PrepFunction = PrepFunction()
+    arch: Union[LstmArch, GruArch, TransformerArch] = LstmArch()
+    bptt: int = 200
+    training_procedure: TrainingProcedure = TrainingProcedure()
     config_version: str = CONFIG_VERSION
 
     def __post_init__(self):
@@ -192,7 +207,8 @@ class ExperimentRun:
         dataset = os.path.basename(self.config.corpus.path)
         prep_func_param = self.config.prep_function.params[0]
         n_layers = self.config.arch.n_layers
-        n_hid = self.config.arch.n_hid
+        n_hid = self.config.arch.n_hid if not isinstance(self.config.arch, TransformerArch) \
+            else self.config.arch.d_inner
 
         import datetime
         time_now = datetime.datetime.now()
@@ -204,7 +220,7 @@ class ExperimentRun:
 
     @property
     def path_to_trained_model(self):
-        return os.path.join(PATH_TO_TRAINED_MODELS, self.id)
+        return os.path.join(MODEL_ZOO_PATH, self.id)
 
 
 @dataclass

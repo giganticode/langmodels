@@ -2,18 +2,14 @@ import hashlib
 import logging
 import os
 
-import appdirs
 import requests
 from columnar import columnar
 from typing import List
 
-from langmodels import _get_version, app_name
+from langmodels import MODEL_ZOO_PATH
 from langmodels.model import TrainedModel, ModelDescription
 
 logger = logging.getLogger(__name__)
-
-user_data_dir = appdirs.user_data_dir(app_name, appauthor=False, version=_get_version())
-MODEL_ZOO_PATH = os.path.join(user_data_dir, 'modelzoo')
 
 MODEL_DIR_URL = 'https://www.inf.unibz.it/~hbabii/pretrained_models'
 MODEL_LIST_URL = MODEL_DIR_URL + '.list'

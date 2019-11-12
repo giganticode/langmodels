@@ -2,15 +2,14 @@ import importlib
 # comet.ml must be imported before everything else
 module = importlib.import_module('comet_ml')
 
-import os
 from typing import Dict, Optional, Any
 
-from langmodels import root_package_dir
+from langmodels import app_name
 
 import docopt_subcommands as dsc
 from langmodels.training.training import train, CudaNotAvailable
 
-from langmodels.lmconfig.datamodel import DeviceOptions
+from langmodels.lmconfig.datamodel import DeviceOptions, LMTrainingConfig
 from langmodels import __version__
 
 
@@ -24,7 +23,7 @@ def is_option_true(args: Dict, option: str) -> bool:
 
 @dsc.command()
 def train_handler(args):
-    """usage: {program} train --config=<config> [--fallback-to-cpu] [--tune] [--disable-comet] [--device=<device>]
+    """usage: {program} train [--config=<config>] [--fallback-to-cpu] [--tune] [--disable-comet] [--device=<device>]
 
     Trains a language model according to the given config.
 
@@ -43,35 +42,36 @@ def train_handler(args):
 CONFIG_VAR_NAME = 'lm_training_config'
 
 
-def handle_train(args):
+def load_training_config(config_name: str) -> LMTrainingConfig:
+    try:
+        module = importlib.import_module(f'langmodels.lmconfig.{config_name}')
+    except ModuleNotFoundError:
+        print(f'Config {config_name} not found')
+        exit(2)
+    try:
+        return getattr(module, CONFIG_VAR_NAME)
+    except AttributeError:
+        print(f'Config module must contain {CONFIG_VAR_NAME} variable')
+        exit(3)
+
+
+def handle_train(args) -> None:
     fallback_to_cpu = is_option_true(args, '--fallback-to-cpu')
     tune = is_option_true(args, '--tune')
     comet = not is_option_true(args, '--disable-comet')
     device = get_option(args, '--device')
     device = int(device) if device else 0
     config = get_option(args, '--config')
-    try:
-        module = importlib.import_module(f'langmodels.lmconfig.{config}')
-    except ModuleNotFoundError:
-        print(f'Config {config} not found')
-        exit(2)
-    try:
-        lm_training_config = getattr(module, CONFIG_VAR_NAME)
-    except AttributeError:
-        print(f'Config module must contain {CONFIG_VAR_NAME} variable')
-        exit(3)
+    lm_training_config = load_training_config(config) if config else LMTrainingConfig()
 
     device_options = DeviceOptions(fallback_to_cpu=fallback_to_cpu, non_default_device_to_use=device)
 
     try:
-        train(lm_training_config=lm_training_config, device_options=device_options, tune=tune, comet=comet)
+        train(training_config=lm_training_config, device_options=device_options, tune=tune, comet=comet)
     except CudaNotAvailable:
         print('Gpu with CUDA-support is not available on this machine. '
               'Use --fallback-to-cpu  switch if you want to train on gpu')
         exit(4)
-
-
-app_name = 'langmodels'
 
 
 def run(args):

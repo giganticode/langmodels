@@ -1,8 +1,9 @@
 import logging
 import os
 from concurrent.futures.process import ProcessPoolExecutor
-from pprint import pprint
+from pprint import pprint, pformat
 
+import jsons
 import numpy as np
 import psutil
 import torch
@@ -25,8 +26,8 @@ from typing import Tuple
 
 import dataprep.api.corpus as api
 from dataprep.api.corpus import PreprocessedCorpus
-from langmodels import modelregistry
-from langmodels.lmconfig.datamodel import LMTrainingConfig, DeviceOptions, ExperimentRun, PATH_TO_TRAINED_MODELS, Corpus
+from langmodels import modelregistry, MODEL_ZOO_PATH
+from langmodels.lmconfig.datamodel import LMTrainingConfig, DeviceOptions, ExperimentRun, Corpus
 from langmodels.lmconfig.datamodel import RafaelsTrainingSchedule, CosineLRSchedule, TrainingProcedure
 from langmodels.lmconfig.serialization import dump_config
 from langmodels.metrics import mrr
@@ -219,17 +220,18 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
              cb_handler=CallbackHandler([DetupleCallback()]))
 
 
-def train(lm_training_config: LMTrainingConfig,
-          device_options: DeviceOptions(),
+def train(training_config: LMTrainingConfig = LMTrainingConfig(),
+          device_options: DeviceOptions() = DeviceOptions(),
           tune=False, comet=True) -> TrainedModel:
+    logger.info(f'Using the following config: \n{pformat(jsons.dumps(training_config))}')
 
-    experiment_run = ExperimentRun.with_config(lm_training_config, device_options=device_options)
+    experiment_run = ExperimentRun.with_config(training_config, device_options=device_options)
 
-    check_path_to_base_model(lm_training_config)
+    check_path_to_base_model(training_config)
     check_path_to_trained_model(experiment_run.path_to_trained_model)
 
-    prep_corpus: api.PreprocessedCorpus = lm_training_config.prep_function.apply(lm_training_config.corpus,
-                                                                                 output_path=PATH_TO_PREP_DATASETS)
+    prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply(training_config.corpus,
+                                                                              output_path=PATH_TO_PREP_DATASETS)
     vocab = create_vocab_for_lm(prep_corpus)
 
     try:
@@ -237,27 +239,27 @@ def train(lm_training_config: LMTrainingConfig,
     except EnvironmentError:
         raise CudaNotAvailable()
 
-    databunch = create_databunch(prep_corpus, vocab, bs=lm_training_config.bs, bptt=lm_training_config.bptt,
+    databunch = create_databunch(prep_corpus, vocab, bs=training_config.bs, bptt=training_config.bptt,
                                  device=device)
 
     check_data(databunch, vocab)
 
-    config = create_custom_config(lm_training_config)
-    arch_class = lm_training_config.get_arch_class()
+    config = create_custom_config(training_config)
+    arch_class = training_config.get_arch_class()
     learner = language_model_learner(databunch, arch_class,
                                      # drop_mult=lm_training_config.arch.drop.multiplier,
                                      config=config, pretrained=not config, metrics=[accuracy, mrr],
                                      callback_fns=[PeakMemMetric] if torch.cuda.is_available() else [],
-                                     path=PATH_TO_TRAINED_MODELS, model_dir=experiment_run.id)
+                                     path=MODEL_ZOO_PATH, model_dir=experiment_run.id)
 
     save_experiment_input(learner, experiment_run, vocab, comet=comet)
 
     add_callbacks(learner, tune=tune)
 
-    load_base_model_if_needed(learner, lm_training_config)
+    load_base_model_if_needed(learner, training_config)
 
     print(f"Starting training... Model will be saved to {experiment_run.path_to_trained_model}")
-    start_training(learner, lm_training_config.training_procedure)
+    start_training(learner, training_config.training_procedure)
 
     # learner.export('learner.pkl')
     # return load_learner(os.path.join(PATH_TO_TRAINED_MODELS, experiment_run.id), 'learner.pkl')

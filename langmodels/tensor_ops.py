@@ -25,3 +25,21 @@ def mrr(preds: Tensor, targs: Tensor) -> Tensor:
     guessed_positions = _find_sorted_array_position(preds, pred_values).float()
     reciprocal = torch.reciprocal(guessed_positions)
     return torch.mean(reciprocal)
+
+
+def contains_no_value(tensor: Tensor, value: int) -> bool:
+    """
+    >>> t = torch.full((100,100,), 2)
+    >>> contains_no_value(t, 0)
+    True
+
+    >>> t = torch.full((100,100,), 2)
+    >>> t[1,45] = 0
+    >>> contains_no_value(t, 0)
+    False
+
+    >>> t = torch.full((100,100,), 0)
+    >>> contains_no_value(t, 0)
+    False
+    """
+    return ((tensor == torch.full_like(tensor, value)).float().sum() == 0).item()

@@ -1,35 +1,13 @@
-from math import log
 from torch.nn import Embedding, ModuleList
 
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Optional
 
 import torch
-from torch import Tensor, FloatTensor
+from torch import Tensor
 from fastai.text import SequentialRNN, AWD_LSTM, WeightDropout, EmbeddingDropout, RNNDropout, one_param, to_detach, \
     Module
 
 TORCH_LONG_MIN_VAL = -2 ** 63
-
-
-def to_binary_entropy(entropy: Union[float, FloatTensor]) -> Union[float, FloatTensor]:
-    return entropy / log(2)
-
-
-def entropy_to_probability(entropy: float) -> float:
-    """
-    >>> entropy_to_probability(0.0)
-    1.0
-
-    >>> entropy_to_probability(1.0)
-    0.5
-
-    >>> entropy_to_probability(3.0)
-    0.125
-
-    >>> entropy_to_probability(100.0)
-    7.888609052210118e-31
-    """
-    return 2 ** -entropy
 
 
 def to_test_mode(model: SequentialRNN) -> None:

@@ -5,7 +5,6 @@ from pprint import pprint, pformat
 
 import jsons
 import numpy as np
-import psutil
 import torch
 from fastai.basic_data import DataBunch
 from fastai.basic_train import validate
@@ -17,22 +16,24 @@ from fastai.metrics import accuracy
 from fastai.text import Vocab, TextList, language_model_learner, PreProcessor, Collection, partition_by_cores, \
     List
 from fastai.train import fit_one_cycle, Learner, EarlyStoppingCallback
-from math import log
 from pathlib import Path
 from torch import Tensor
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
-from typing import Tuple
+from typing import Tuple, Optional
 
 import dataprep.api.corpus as api
 from dataprep.api.corpus import PreprocessedCorpus
-from langmodels import modelregistry, MODEL_ZOO_PATH
+from langmodels import MODEL_ZOO_PATH
+from langmodels.cuda_util import get_device_id
+from langmodels.file_util import check_path_writable, check_path_exists
 from langmodels.lmconfig.datamodel import LMTrainingConfig, DeviceOptions, ExperimentRun, Corpus
 from langmodels.lmconfig.datamodel import RafaelsTrainingSchedule, CosineLRSchedule, TrainingProcedure
 from langmodels.lmconfig.serialization import dump_config
-from langmodels.metrics import mrr
+from langmodels.tensor_ops import mrr
 from langmodels.model import TrainedModel, create_custom_config
 from langmodels.modelregistry import load_from_path
+from langmodels.profiling import get_cpu_memory_used_mb
 from langmodels.retrier import RetryingSaveModelCalback
 from langmodels.training.schedule import ReduceLRCallback
 from langmodels.training.tracking.comet import log_to_comet
@@ -73,36 +74,8 @@ class Numericalizer(PreProcessor):
             return sum(e.map(self._process_on_one_core, partition_by_cores(texts, self.n_cpus)), [])
 
 
-def contains_no_value(tensor: Tensor, value: int) -> bool:
-    """
-    >>> t = torch.full((100,100,), 2)
-    >>> contains_no_value(t, 0)
-    True
-
-    >>> t = torch.full((100,100,), 2)
-    >>> t[1,45] = 0
-    >>> contains_no_value(t, 0)
-    False
-
-    >>> t = torch.full((100,100,), 0)
-    >>> contains_no_value(t, 0)
-    False
-    """
-    return ((tensor == torch.full_like(tensor, value)).float().sum() == 0).item()
-
-
 def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
     return Vocab(['`unk', '`pad'] + list(prep_corpus.load_vocab().keys()))
-
-
-def get_device_id(device_options: DeviceOptions) -> str:
-    if torch.cuda.is_available():
-        device_id = device_options.non_default_device_to_use or torch.cuda.current_device()
-        return torch.device('cuda', device_id)
-    elif device_options.fallback_to_cpu:
-        return "cpu"
-    else:
-        raise EnvironmentError("Cuda not available")
 
 
 def add_callbacks(learner: Learner, tune: bool) -> None:
@@ -132,25 +105,6 @@ def start_training(learner: Learner, training_procedure: TrainingProcedure) -> N
                       max_lr=schedule.max_lr,
                       wd=training_procedure.weight_decay)
     # not saving the model explicitly because it should have been saved by the callbacks
-
-
-def check_path_to_trained_model(path) -> None:
-    if not os.path.exists(path):
-        os.mkdir(path)
-    elif not os.access(path, os.W_OK | os.X_OK):
-        raise FileNotFoundError(path)
-
-
-def check_path_to_base_model(config: LMTrainingConfig) -> None:
-    if config.base_model:
-        path_to_best_model = os.path.join(config.base_model, 'best.pth')
-        if not os.path.exists(path_to_best_model):
-            raise FileNotFoundError(path_to_best_model)
-
-
-def get_cpu_memory_used_mb():
-    process = psutil.Process(os.getpid())
-    return process.memory_info().rss / 2 ** 20
 
 
 def create_databunch(prep_corpus: PreprocessedCorpus, vocab: Vocab, bs: int, bptt: int, device: str,
@@ -197,16 +151,11 @@ def save_experiment_input(learner: Learner, run: ExperimentRun, vocab: Vocab, co
         log_to_comet(run.id, run.config, learner, vocab)
 
 
-class CudaNotAvailable(Exception):
-    pass
-
-
-def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_files: bool=False):
+def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_files: bool = False,
+                   fallback_to_cpu: bool = True, non_default_device_to_use: Optional[int] = None):
     prep_corpus: api.PreprocessedCorpus = trained_model.prep_corpus(corpus)
-    try:
-        device_id = get_device_id(DeviceOptions(fallback_to_cpu=True))
-    except EnvironmentError:
-        raise CudaNotAvailable()
+
+    device_id = get_device_id(fallback_to_cpu, non_default_device_to_use)
 
     databunch = create_databunch(prep_corpus, trained_model.vocab, bs=64, bptt=1, device=device_id,
                                  only_validation_files=only_validation_files)
@@ -220,25 +169,23 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
              cb_handler=CallbackHandler([DetupleCallback()]))
 
 
+def check_run_prerequisites(run: ExperimentRun) -> None:
+    if run.config.base_model:
+        check_path_exists(os.path.join(run.config.base_model, 'best.pth'))
+    check_path_writable(run.path_to_trained_model)
+
+
 def train(training_config: LMTrainingConfig = LMTrainingConfig(),
           device_options: DeviceOptions() = DeviceOptions(),
           tune=False, comet=True) -> TrainedModel:
     logger.info(f'Using the following config: \n{pformat(jsons.dumps(training_config))}')
-
     experiment_run = ExperimentRun.with_config(training_config, device_options=device_options)
-
-    check_path_to_base_model(training_config)
-    check_path_to_trained_model(experiment_run.path_to_trained_model)
+    check_run_prerequisites(experiment_run)
 
     prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply(training_config.corpus,
                                                                               output_path=PATH_TO_PREP_DATASETS)
     vocab = create_vocab_for_lm(prep_corpus)
-
-    try:
-        device = get_device_id(device_options)
-    except EnvironmentError:
-        raise CudaNotAvailable()
-
+    device = get_device_id(device_options.fallback_to_cpu, device_options.non_default_device_to_use)
     databunch = create_databunch(prep_corpus, vocab, bs=training_config.bs, bptt=training_config.bptt,
                                  device=device)
 

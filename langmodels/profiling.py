@@ -1,3 +1,6 @@
+import os
+
+import psutil
 import time
 from collections import defaultdict
 
@@ -24,3 +27,8 @@ class TimeMeasurer(object):
 
     def totals(self):
         return {k: sum(v) for k, v in self._times.items()}
+
+
+def get_cpu_memory_used_mb():
+    process = psutil.Process(os.getpid())
+    return process.memory_info().rss / 2 ** 20

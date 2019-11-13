@@ -1,7 +1,7 @@
 import colorsys
 from math import log
 
-from langmodels.nn import entropy_to_probability
+from langmodels.evaluation.metrics import entropy_to_probability
 
 MIN_HUE = 0.0
 MAX_HUE = 0.33

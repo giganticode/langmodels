@@ -6,7 +6,8 @@ from dataprep.parse.model.metadata import PreprocessingMetadata
 from unittest.mock import MagicMock, Mock
 
 from langmodels.evaluation import evaluate_model_on_string
-from langmodels.evaluation.common import Evaluation, EvaluationScenario, TokenTypes, EvaluationResult
+from langmodels.evaluation.filtering import TokenTypes
+from langmodels.evaluation.metrics import EvaluationResult, EvaluationScenario, Evaluation
 from langmodels.model import TrainedModel
 
 

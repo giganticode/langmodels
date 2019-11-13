@@ -1,5 +1,7 @@
 import importlib
 # comet.ml must be imported before everything else
+from langmodels.cuda_util import CudaNotAvailable
+
 module = importlib.import_module('comet_ml')
 
 from typing import Dict, Optional, Any
@@ -7,7 +9,7 @@ from typing import Dict, Optional, Any
 from langmodels import app_name
 
 import docopt_subcommands as dsc
-from langmodels.training.training import train, CudaNotAvailable
+from langmodels.training.training import train
 
 from langmodels.lmconfig.datamodel import DeviceOptions, LMTrainingConfig
 from langmodels import __version__

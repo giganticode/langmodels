@@ -4,10 +4,9 @@ import os
 from tqdm import tqdm
 from typing import List, Tuple, Callable, Optional, Union, Dict, Set
 
-from langmodels.evaluation.common import Evaluation, get_file_extension, read_file_contents, \
-    get_all_files, TokenTypes, EvaluationScenario
+from langmodels.file_util import get_all_files, read_file_contents, get_file_extension
 from langmodels.evaluation.metrics import bin_entropy, mrr, get_metric_aggregator_by_name, Metric, \
-    get_metric_func_by_name
+    get_metric_func_by_name, TokenTypes, EvaluationScenario, Evaluation
 from langmodels.model import TrainedModel
 
 logger = logging.getLogger(__name__)

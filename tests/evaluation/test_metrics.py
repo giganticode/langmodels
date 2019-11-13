@@ -1,8 +1,8 @@
 from dataprep.parse.model.metadata import PreprocessingMetadata
-from langmodels.evaluation.common import EvaluationScenario, TokenTypes, EvaluationResult, FullTokenIterator, \
+from langmodels.evaluation.filtering import TokenTypes, FullTokenIterator, \
     SubtokenIterator
 
-from langmodels.evaluation.metrics import bin_entropy, mrr
+from langmodels.evaluation.metrics import bin_entropy, mrr, EvaluationResult, EvaluationScenario
 from unittest.mock import Mock
 
 from langmodels.model import TrainedModel

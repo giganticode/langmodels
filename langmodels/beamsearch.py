@@ -5,7 +5,7 @@ from fastai.text import SequentialRNN
 from torch.nn.functional import log_softmax
 
 from langmodels.nn import get_last_layer_activations, save_hidden_states, TORCH_LONG_MIN_VAL
-from langmodels.gpuutil import get_device
+from langmodels.cuda_util import get_device
 
 DEVICE = get_device()
 

@@ -2,16 +2,18 @@ import logging
 import os
 from dataclasses import dataclass
 
+from dataprep.subtokens import is_terminal_subtoken
+
 from dataprep.infrastructure.dataset import normalize_extension_string
 
-from dataprep.parse.model.metadata import PreprocessingMetadata
+from dataprep.parse.model.metadata import PreprocessingMetadata, check_metadata_validity
 from math import exp
 from typing import List, Dict, Any, Tuple, Optional, Union
 
 import torch
 from dataprep.api.corpus import PreprocessedCorpus
 from dataprep.parse.model.placeholders import placeholders
-from fastai.text import AWD_LSTM, SequentialRNN, get_language_model, F, Vocab, awd_lstm_lm_config, convert_weights
+from fastai.text import SequentialRNN, get_language_model, F, Vocab, awd_lstm_lm_config, convert_weights
 from fastai.text.models.transformer import init_transformer
 from torch import cuda
 
@@ -20,8 +22,9 @@ from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMT
     LMTrainingMetrics
 from langmodels.lmconfig.serialization import load_config_from_file, read_value_from_file
 from langmodels.migration import pth_to_torch
-from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL, to_binary_entropy
-from langmodels.gpuutil import get_device
+from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
+from langmodels.util import to_binary_entropy
+from langmodels.cuda_util import get_device, get_map_location
 
 logger = logging.getLogger(__name__)
 
@@ -64,23 +67,6 @@ def create_custom_config(lm_training_config: LMTrainingConfig):
         raise ValueError(f"Unknown architecture: {arch}")
 
 
-def get_terminal_placeholders() -> List[str]:
-    return [placeholders['comment'], placeholders['string_literal'],
-            placeholders['ect'], placeholders['non_eng'], placeholders['olc_end']]
-
-
-def ends_with_terminal_placeholder(subtoken: str) -> bool:
-    for tp in get_terminal_placeholders():
-        if subtoken.endswith(tp):
-            return True
-    return False
-
-
-def is_terminal_subtoken(subtoken: str) -> bool:
-    return subtoken.endswith(placeholders['compound_word_end']) \
-           or ends_with_terminal_placeholder(subtoken)
-
-
 def _create_term_vocab(vocab: Vocab) -> Tuple[Vocab, int]:
     terminal_token_indices = {i for i, k in enumerate(vocab.itos) if is_terminal_subtoken(k)}
     term_vocab_list = [vocab.itos[i] for i in terminal_token_indices]
@@ -105,18 +91,20 @@ def _check_is_term_vocab(vocab: Vocab, first_non_term: int) -> None:
 DEFAULT_BEAM_SIZE = 500
 
 
-def check_metadata_validity(prep_text: List[str], metadata: PreprocessingMetadata):
-    if 0 not in metadata.word_boundaries:
-        raise AssertionError('')
+def to_full_token_string(vocab: Vocab, subtokens_num: torch.LongTensor, include_debug_tokens=False) -> str:
+    try:
+        subtokens_num = subtokens_num[:subtokens_num.tolist().index(TORCH_LONG_MIN_VAL)]
+    except ValueError: pass
 
-    for idx, token in enumerate(prep_text):
-        end_according_to_data = is_terminal_subtoken(token)
-        end_according_to_metadata = (idx + 1) in metadata.word_boundaries
-        if end_according_to_data != end_according_to_metadata:
-            error_context_start_index = idx - 20 if idx - 20 > 0 else 0
-            raise AssertionError(f'Token {token} according to metadata is'
-                                 f'{" " if end_according_to_metadata else " NOT"} end-token. '
-                                 f'Showing context: {prep_text[error_context_start_index:idx+1]}')
+    sep = '|' if include_debug_tokens else ''
+    textified = vocab.textify(subtokens_num, sep=sep)
+    cwe = placeholders['compound_word_end']
+    if textified in placeholders.values():
+        return textified
+
+    if not is_terminal_subtoken(textified):
+        raise ValueError(f'{textified} ({subtokens_num}) is not a full token')
+    return textified if include_debug_tokens else textified[:-len(cwe)]
 
 
 @dataclass
@@ -189,17 +177,9 @@ class TrainedModel(object):
 
         vocab = custom_vocab if custom_vocab else self.original_vocab
         model = get_language_model(self.config.get_arch_class(), len(vocab.itos), create_custom_config(self.config))
-        if self.force_use_cpu:
-            map_location = lambda storage, loc: storage
-            logger.debug("Using CPU for inference")
-        elif cuda.is_available():
-            map_location = torch.device('cuda:0')
+        map_location = get_map_location(self.force_use_cpu)
+        if cuda.is_available():
             model.cuda()
-            logger.debug("Using GPU for inference")
-        else:
-            map_location = lambda storage, loc: storage
-            logger.info("Cuda not available. Falling back to using CPU.")
-
         state_dict = torch.load(path_to_model, map_location=map_location)
 
         # a more simple solution is to use fastai's load_learner,
@@ -221,13 +201,13 @@ class TrainedModel(object):
         check_metadata_validity(prep_text, metadata)
         return (prep_text, metadata) if 'return_metadata' in kwargs and kwargs['return_metadata'] else prep_text
 
-    def _check_loaded_description_only(self):
-        if self.load_only_description:
+    def _check_model_loaded(self, only_description=False):
+        if not only_description and self.load_only_description:
             raise RuntimeError("Operation not supported. Only model's description is loaded. "
                                "Prease reload the model with param load_only_description set to False.")
 
     def feed_text(self, text: str) -> None:
-        self._check_loaded_description_only()
+        self._check_model_loaded()
 
         prep_text, metadata = self.prep_text(text, return_metadata=True, force_reinit_bpe_data=False)
         context_tensor = torch.tensor([self.vocab.numericalize(prep_text)], device=get_device(self.force_use_cpu))
@@ -238,7 +218,7 @@ class TrainedModel(object):
         """
         changes hidden states of the model!!
         """
-        self._check_loaded_description_only()
+        self._check_model_loaded()
 
         if not prep_text:
             return []
@@ -265,34 +245,17 @@ class TrainedModel(object):
         return loss_list
 
     def reset(self) -> None:
-        self._check_loaded_description_only()
+        self._check_model_loaded()
 
         self.model.reset()
         self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
                                                         device=get_device(self.force_use_cpu))
 
     def predict_next_full_token(self, n_suggestions: int, include_debug_tokens: bool = False) -> List[Tuple[str, float]]:
-        self._check_loaded_description_only()
+        self._check_model_loaded()
 
         subtokens, scores = beam_search(self.model, self.last_predicted_token_tensor[0], self.first_nonterm_token, n_suggestions, self.beam_size)
-        return [(self.to_full_token_string(st, include_debug_tokens=include_debug_tokens), 1 / exp(score.item())) for st, score in zip(subtokens, scores)]
-
-    def to_full_token_string(self, subtokens_num: torch.LongTensor, include_debug_tokens=False) -> str:
-        self._check_loaded_description_only()
-
-        try:
-            subtokens_num = subtokens_num[:subtokens_num.tolist().index(TORCH_LONG_MIN_VAL)]
-        except ValueError: pass
-
-        sep = '|' if include_debug_tokens else ''
-        textified = self.vocab.textify(subtokens_num, sep=sep)
-        cwe = placeholders['compound_word_end']
-        if textified in placeholders.values():
-            return textified
-
-        if not is_terminal_subtoken(textified):
-            raise ValueError(f'{textified} ({subtokens_num}) is not a full token')
-        return textified if include_debug_tokens else textified[:-len(cwe)]
+        return [(to_full_token_string(self.vocab, st, include_debug_tokens=include_debug_tokens), 1 / exp(score.item())) for st, score in zip(subtokens, scores)]
 
     def _format_layers_config(self) -> str:
         n_layers = self.config.arch.n_layers

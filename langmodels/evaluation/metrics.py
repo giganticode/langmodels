@@ -1,11 +1,12 @@
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 from typing import List, Tuple, Optional, Set, Callable, Dict, Type
 
 from dataprep.parse.model.metadata import PreprocessingMetadata
-from langmodels.evaluation.common import FullTokenIterator, to_full_token_string, TokenTypes, FilteringTokenIterator, \
-    EvaluationResult, TokenIterator, SubtokenIterator, MetricName, EvaluationScenario
+from langmodels.evaluation.filtering import FullTokenIterator, to_full_token_string, FilteringTokenIterator, \
+    TokenIterator, SubtokenIterator, MetricName, TokenTypes
 from langmodels.model import TrainedModel
 
 DEFAULT_N_MODEL_SUGGESTIONS = 100
@@ -55,6 +56,33 @@ inclusion_func_dict: Dict[TokenTypes, InclusionFunction] = {
     TokenTypes.ONLY_COMMENTS: lambda m, i: m.is_comment_at_index(i),
     TokenTypes.ALL_BUT_COMMENTS: lambda m, i: not m.is_comment_at_index(i)
 }
+
+
+@dataclass(frozen=True)
+class EvaluationResult(object):
+    subtoken_values: List[Optional[float]]  # this value should correspond to the number of subtokens
+    average: float
+    n_samples: int
+
+
+@dataclass(frozen=True)
+class EvaluationScenario(object):
+    metric_name: MetricName
+    token_types: TokenTypes
+
+    def __str__(self):
+        return f'{self.metric_name}/{self.token_types}'
+
+    def __repr__(self):
+        return str(self)
+
+
+@dataclass(frozen=True)
+class Evaluation(object):
+    text: str
+    prep_text: List[str]
+    prep_metadata: PreprocessingMetadata
+    scenarios: Dict[EvaluationScenario, EvaluationResult]
 
 
 def bin_entropy(model: TrainedModel, prep_line: List[str], prep_metadata: PreprocessingMetadata,
@@ -159,3 +187,22 @@ def get_metric_func_by_name(name: str) -> Metric:
 
 def get_metric_aggregator_by_name(name: str) -> MetricAggregator:
     return metric_dict[name][1]
+
+
+def entropy_to_probability(entropy: float) -> float:
+    """
+    >>> entropy_to_probability(0.0)
+    1.0
+
+    >>> entropy_to_probability(1.0)
+    0.5
+
+    >>> entropy_to_probability(3.0)
+    0.125
+
+    >>> entropy_to_probability(100.0)
+    7.888609052210118e-31
+    """
+    return 2 ** -entropy
+
+

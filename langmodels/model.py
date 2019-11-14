@@ -258,6 +258,8 @@ class TrainedModel(object):
         return [(to_full_token_string(self.vocab, st, include_debug_tokens=include_debug_tokens), 1 / exp(score.item())) for st, score in zip(subtokens, scores)]
 
     def _format_layers_config(self) -> str:
+        if isinstance(self.config.arch, TransformerArch):
+            return "transformer"  # TODO add proper layer description
         n_layers = self.config.arch.n_layers
         emb_size = self.config.arch.emb_sz
         n_hid = self.config.arch.n_hid

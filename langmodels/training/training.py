@@ -27,14 +27,14 @@ from dataprep.api.corpus import PreprocessedCorpus
 from langmodels import MODEL_ZOO_PATH
 from langmodels.cuda_util import get_device_id
 from langmodels.file_util import check_path_writable, check_path_exists
-from langmodels.lmconfig.datamodel import LMTrainingConfig, DeviceOptions, ExperimentRun, Corpus
-from langmodels.lmconfig.datamodel import RafaelsTrainingSchedule, CosineLRSchedule, TrainingProcedure
+from langmodels.lmconfig.datamodel import LMTrainingConfig, DeviceOptions, ExperimentRun, Corpus, \
+    RafaelsTrainingSchedule, TrainingProcedure, CosineLRSchedule
 from langmodels.lmconfig.serialization import dump_config
-from langmodels.tensor_ops import mrr
 from langmodels.model import TrainedModel, create_custom_config
 from langmodels.modelregistry import load_from_path
 from langmodels.profiling import get_cpu_memory_used_mb
 from langmodels.retrier import RetryingSaveModelCalback
+from langmodels.tensor_ops import mrr, contains_no_value
 from langmodels.training.schedule import ReduceLRCallback
 from langmodels.training.tracking.comet import log_to_comet
 
@@ -55,9 +55,11 @@ class Numericalizer(PreProcessor):
     def process_one(self, item: str):
         with open(item, 'r') as f:
             prep_tokens = [token for line in f for token in line.rstrip('\n').split(' ')]
-            #TODO XXX temp hack to fix \xa0 issue
-            prep_tokens = ['`unk' if t == '\\xa0' else t for t in prep_tokens]
-            return np.array(self.vocab.numericalize(prep_tokens), dtype=np.int64)
+            for prep_token in prep_tokens:
+                if prep_token not in self.vocab.itos:
+                    raise ValueError(f'{prep_token} is not present in the vocabulary.')
+            numericalized_tokens = np.array(self.vocab.numericalize(prep_tokens), dtype=np.int64)
+            return numericalized_tokens
 
     def process(self, ds: Collection):
         ds.vocab = self.vocab
@@ -217,8 +219,8 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
 def check_data(databunched: DataBunch, vocab: Vocab) -> None:
     first_batch = databunched.one_batch()[0]
 
-#    if not contains_no_value(first_batch, UNKNOWN_TOKEN_INDEX):
-#        raise ValueError(f"Unknown is found in tensor: {first_batch}")
+    if not contains_no_value(first_batch, UNKNOWN_TOKEN_INDEX):
+        raise ValueError(f"Unknown is found : {[vocab.textify(seq) for seq in first_batch]}")
     print(f'Displaying the first batch:\n{first_batch}')
     token_seqs = [vocab.textify(seq) for seq in first_batch]
     pprint(token_seqs)

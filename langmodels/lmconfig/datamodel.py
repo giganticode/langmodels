@@ -92,8 +92,8 @@ class PrepFunction(object):
 class LstmArch(object):
     bidir: bool = False
     qrnn: bool = False
-    emb_sz: int = 300
-    n_hid: int = 650
+    emb_sz: int = 1024
+    n_hid: int = 1024
     n_layers: int = 3
     adam_betas: Tuple[float, float] = (0.7, 0.99)
     clip: float = 0.3

@@ -6,6 +6,7 @@ from pprint import pprint, pformat
 import jsons
 import numpy as np
 import torch
+from dataprep.util import to_literal_str
 from fastai.basic_data import DataBunch
 from fastai.basic_train import validate
 from fastai.callback import CallbackHandler, Callback
@@ -24,17 +25,12 @@ from typing import Tuple, Optional
 
 import dataprep.api.corpus as api
 from dataprep.api.corpus import PreprocessedCorpus
-from langmodels import MODEL_ZOO_PATH
-from langmodels.cuda_util import get_device_id
-from langmodels.file_util import check_path_writable, check_path_exists
-from langmodels.lmconfig.datamodel import LMTrainingConfig, DeviceOptions, ExperimentRun, Corpus, \
+from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, \
     RafaelsTrainingSchedule, TrainingProcedure, CosineLRSchedule
 from langmodels.lmconfig.serialization import dump_config
 from langmodels.model import TrainedModel, create_custom_config
 from langmodels.modelregistry import load_from_path
-from langmodels.profiling import get_cpu_memory_used_mb
 from langmodels.retrier import RetryingSaveModelCalback
-from langmodels.tensor_ops import mrr, contains_no_value
 from langmodels.training.schedule import ReduceLRCallback
 from langmodels.training.tracking.comet import log_to_comet
 
@@ -77,7 +73,7 @@ class Numericalizer(PreProcessor):
 
 
 def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
-    return Vocab(['`unk', '`pad'] + list(prep_corpus.load_vocab().keys()))
+    return Vocab(['`unk', '`pad'] + list(map(lambda x: to_literal_str(x), prep_corpus.load_vocab().keys())))
 
 
 def add_callbacks(learner: Learner, tune: bool) -> None:

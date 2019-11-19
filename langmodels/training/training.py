@@ -59,7 +59,8 @@ class Numericalizer(PreProcessor):
             prep_tokens = [token for line in f for token in line.rstrip('\n').split(' ')]
             for prep_token in prep_tokens:
                 if prep_token not in self.vocab.itos:
-                    raise ValueError(f'{prep_token} is not present in the vocabulary.')
+                    raise ValueError(f'{[prep_token]} is not present in the vocabulary.\n'
+                                     f'Vocab is {self.vocab.itos}')
             numericalized_tokens = np.array(self.vocab.numericalize(prep_tokens), dtype=np.int64)
             return numericalized_tokens
 

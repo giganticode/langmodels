@@ -1,10 +1,21 @@
-# langmodels
+## **langmodels**
 
 [![Build Status](https://travis-ci.org/giganticode/langmodels.svg?branch=master)](https://travis-ci.org/giganticode/langmodels)
 
-**Applying machine learning to large source code corpora**
+This is a repository for **neural language models (LMs)** trained on a large corpus of source code 
+and a toolkit to work with such models. 
 
-# Quick start
+You could be interested in using this library if you want to:
+* Use existing pre-trained models for tasks such as autocompletion and bug prediction;
+* Use the pre-trained models for transfer transfer learning or further fine-tuning;
+* Train a model from scratch by choosing one of the wide range of corpus preprocessing choices, 
+ neural network (NN) architectures, and training options.
+
+This project uses [fastai](https://www.fast.ai) and 
+[pytorch](https://pytorch.org) libraries for NN training/inference. 
+For corpus preprocessing [giganticode-dataprep](https://github.com/giganticode/dataprep) is used.
+
+## Quick start
 
 ### Prerequisites
 
@@ -20,6 +31,7 @@ source langmodels-venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## Using existing pre-trained models
 ### Loading a default pre-trained model
 ```python
 >>> import langmodels.modelregistry as reg
@@ -30,11 +42,11 @@ pip install -r requirements.txt
 2019-10-29 12:01:36,103 [langmodels.model] DEBUG: Using GPU for inference
 ```
 
-# More model loading options
+### Other model loading options
 
-**First, all available pre-trained LMs can be listed**
+**To see which models are available, you can call `list_pretrained_models` function.**
 
-Set `cached` parameter to `True` (defaults to `False`) to display only cached projects (e.g. if offline) 
+Set `cached` parameter to `True` (default is `False`) to display only cached LMs (e.g. if offline).
 ```python
 >>> import langmodels.modelregistry as reg
 >>> reg.list_pretrained_models(cached=False)
@@ -58,9 +70,10 @@ Use `query_all_models` method to get a list of `ModelDescription` objects
 ModelDescription(id='langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344', bpe_merges='10k', layers_config='1024/2/1024', arch='AWD_LSTM', bin_entropy=2.1455788479, training_time_minutes_per_epoch=1429, n_epochs=6, best_epoch=5, tags=['BEST', 'DEFAULT'])
 ```
 
-**The model can be loaded by tag or by id**
+**A model can be loaded by tag or by id.**
 
-You can specify if you want to load a model to CPU despite having cuda-supported GPU with `force_use_cpu` parameter (defaults to `False`). If cuda-supported GPU is not available, this parameter is disregarded.
+You can specify if you want to load a model to CPU despite having cuda-supported GPU with `force_use_cpu` parameter 
+(defaults to `False`). If cuda-supported GPU is not available, this parameter is disregarded.
 ```python
 >>> trained_model = reg.load_model_with_tag('BEST')
 
@@ -80,7 +93,7 @@ Also, you can use a lower-level API to load a model by path :
 trained_model = reg.load_from_path('/home/hlib/.local/share/langmodels/0.0.1/modelzoo/dev_10k_1_10_190923.132328')
 ```
 
-# Inference
+## Inference
 ### Autocompletion
 
 Example
@@ -109,7 +122,83 @@ Example
 
 ```
 
-# Evaluation of language models
+
+### Bug prediction based on per-line entropies evaluation
+
+An LM can be used to calculate cross-entropies for each line of a file. High values can give an idea about 
+unusual/suspicious chunks of code [[1]](#1).
+
+Check section [LM Evaluation](#lm-evaluation) section to learn how to calculate 
+cross-entropy for a project/file/string,
+
+Check our [vsc plugin](https://github.com/giganticode/vsc-extension) for highlighting suspicious code.
+
+## Fine-tuning and Transfer learning
+
+**TBD**
+
+## Training from scratch
+
+### Python API
+
+```python
+>>> from langmodels.training import train
+>>> from langmodels.lmconfig.datamodel import *
+
+>>> train(LMTrainingConfig(corpus=Corpus(path='/path/to/the/dataset')))
+```
+
+More parameters to customize corpus pre-processing, NN architecture, and the training process can be specified:
+
+```python
+>>> from langmodels.training import train
+>>> from langmodels.lmconfig.datamodel import *
+
+>>> train(LMTrainingConfig(corpus=Corpus(path='/path/to/the/dataset'), 
+                            prep_function=PrepFunction({'no_com': False, 'no_unicode': True}),
+                            arch=GRU(n_layers=2),
+                            training_procedure=TrainingProcedure(weight_decay=5e-6)
+))
+```
+
+Below you can see all the default parameters specified explicitly:
+
+```python
+>>> from langmodels.lmconfig.datamodel import *
+>>> from langmodels.training import train
+
+>>> train(LMTrainingConfig(base_model=None, 
+                       bs=32, 
+                       corpus=Corpus(path=os.path.join(HOME, '/path/to/the/dataset'), extensions="java"), 
+                       prep_function=PrepFunction(corpus_api.bpe, ['10k'], 
+                                                  {'no_com': False, 'no_unicode': True, 
+                                                   'no_spaces': True, 'max_str_length': sys.maxsize}), 
+                       arch=LstmArch(
+                           bidir=False, qrnn=False, emb_sz=1024, n_hid=1024, n_layers=3, 
+                           adam_betas=(0.7, 0.99), clip=0.3, reg_fn=RegFn(alpha=2, beta=1), 
+                           drop=Dropouts(multiplier=0.5, oute=0.02, outi=0.25, outh=0.15, w=0.2, out=0.1), 
+                           tie_weights=True, out_bias=True), 
+                       bptt=200, 
+                       training_procedure=TrainingProcedure(
+                           schedule=RafaelsTrainingSchedule(init_lr=1e-4, mult_coeff=0.5, 
+                                                            max_epochs=50, max_lr_reduction_times=6), 
+                           weight_decay=1e-6)
+                       )
+      )
+```
+
+### CLI API
+
+```
+<TBD>
+
+```
+
+## LM Evaluation
+
+When training a language model, it is important to have ability to evaluate LM's performance
+In this section we describe about different ways to ways to validate the performance using this library. 
+You can also use our [tool](https://github.com/giganticode/vsc-extension-backend) to visualize the evaluation.
 
 ### Evaluation on a string / file
 
@@ -177,7 +266,8 @@ Default value is {TokenTypes.ALL}
 ```python
 >>> from langmodels.modelregistry import load_default_model 
 >>> from langmodels.evaluation import evaluate_model_on_path
->>> from langmodels.evaluation.common import TokenTypes
+>>>
+from langmodels.evaluation.metrics import TokenTypes
 
 >>> model = load_default_model
 >>> evaluate_model_on_path(model, '/path/to/file', metrics={'full_token_entropy', 'mrr'}, token_types={TokenTypes.ALL, TokenTypes.ONLY_COMMENTS, TokenTypes.ALL_BUT_COMMENTS})
@@ -185,6 +275,8 @@ Default value is {TokenTypes.ALL}
 
 ```
 
-# Editional training and Transfer learning
+## References
 
-**TBD**
+<a id="1">[1]</a> Ray, B., Hellendoorn, V., Godhane, S., Tu, Z., Bacchelli, A., & Devanbu, P. (2016, May). 
+On the" naturalness" of buggy code. In 2016 IEEE/ACM 38th International Conference on Software Engineering (ICSE) 
+(pp. 428-439). IEEE.

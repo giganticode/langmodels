@@ -1,12 +1,16 @@
 import logging
 import os
+from collections import Counter
 from concurrent.futures.process import ProcessPoolExecutor
+from functools import reduce
 from pprint import pprint, pformat
 
 import jsons
 import numpy as np
 import torch
-from dataprep.util import to_literal_str
+import typing
+
+from dataprep.util import to_literal_str, merge_dicts_
 from fastai.basic_data import DataBunch
 from fastai.basic_train import validate
 from fastai.callback import CallbackHandler, Callback
@@ -49,34 +53,51 @@ PATH_TO_PREP_DATASETS = os.environ['PATH_TO_PREP_DATASETS'] if 'PATH_TO_PREP_DAT
 
 
 class Numericalizer(PreProcessor):
-    def __init__(self, vocab: Vocab, n_cpus: int = os.cpu_count()):
+    def __init__(self, vocab: Vocab, n_cpus: int = os.cpu_count(), allow_unks: bool = False):
         super().__init__()
         self.vocab = vocab
         self.n_cpus = n_cpus
+        self.allow_unks = allow_unks
 
     def process_one(self, item: str):
         with open(item, 'r') as f:
             prep_tokens = [token for line in f for token in line.rstrip('\n').split(' ')]
+            unks = Counter()
             for prep_token in prep_tokens:
                 if prep_token not in self.vocab.itos:
-                    raise ValueError(f'{[prep_token]} is not present in the vocabulary.\n'
-                                     f'Vocab is {self.vocab.itos}')
+                    if self.allow_unks:
+                        unks.update([prep_token])
+                    else:
+                        raise ValueError(f'{[prep_token]} is not present in the vocabulary.\n'
+                                         f'Vocab is {self.vocab.itos}')
             numericalized_tokens = np.array(self.vocab.numericalize(prep_tokens), dtype=np.int64)
-            return numericalized_tokens
+            return numericalized_tokens, unks
 
-    def process(self, ds: Collection):
+    def process(self, ds: Collection) -> None:
         ds.vocab = self.vocab
-        ds.items = np.array(self._process_in_parallel(ds.items))
+        tokens, unks = self._process_in_parallel(ds.items)
+        ds.items = np.array(tokens)
+        if self.allow_unks:
+            logger.warning(f"Encountered the following unknown tokens "
+                           f"{sorted(unks.items(), reverse=True, key=lambda x:x[1])}")
 
-    def _process_on_one_core(self, items: Collection[str]) -> List:
+    def _process_on_one_core(self, items: Collection[str]) -> List[Tuple[List[str], typing.Mapping[str, int]]]:
         return [self.process_one(item) for item in tqdm(items)]
 
-    def _process_in_parallel(self, texts: Collection[str]) -> List[List[str]]:
-        "Process a list of `texts`."
+    def _process_in_parallel(self, texts: Collection[str]) -> Tuple[List[List[str]], typing.Mapping[str, int]]:
         if self.n_cpus <= 1:
-            return self._process_on_one_core(texts)
+            if len(texts) == 0:
+                return [[]], Counter()
+            all_tokens, unk_list = zip(*self._process_on_one_core(texts))
+            return list(all_tokens), reduce(lambda x, y: merge_dicts_(x, y)[0], unk_list, {})
         with ProcessPoolExecutor(self.n_cpus) as e:
-            return sum(e.map(self._process_on_one_core, partition_by_cores(texts, self.n_cpus)), [])
+            all_tokens = []
+            all_unks = {}
+            for from_one_core in e.map(self._process_on_one_core, partition_by_cores(texts, self.n_cpus)):
+                for tokens, unks in from_one_core:
+                    all_tokens.append(tokens)
+                    merge_dicts_(all_unks, unks)
+            return all_tokens, all_unks
 
 
 def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
@@ -113,10 +134,12 @@ def start_training(learner: Learner, training_procedure: TrainingProcedure) -> N
 
 
 def create_databunch(prep_corpus: PreprocessedCorpus, vocab: Vocab, bs: int, bptt: int, device: str,
-                     only_validation_files: bool = False) -> DataBunch:
+                     only_validation_files: bool = False, allow_unks: bool = False) -> DataBunch:
     print(f'Getting preprocessed corpus from {prep_corpus.path_to_prep_dataset}')
     file_path_list = [Path(os.fsdecode(p)) for p in prep_corpus.get_file_iterator()]
-    text_list = TextList(file_path_list, path=prep_corpus.path_to_prep_dataset, processor=Numericalizer(vocab))
+    numericalizer = Numericalizer(vocab, allow_unks=allow_unks)
+    text_list = TextList(file_path_list, path=prep_corpus.path_to_prep_dataset,
+                         processor=numericalizer)
 
     print("Splitting into training/validation sets")
     if only_validation_files:
@@ -162,8 +185,9 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
 
     device_id = get_device_id(fallback_to_cpu, non_default_device_to_use)
 
+    logger.info(f"Vocab size: {len(trained_model.vocab.itos)}")
     databunch = create_databunch(prep_corpus, trained_model.vocab, bs=64, bptt=1, device=device_id,
-                                 only_validation_files=only_validation_files)
+                                 only_validation_files=only_validation_files, allow_unks=True)
 
     class DetupleCallback(Callback):
         def on_loss_begin(self, last_output: Tuple[Tensor, Tensor, Tensor], **kwargs):
@@ -190,9 +214,10 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply(training_config.corpus,
                                                                               output_path=PATH_TO_PREP_DATASETS)
     vocab = create_vocab_for_lm(prep_corpus)
+    print(f"Vocab size: {len(vocab.itos)}")
     device = get_device_id(device_options.fallback_to_cpu, device_options.non_default_device_to_use)
     databunch = create_databunch(prep_corpus, vocab, bs=training_config.bs, bptt=training_config.bptt,
-                                 device=device)
+                                 device=device, allow_unks=False)
 
     check_data(databunch, vocab)
 

@@ -1,16 +1,11 @@
 import logging
 import os
-from collections import Counter
-from concurrent.futures.process import ProcessPoolExecutor
-from functools import reduce
 from pprint import pprint, pformat
 
 import jsons
-import numpy as np
 import torch
-import typing
 
-from dataprep.util import to_literal_str, merge_dicts_
+from dataprep.util import to_literal_str
 from fastai.basic_data import DataBunch
 from fastai.basic_train import validate
 from fastai.callback import CallbackHandler, Callback
@@ -18,13 +13,11 @@ from fastai.callbacks.mem import PeakMemMetric
 from fastai.callbacks.misc import StopAfterNBatches
 from fastai.layers import FlattenedLoss
 from fastai.metrics import accuracy
-from fastai.text import Vocab, TextList, language_model_learner, PreProcessor, Collection, partition_by_cores, \
-    List
+from fastai.text import Vocab, TextList, language_model_learner
 from fastai.train import fit_one_cycle, Learner, EarlyStoppingCallback
 from pathlib import Path
 from torch import Tensor
 from torch.nn import CrossEntropyLoss
-from tqdm import tqdm
 from typing import Tuple, Optional
 
 import dataprep.api.corpus as api
@@ -41,63 +34,19 @@ from langmodels.modelregistry import load_from_path
 from langmodels.profiling import get_cpu_memory_used_mb
 from langmodels.retrier import RetryingSaveModelCalback
 from langmodels.tensor_ops import contains_no_value, mrr
+from langmodels.training.numericalize import Numericalizer
 from langmodels.training.schedule import ReduceLRCallback
 from langmodels.training.tracking.comet import log_to_comet
 
 logger = logging.getLogger(__name__)
 
 UNKNOWN_TOKEN_INDEX = 0
+VOCAB_FILE_NAME = 'vocab'
+CONFIG_FILE_NAME = 'config'
 
 HOME = os.environ['HOME']
-PATH_TO_PREP_DATASETS = os.environ['PATH_TO_PREP_DATASETS'] if 'PATH_TO_PREP_DATASETS' in os.environ else os.path.join(HOME, 'prep-datasets')
-
-
-class Numericalizer(PreProcessor):
-    def __init__(self, vocab: Vocab, n_cpus: int = os.cpu_count(), allow_unks: bool = False):
-        super().__init__()
-        self.vocab = vocab
-        self.n_cpus = n_cpus
-        self.allow_unks = allow_unks
-
-    def process_one(self, item: str):
-        with open(item, 'r') as f:
-            prep_tokens = [token for line in f for token in line.rstrip('\n').split(' ')]
-            unks = Counter()
-            for prep_token in prep_tokens:
-                if prep_token not in self.vocab.itos:
-                    if self.allow_unks:
-                        unks.update([prep_token])
-                    else:
-                        raise ValueError(f'{[prep_token]} is not present in the vocabulary.\n'
-                                         f'Vocab is {self.vocab.itos}')
-            numericalized_tokens = np.array(self.vocab.numericalize(prep_tokens), dtype=np.int64)
-            return numericalized_tokens, unks
-
-    def process(self, ds: Collection) -> None:
-        ds.vocab = self.vocab
-        tokens, unks = self._process_in_parallel(ds.items)
-        ds.items = np.array(tokens)
-        if self.allow_unks:
-            logger.warning(f"Encountered the following unknown tokens "
-                           f"{sorted(unks.items(), reverse=True, key=lambda x:x[1])}")
-
-    def _process_on_one_core(self, items: Collection[str]) -> List[Tuple[List[str], typing.Mapping[str, int]]]:
-        return [self.process_one(item) for item in tqdm(items)]
-
-    def _process_in_parallel(self, texts: Collection[str]) -> Tuple[List[List[str]], typing.Mapping[str, int]]:
-        if self.n_cpus <= 1:
-            if len(texts) == 0:
-                return [[]], Counter()
-            all_tokens, unk_list = zip(*self._process_on_one_core(texts))
-            return list(all_tokens), reduce(lambda x, y: merge_dicts_(x, y)[0], unk_list, {})
-        with ProcessPoolExecutor(self.n_cpus) as e:
-            all_tokens = []
-            all_unks = {}
-            for from_one_core in e.map(self._process_on_one_core, partition_by_cores(texts, self.n_cpus)):
-                for tokens, unks in from_one_core:
-                    all_tokens.append(tokens)
-                    merge_dicts_(all_unks, unks)
-            return all_tokens, all_unks
+PATH_TO_PREP_DATASETS = os.environ['PATH_TO_PREP_DATASETS'] if 'PATH_TO_PREP_DATASETS' in os.environ \
+    else os.path.join(HOME, 'prep-datasets')
 
 
 def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
@@ -116,7 +65,7 @@ def add_callbacks(learner: Learner, tune: bool) -> None:
         learner.callbacks.append(StopAfterNBatches(n_batches=2))
 
 
-def start_training(learner: Learner, training_procedure: TrainingProcedure) -> None:
+def choose_schedule_and_fit(learner: Learner, training_procedure: TrainingProcedure) -> None:
     schedule = training_procedure.schedule
     if isinstance(schedule, RafaelsTrainingSchedule):
         reduce_lr_callback = ReduceLRCallback(learner,
@@ -168,10 +117,6 @@ def load_base_model_if_needed(learner: Learner, lm_training_config: LMTrainingCo
         print("Training form scratch")
 
 
-VOCAB_FILE_NAME = 'vocab'
-CONFIG_FILE_NAME = 'config'
-
-
 def save_experiment_input(learner: Learner, run: ExperimentRun, vocab: Vocab, comet: bool):
     vocab.save(os.path.join(run.path_to_trained_model, VOCAB_FILE_NAME))
     dump_config(run.config, os.path.join(run.path_to_trained_model, CONFIG_FILE_NAME))
@@ -179,8 +124,27 @@ def save_experiment_input(learner: Learner, run: ExperimentRun, vocab: Vocab, co
         log_to_comet(run.id, run.config, learner, vocab)
 
 
+def check_run_prerequisites(run: ExperimentRun) -> None:
+    if run.config.base_model:
+        check_path_exists(os.path.join(run.config.base_model, 'best.pth'))
+    check_path_writable(run.path_to_trained_model)
+
+
+def check_data(databunched: DataBunch, vocab: Vocab) -> None:
+    first_batch = databunched.one_batch()[0]
+
+    if not contains_no_value(first_batch, UNKNOWN_TOKEN_INDEX):
+        raise ValueError(f"Unknown is found : {[vocab.textify(seq) for seq in first_batch]}")
+    print(f'Displaying the first batch:\n{first_batch}')
+    token_seqs = [vocab.textify(seq) for seq in first_batch]
+    pprint(token_seqs)
+
+
 def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_files: bool = False,
                    fallback_to_cpu: bool = True, non_default_device_to_use: Optional[int] = None):
+    """
+    Validation using fastai's `validation` method
+    """
     prep_corpus: api.PreprocessedCorpus = trained_model.prep_corpus(corpus)
 
     device_id = get_device_id(fallback_to_cpu, non_default_device_to_use)
@@ -191,17 +155,11 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
 
     class DetupleCallback(Callback):
         def on_loss_begin(self, last_output: Tuple[Tensor, Tensor, Tensor], **kwargs):
-            "Save the extra outputs for later and only returns the true output."
+            """Save the extra outputs for later and only returns the true output."""
             return {'last_output': last_output[0]}
 
     return validate(trained_model.model, databunch.valid_dl, loss_func=FlattenedLoss(CrossEntropyLoss),
-             cb_handler=CallbackHandler([DetupleCallback()]))
-
-
-def check_run_prerequisites(run: ExperimentRun) -> None:
-    if run.config.base_model:
-        check_path_exists(os.path.join(run.config.base_model, 'best.pth'))
-    check_path_writable(run.path_to_trained_model)
+                    cb_handler=CallbackHandler([DetupleCallback()]))
 
 
 def train(training_config: LMTrainingConfig = LMTrainingConfig(),
@@ -236,19 +194,9 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     load_base_model_if_needed(learner, training_config)
 
     print(f"Starting training... Model will be saved to {experiment_run.path_to_trained_model}")
-    start_training(learner, training_config.training_procedure)
+    choose_schedule_and_fit(learner, training_config.training_procedure)
 
     # learner.export('learner.pkl')
     # return load_learner(os.path.join(PATH_TO_TRAINED_MODELS, experiment_run.id), 'learner.pkl')
     return load_from_path(experiment_run.path_to_trained_model, force_use_cpu=True)
     # return learner
-
-
-def check_data(databunched: DataBunch, vocab: Vocab) -> None:
-    first_batch = databunched.one_batch()[0]
-
-    if not contains_no_value(first_batch, UNKNOWN_TOKEN_INDEX):
-        raise ValueError(f"Unknown is found : {[vocab.textify(seq) for seq in first_batch]}")
-    print(f'Displaying the first batch:\n{first_batch}')
-    token_seqs = [vocab.textify(seq) for seq in first_batch]
-    pprint(token_seqs)

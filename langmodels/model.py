@@ -1,6 +1,6 @@
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 from dataprep.subtokens import is_terminal_subtoken
 
@@ -197,7 +197,7 @@ class TrainedModel(object):
     def prep_text(self, text, **kwargs) -> Union[Tuple[List[str], PreprocessingMetadata], List[str]]:
         import dataprep.api.text as text_api
         text_callable = getattr(text_api, self._prep_function.callable.__name__)
-        prep_text, metadata = text_callable(text, *self._prep_function.params, **self._prep_function.options, **kwargs)
+        prep_text, metadata = text_callable(text, *self._prep_function.params, **asdict(self._prep_function.options), **kwargs)
         check_metadata_validity(prep_text, metadata)
         return (prep_text, metadata) if 'return_metadata' in kwargs and kwargs['return_metadata'] else prep_text
 

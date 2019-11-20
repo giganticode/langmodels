@@ -1,21 +1,14 @@
-from inspect import signature
 from typing import Optional, Dict, Type, Union
 
 import jsons
 
-from langmodels.lmconfig.datamodel import PrepFunction, LMTrainingConfig, LMTrainingMetrics
+from langmodels.lmconfig.datamodel import PrepFunction, LMTrainingConfig, LMTrainingMetrics, PrepFunctionOptions
 
 
 def prep_function_serializer(prep_function: PrepFunction, **kwargs):
-    SERIALIZABLE_OPTIONS = [
-        'no_str', 'no_com', 'no_spaces', 'no_unicode', 'no_case'
-    ]
-    callable_parameters = signature(prep_function.callable).parameters
-    serialized_options = {k: (prep_function.options[k] if k in prep_function.options else False) for k in
-                          SERIALIZABLE_OPTIONS if k in callable_parameters}
     return {'callable': prep_function.callable.__name__,
             'params': prep_function.params,
-            'options': serialized_options}
+            'options':  jsons.dump(prep_function.options)}
 
 
 def prep_function_deserializer(dct: Dict, cls: Type[PrepFunction], **kwargs) -> PrepFunction:
@@ -23,7 +16,7 @@ def prep_function_deserializer(dct: Dict, cls: Type[PrepFunction], **kwargs) -> 
     return cls(
         callable=getattr(api, dct['callable']),
         params=dct['params'],
-        options=dct['options']
+        options=jsons.load(dct['options'], PrepFunctionOptions)
     )
 
 

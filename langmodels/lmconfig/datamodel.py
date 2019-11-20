@@ -1,6 +1,6 @@
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Optional, Callable, Tuple, Union, Any, List, Dict
 
 import dataprep.api.corpus as corpus_api
@@ -68,21 +68,24 @@ ParametrizedPrepCallable = Callable[[Corpus], PreprocessedCorpus]
 
 
 @dataclass(frozen=True)
+class PrepFunctionOptions(object):
+    no_unicode: bool = True
+    no_spaces: bool = True
+    no_com: bool = False
+    no_str: bool = False
+    max_str_length: int = sys.maxsize
+
+
+@dataclass(frozen=True)
 class PrepFunction(object):
     callable: PrepCallable = corpus_api.bpe
-    params: List = field(default_factory=lambda: ['10k'])
-    options: Dict[str, Any] = field(default_factory=lambda: {
-        'no_unicode': True,
-        'no_spaces': True,
-        'no_com': False,
-        'no_str': False,
-        'max_str_length': sys.maxsize
-    })
+    params: List[str] = field(default_factory=lambda: ['10k'])
+    options: PrepFunctionOptions = PrepFunctionOptions()
 
     @property
     def apply(self) -> ParametrizedPrepCallable:
         def prep_corpus(corpus: Corpus, **kwargs) -> PreprocessedCorpus:
-            return self.callable(corpus.path, *self.params, **self.options, **kwargs,
+            return self.callable(corpus.path, *self.params, **asdict(self.options), **kwargs,
                                  calc_vocab=True, extensions=corpus.extensions)
 
         return prep_corpus

@@ -182,7 +182,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     config = create_custom_config(training_config)
     arch_class = training_config.get_arch_class()
     learner = language_model_learner(databunch, arch_class,
-                                     # drop_mult=lm_training_config.arch.drop.multiplier,
+                                     drop_mult=training_config.arch.drop.multiplier,
                                      config=config, pretrained=not config, metrics=[accuracy, mrr],
                                      callback_fns=[PeakMemMetric] if torch.cuda.is_available() else [],
                                      path=MODEL_ZOO_PATH, model_dir=experiment_run.id)

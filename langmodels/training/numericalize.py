@@ -1,3 +1,4 @@
+import logging
 import os
 import typing
 from collections import Counter
@@ -12,7 +13,8 @@ from fastai.data_block import PreProcessor
 from fastai.text import Vocab
 from tqdm import tqdm
 
-from langmodels.training.training import logger
+
+logger = logging.getLogger(__name__)
 
 
 class Numericalizer(PreProcessor):

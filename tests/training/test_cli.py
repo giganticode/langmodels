@@ -29,7 +29,7 @@ def test_device_comet_cpu(train_func_mocker):
 
 
 def test_short_options(train_func_mocker):
-    argv = ['train', '-pxt', '-d 3']
+    argv = ['train', '-Cxt', '-d 3']
     run(argv)
     cli.train.assert_called_with(tune=True, comet=False,
                                  device_options=DeviceOptions(fallback_to_cpu=True, non_default_device_to_use=3),

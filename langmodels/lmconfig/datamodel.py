@@ -1,7 +1,7 @@
 import os
 import sys
 from dataclasses import dataclass, field, asdict
-from typing import Optional, Callable, Tuple, Union, Any, List, Dict
+from typing import Optional, Callable, Tuple, Union, List, Type
 
 import dataprep.api.corpus as corpus_api
 from dataprep.api.corpus import PreprocessedCorpus
@@ -131,6 +131,16 @@ class GruArch(object):
 
 
 @dataclass(frozen=True)
+class TransformerDropouts(object):
+    multiplier: float = 1.0
+    resid: float = 0.1
+    attn: float = 0.1
+    ff: float = 0.1
+    embed: float = 0.1
+    output: float = 0.
+
+
+@dataclass(frozen=True)
 class TransformerArch(object):
     ctx_len: int = 256
     n_layers: int = 3
@@ -138,11 +148,7 @@ class TransformerArch(object):
     d_model: int = 512
     d_head: int = 16
     d_inner: int = 2048
-    resid_p: float = 0.1
-    attn_p: float = 0.1
-    ff_p: float = 0.1
-    embed_p: float = 0.1
-    output_p: float = 0.
+    drop: TransformerDropouts = TransformerDropouts()
     bias: bool = True
     scale: bool = True
     act: Activation = Activation.GeLU
@@ -181,7 +187,7 @@ class LMTrainingConfig(object):
                             f'CONFIG_VERSION {self.config_version} '
                             f'to CONFIG_VERSION {CONFIG_VERSION} object')
 
-    def get_arch_class(self) -> Union[AWD_LSTM, Transformer, TransformerXL]:
+    def get_arch_class(self) -> Union[Type[AWD_LSTM], Type[GRU], Type[Transformer]]:
         if isinstance(self.arch, LstmArch):
             return AWD_LSTM
         elif isinstance(self.arch, GruArch):

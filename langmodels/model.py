@@ -52,8 +52,26 @@ def create_custom_lstm_or_gru_config(arch: Union[GruArch, LstmArch]):
 
 
 def create_custom_transformer_config(arch: TransformerArch) -> Dict[str, Any]:
-    d = arch.__dict__
-    d['init'] = init_transformer
+    d = {'init': init_transformer,
+         'ctx_len': arch.ctx_len,
+         'n_layers': arch.n_layers,
+         'n_heads': arch.n_heads,
+         'd_model': arch.d_model,
+         'd_head': arch.d_head,
+         'd_inner': arch.d_inner,
+         'resid_p': arch.drop.resid,
+         'attn_p': arch.drop.attn,
+         'ff_p': arch.drop.ff,
+         'embed_p': arch.drop.embed,
+         'output_p': arch.drop.output,
+         'bias': arch.bias,
+         'scale': arch.scale,
+         'act': arch.act,
+         'double_drop': arch.double_drop,
+         'tie_weights': arch.tie_weights,
+         'out_bias': arch.out_bias,
+         'mask': arch.mask,
+    }
     return d
 
 

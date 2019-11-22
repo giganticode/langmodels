@@ -248,8 +248,6 @@ class TrainedModel(object):
         n_chunks = (len(prep_text)-1) // max_subtokens_per_chunk + 1
         for i in range(n_chunks):
             pt = prep_text[i*max_subtokens_per_chunk:(i+1)*max_subtokens_per_chunk]
-            #TODO XXX this is a hack to temporarily fix \xa0 issue
-            pt = ['`unk' if t == '\xa0' else t for t in pt]
             numericalized_prep_text = torch.tensor([self.vocab.numericalize(pt)],
                                                    device=get_device(self.force_use_cpu))
 

@@ -42,10 +42,14 @@ def train_handler(args):
                                                     the model fits into memory)
       -d <device>, --device=<device>               Device id to use
       -c, --config=<config>                        Path to the json with config to be used to train the model
-      -p, --patch=<patch>                          'Patch' to apply to the default lm training config
+      -p, --patch=<patch>                          'Patch' to apply to the default lm training config e.g
 
     """
     handle_train(args)
+
+
+def parse_patch(patch_string: str) -> Dict[str, str]:
+    return {l[0]: l[1] for l in [param.split(':') for param in patch_string.split(',')]}
 
 
 def handle_train(args) -> None:
@@ -61,7 +65,7 @@ def handle_train(args) -> None:
         raise ValueError(f"Could not deserialize a valid config from {path_to_config}")
 
     patch = get_option(args, '--patch')
-    lm_training_config = patch_config(lm_training_config, jsons.loads(patch)) if patch else lm_training_config
+    lm_training_config = patch_config(lm_training_config, parse_patch(patch)) if patch else lm_training_config
 
     device_options = DeviceOptions(fallback_to_cpu=fallback_to_cpu, non_default_device_to_use=device)
 

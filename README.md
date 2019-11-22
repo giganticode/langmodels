@@ -189,9 +189,34 @@ Below you can see all the default parameters specified explicitly:
 
 ### CLI API
 
+Training can be run from command line as simple as running `train` command passing path to the config in json format 
+as `--config` param. To override values in the json file (or default values if `--config` param is not specified), 
+you can use `--patch` param.
+```shell script
+>> langmodels train --config="/path/to/json/config.json" --patch="bs=64,arch.drop.multiplier=3.0"
 ```
-<TBD>
 
+If neither `--config` nor `--patch` params are specified, the training will be running with the default parameters.
+The json with the default parameters would look like follows:
+
+```json
+{"arch": {"adam_betas": [0.7, 0.99], "bidir": false, "clip": 0.3, "drop":
+ {"multiplier": 0.5, "out": 0.1, "oute": 0.02, "outh": 0.15, "outi": 0.25,
+ "w": 0.2}, "emb_sz": 1024, "lstm": true, "n_hid": 1024, "n_layers": 3,
+ "out_bias": true, "qrnn": false, "reg_fn": {"alpha": 2.0, "beta": 1.0},
+ "tie_weights": true}, "base_model": null, "bptt": 200, "bs": 32,
+ "config_version": "1.0.0", "corpus": {"extensions": "java", "path":
+ "/home/hlib/dev/raw_datasets/allamanis/langmodel-large-split"},
+ "prep_function": {"callable": "bpe", "params": ["10k"], "options":
+ {"max_str_length": 9223372036854775807, "no_com": false, "no_spaces": true,
+ "no_str": false, "no_unicode": true}}, "training_procedure": {"schedule":
+ {"init_lr": 0.0001, "max_epochs": 50, "max_lr_reduction_times": 6,
+ "mult_coeff": 0.5}, "weight_decay": 1e-06}}
+```
+
+For more options, run:
+```shell script
+>> langmodels train --help
 ```
 
 ## LM Evaluation

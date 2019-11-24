@@ -1,5 +1,6 @@
 import logging
 import os
+from collections import OrderedDict
 from dataclasses import dataclass, asdict
 
 from dataprep.subtokens import is_terminal_subtoken
@@ -202,7 +203,9 @@ class TrainedModel(object):
 
         # a more simple solution is to use fastai's load_learner,
         # however it doesn't seem to work out of the box with customizations we've done
-        weights = pth_to_torch(state_dict)
+
+        # update: it appeared that it's quite simple to load weights. So maybe not worth it loading a learner?
+        weights = OrderedDict(state_dict['model'] if ('model' in state_dict) else state_dict)
         if custom_vocab:
             weights = convert_weights(weights, self.original_vocab.stoi, custom_vocab.itos)
         model.load_state_dict(weights, strict=True)

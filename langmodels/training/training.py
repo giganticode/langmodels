@@ -131,11 +131,12 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
     Validation using fastai's `validation` method
     """
     prep_corpus: api.PreprocessedCorpus = trained_model.prep_corpus(corpus)
+    config: LMTrainingConfig = trained_model.config
 
     device_id = get_device_id(fallback_to_cpu, non_default_device_to_use)
 
     logger.info(f"Vocab size: {len(trained_model.vocab.itos)}")
-    databunch = create_databunch(prep_corpus, trained_model.vocab, bs=64, bptt=1, device=device_id,
+    databunch = create_databunch(prep_corpus, trained_model.vocab, bs=config.bs, bptt=config.bptt, device=device_id,
                                  only_validation_files=only_validation_files, allow_unks=True)
 
     class DetupleCallback(Callback):

@@ -1,6 +1,5 @@
-from typing import Optional, Dict, Type, Union
-
 import jsons
+from typing import Dict, Type, Union
 
 from langmodels.lmconfig.datamodel import PrepFunction, LMTrainingConfig, LMTrainingMetrics, PrepFunctionOptions
 
@@ -24,12 +23,19 @@ jsons.set_serializer(prep_function_serializer, PrepFunction)
 jsons.set_deserializer(prep_function_deserializer, cls=PrepFunction)
 
 
-def dump_config(config: LMTrainingConfig, file: Optional[str]=None) -> str:
-    str = jsons.dumps(config)
-    if file:
-        with open(file, 'w') as f:
-            f.write(str)
-    return str
+def dump_config_to_json(config: LMTrainingConfig) -> object:
+    return jsons.dump(config)
+
+
+def dump_config_to_string(config: LMTrainingConfig) -> str:
+    return jsons.dumps(dump_config_to_json(config))
+
+
+def dump_config(config: LMTrainingConfig, file: str) -> str:
+    config_str = dump_config_to_string(config)
+    with open(file, 'w') as f:
+        f.write(config_str)
+    return config_str
 
 
 def load_config_from_string(s: str) -> Union[LMTrainingConfig, LMTrainingMetrics]:

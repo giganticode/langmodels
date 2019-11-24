@@ -2,10 +2,8 @@ import logging
 import os
 from pprint import pprint, pformat
 
-import jsons
 import torch
-
-from dataprep.util import to_literal_str
+from comet_ml import Experiment
 from fastai.basic_data import DataBunch
 from fastai.basic_train import validate
 from fastai.callback import CallbackHandler, Callback
@@ -15,6 +13,7 @@ from fastai.layers import FlattenedLoss
 from fastai.metrics import accuracy
 from fastai.text import Vocab, TextList, language_model_learner
 from fastai.train import fit_one_cycle, Learner, EarlyStoppingCallback
+from flatdict import FlatDict
 from pathlib import Path
 from torch import Tensor
 from torch.nn import CrossEntropyLoss
@@ -22,21 +21,19 @@ from typing import Tuple, Optional
 
 import dataprep.api.corpus as api
 from dataprep.api.corpus import PreprocessedCorpus
-
-from langmodels import MODEL_ZOO_PATH
+from dataprep.util import to_literal_str
 from langmodels.cuda_util import get_device_id
 from langmodels.file_util import check_path_exists, check_path_writable
 from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, \
     RafaelsTrainingSchedule, TrainingProcedure, CosineLRSchedule, ExperimentRun, DeviceOptions
-from langmodels.lmconfig.serialization import dump_config
+from langmodels.lmconfig.serialization import dump_config, dump_config_to_string, dump_config_to_json
 from langmodels.model import TrainedModel, create_custom_config
 from langmodels.modelregistry import load_from_path
 from langmodels.profiling import get_cpu_memory_used_mb
-from langmodels.retrier import RetryingSaveModelCalback
 from langmodels.tensor_ops import contains_no_value, mrr
+from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, RetryingSaveModelCalback
 from langmodels.training.numericalize import Numericalizer
 from langmodels.training.schedule import ReduceLRCallback
-from langmodels.training.tracking.comet import log_to_comet
 
 logger = logging.getLogger(__name__)
 
@@ -51,18 +48,6 @@ PATH_TO_PREP_DATASETS = os.environ['PATH_TO_PREP_DATASETS'] if 'PATH_TO_PREP_DAT
 
 def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
     return Vocab(['`unk', '`pad'] + list(map(lambda x: to_literal_str(x), prep_corpus.load_vocab().keys())))
-
-
-def add_callbacks(learner: Learner, tune: bool) -> None:
-
-    save_every_epoch_callback = RetryingSaveModelCalback(learner, every='epoch', name='epoch')
-    learner.callbacks.append(save_every_epoch_callback)
-    save_best_model_callback = RetryingSaveModelCalback(learner, every='improvement', name='best')
-    learner.callbacks.append(save_best_model_callback)
-
-    if tune:
-        logger.warning("Tune mode is ON!")
-        learner.callbacks.append(StopAfterNBatches(n_batches=2))
 
 
 def choose_schedule_and_fit(learner: Learner, training_procedure: TrainingProcedure) -> None:
@@ -117,11 +102,11 @@ def load_base_model_if_needed(learner: Learner, lm_training_config: LMTrainingCo
         print("Training form scratch")
 
 
-def save_experiment_input(learner: Learner, run: ExperimentRun, vocab: Vocab, comet: bool):
+def save_experiment_input(run: ExperimentRun, learner: Learner, vocab: Vocab):
     vocab.save(os.path.join(run.path_to_trained_model, VOCAB_FILE_NAME))
     dump_config(run.config, os.path.join(run.path_to_trained_model, CONFIG_FILE_NAME))
-    if comet:
-        log_to_comet(run.id, run.config, learner, vocab)
+    if run.comet_experiment:
+        save_params_to_comet(run.comet_experiment, run.config, vocab, get_param_number(learner))
 
 
 def check_run_prerequisites(run: ExperimentRun) -> None:
@@ -162,11 +147,44 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
                     cb_handler=CallbackHandler([DetupleCallback()]))
 
 
+def get_param_number(learner: Learner) -> int:
+    return sum(p.numel() for p in learner.model.parameters() if p.requires_grad)
+
+
+def save_params_to_comet(experiment: Experiment, lm_training_config: LMTrainingConfig,
+                         vocab: Vocab, trainable_params: int) -> Experiment:
+    flat_config = FlatDict(dump_config_to_json(lm_training_config))
+    for name, value in flat_config.items():
+        experiment.log_parameter(name, value)
+    experiment.log_parameter("vocabulary", len(vocab.itos))
+    experiment.log_parameter("trainable_params", trainable_params)
+    experiment.log_parameter("model_available", False)
+    return experiment
+
+
+def add_callbacks(experiment_run: ExperimentRun, learner: Learner, vocab: Vocab, tune: bool) -> None:
+    comet_experiment: Optional[Experiment] = experiment_run.comet_experiment
+    if comet_experiment:
+        learner.callbacks.append(LrLogger(learner, comet_experiment))
+
+    first_model_trained_callback = FirstModelTrainedCallback(learner, experiment_run)
+    learner.callbacks.append(first_model_trained_callback)
+
+    save_every_epoch_callback = RetryingSaveModelCalback(learner, every='epoch', name='epoch')
+    learner.callbacks.append(save_every_epoch_callback)
+    save_best_model_callback = RetryingSaveModelCalback(learner, every='improvement', name='best')
+    learner.callbacks.append(save_best_model_callback)
+
+    if tune:
+        logger.warning("Tune mode is ON!")
+        learner.callbacks.append(StopAfterNBatches(n_batches=2))
+
+
 def train(training_config: LMTrainingConfig = LMTrainingConfig(),
           device_options: DeviceOptions() = DeviceOptions(),
           tune=False, comet=True) -> TrainedModel:
-    logger.info(f'Using the following config: \n{pformat(jsons.dumps(training_config))}')
-    experiment_run = ExperimentRun.with_config(training_config, device_options=device_options)
+    logger.info(f'Using the following config: \n{pformat(dump_config_to_string(training_config))}')
+    experiment_run = ExperimentRun.with_config(training_config, device_options=device_options, comet=comet)
     check_run_prerequisites(experiment_run)
 
     prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply(training_config.corpus,
@@ -185,15 +203,17 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
                                      drop_mult=training_config.arch.drop.multiplier,
                                      config=config, pretrained=not config, metrics=[accuracy, mrr],
                                      callback_fns=[PeakMemMetric] if torch.cuda.is_available() else [],
-                                     path=MODEL_ZOO_PATH, model_dir=experiment_run.id)
+                                     path=os.path.dirname(experiment_run.path_to_trained_model),
+                                     model_dir=os.path.basename(experiment_run.path_to_trained_model))
 
-    save_experiment_input(learner, experiment_run, vocab, comet=comet)
+    save_experiment_input(experiment_run, learner, vocab)
 
-    add_callbacks(learner, tune=tune)
+    add_callbacks(experiment_run, learner, vocab, tune)
 
     load_base_model_if_needed(learner, training_config)
 
-    print(f"Starting training... Model will be saved to {experiment_run.path_to_trained_model}")
+    print(f"Starting training... Model will be saved to {experiment_run.perm_path_to_model} "
+          f"(Saving config and vocab to {experiment_run.path_to_trained_model} before getting the first trained model)")
     choose_schedule_and_fit(learner, training_config.training_procedure)
 
     # learner.export('learner.pkl')

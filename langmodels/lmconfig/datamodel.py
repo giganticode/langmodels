@@ -1,6 +1,8 @@
 import os
 import sys
 from dataclasses import dataclass, field, asdict
+
+from comet_ml import Experiment
 from typing import Optional, Callable, Tuple, Union, List, Type
 
 import dataprep.api.corpus as corpus_api
@@ -13,6 +15,8 @@ from langmodels.nn import GRU
 CONFIG_VERSION = '1.0.0'
 
 HOME = os.environ['HOME']
+
+TMP_SUFFIX = '.tmp'
 
 
 @dataclass(frozen=True)
@@ -198,26 +202,40 @@ class LMTrainingConfig(object):
             raise ValueError(f"Unknown architecture: {self.arch}")
 
 
+def create_comet_experiment(run_id: str):
+    experiment = Experiment()
+    experiment.set_name(run_id)
+    return experiment
+
+
 class ExperimentRun:
-    def __init__(self, config: LMTrainingConfig, device_options: DeviceOptions):
+    def __init__(self, run_id: str, config: LMTrainingConfig, device_options: DeviceOptions, comet_experiment: Optional):
+        self.id = run_id
         self.config = config
         self.gpu = device_options
-        self.id = self._generate_run_id()
+        self.comet_experiment: Optional[Experiment] = comet_experiment
+        self.first_model_trained = False
 
     @classmethod
-    def with_config(cls, config: LMTrainingConfig, device_options: DeviceOptions = DeviceOptions()):
-        return cls(config, device_options)
+    def with_config(cls, config: LMTrainingConfig, device_options: DeviceOptions = DeviceOptions(), comet: bool = True):
+        run_id = ExperimentRun._generate_run_id(config)
+        comet_experiment = create_comet_experiment(run_id) if comet else None
+        return cls(run_id, config, device_options, comet_experiment)
 
-    def _generate_run_id(self) -> str:
+    def set_first_model_trained(self):
+        self.first_model_trained = True
+
+    @staticmethod
+    def _generate_run_id(config: LMTrainingConfig) -> str:
         name_parts = []
-        if self.config.base_model:
-            name_parts.append([os.path.basename(self.config.base_model)])
+        if config.base_model:
+            name_parts.append([os.path.basename(config.base_model)])
 
-        dataset = os.path.basename(self.config.corpus.path)
-        prep_func_param = self.config.prep_function.params[0]
-        n_layers = self.config.arch.n_layers
-        n_hid = self.config.arch.n_hid if not isinstance(self.config.arch, TransformerArch) \
-            else self.config.arch.d_inner
+        dataset = os.path.basename(config.corpus.path)
+        prep_func_param = config.prep_function.params[0]
+        n_layers = config.arch.n_layers
+        n_hid = config.arch.n_hid if not isinstance(config.arch, TransformerArch) \
+            else config.arch.d_inner
 
         import datetime
         time_now = datetime.datetime.now()
@@ -228,7 +246,11 @@ class ExperimentRun:
         return "_-_".join(map(lambda p: "_".join(p), name_parts))
 
     @property
-    def path_to_trained_model(self):
+    def path_to_trained_model(self) -> str:
+        return self.perm_path_to_model if self.first_model_trained else f'{self.perm_path_to_model}{TMP_SUFFIX}'
+
+    @property
+    def perm_path_to_model(self) -> str:
         return os.path.join(MODEL_ZOO_PATH, self.id)
 
 

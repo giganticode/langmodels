@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 
 from tqdm import tqdm
 from typing import List, Tuple, Callable, Optional, Union, Dict, Set
@@ -115,14 +116,13 @@ def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
     return model_evaluation
 
 
-def evaluate_model_on_file(model: TrainedModel, file: str,
+def evaluate_model_on_file(model: TrainedModel, file: Path,
                            token_types: Optional[Set[TokenTypes]] = None,
                            metrics: Optional[Union[Set[Metric], Set[str]]] = None,
                            result_per_line: bool = True) -> Union[List[Evaluation], Evaluation]:
-    extension = get_file_extension(file)
-    model.check_inference_possible_for_file_type(extension)
+    model.check_inference_possible_for_file_type(file.suffix)
     text = read_file_contents(file)
-    result = evaluate_model_on_string(model, text, extension, token_types, metrics,
+    result = evaluate_model_on_string(model, text, file.suffix, token_types, metrics,
                                       result_per_line=result_per_line, append_eof=True)
     return result if result_per_line else result[0]
 

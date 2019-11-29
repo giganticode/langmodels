@@ -18,11 +18,13 @@ logger = logging.getLogger(__name__)
 
 
 class Numericalizer(PreProcessor):
-    def __init__(self, vocab: Vocab, n_cpus: int = os.cpu_count(), allow_unks: bool = False):
+    def __init__(self, vocab: Vocab, n_cpus: int = os.cpu_count(),
+                 allow_unks: bool = False, large_databunch: bool = False):
         super().__init__()
         self.vocab = vocab
         self.n_cpus = n_cpus
         self.allow_unks = allow_unks
+        self.large_databunch = large_databunch
 
     def process_one(self, item: str):
         with open(item, 'r') as f:
@@ -47,7 +49,8 @@ class Numericalizer(PreProcessor):
                            f"{sorted(unks.items(), reverse=True, key=lambda x:x[1])}")
 
     def _process_on_one_core(self, items: Collection[str]) -> List[Tuple[np.ndarray, typing.Mapping[str, int]]]:
-        return [self.process_one(item) for item in tqdm(items)]
+        items = tqdm(items) if self.large_databunch else items
+        return [self.process_one(item) for item in items]
 
     def _process_in_parallel(self, texts: Collection[str]) -> Tuple[List[np.ndarray], typing.Mapping[str, int]]:
         if self.n_cpus <= 1:

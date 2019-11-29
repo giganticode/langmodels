@@ -1,7 +1,8 @@
 import logging
 import os
-from typing import Generator
 
+from pathlib import Path
+from typing import Generator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,29 +19,29 @@ def check_path_exists(path: str) -> None:
         raise FileNotFoundError(path)
 
 
-def get_all_files(path: str) -> Generator[str, None, None]:
+def get_all_files(path: str, extension: Optional[str] = 'java') -> Generator[Path, None, None]:
     if os.path.isfile(path):
-        yield path
+        yield Path(path)
     else:
         for root, dirs, files in os.walk(path, followlinks=True):
             for file in files:
-                if file.endswith('.java'):
-                    yield os.path.join(root, file)
+                if not extension or file.endswith(f'.{extension}'):
+                    yield Path(os.path.join(root, file))
 
 
-def read_file_with_encoding(file_path: str, encoding: str) -> str:
-    with open(file_path, 'r', encoding=encoding) as f:
+def read_file_with_encoding(file: Path, encoding: str) -> str:
+    with file.open('r', encoding=encoding) as f:
         return f.read()
 
 
-def read_file_contents(file_path: str) -> str:
+def read_file_contents(file: Path) -> str:
     try:
-        return read_file_with_encoding(file_path, 'utf-8')
+        return read_file_with_encoding(file, 'utf-8')
     except UnicodeDecodeError:
         try:
-            return read_file_with_encoding(file_path, 'ISO-8859-1')
+            return read_file_with_encoding(file, 'ISO-8859-1')
         except UnicodeDecodeError:
-            logger.error(f"Unicode decode error in file: {file_path}")
+            logger.error(f"Unicode decode error in file: {file}")
 
 
 def get_file_total_lines(file):

@@ -165,6 +165,7 @@ class TransformerArch(object):
 @dataclass(frozen=True)
 class TrainingProcedure(object):
     schedule: Union[CosineLRSchedule, RafaelsTrainingSchedule] = RafaelsTrainingSchedule()
+    files_per_epoch: Optional[int] = 50 * 1000
     weight_decay: float = 1e-6
 
 

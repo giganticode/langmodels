@@ -40,6 +40,7 @@ jobs:
 install:
   - pip3 install torch==1.3.0
   - pip install -r requirements.txt
+  - pip install -r requirements-dev.txt
 script:
   - cd $TRAVIS_BUILD_DIR
   - echo "Current directory is $(pwd)"

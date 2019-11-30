@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 def check_path_writable(path: str) -> None:
     if not os.path.exists(path):
-        os.mkdir(path)
+        os.makedirs(path)
     elif not os.access(path, os.W_OK | os.X_OK):
         raise FileNotFoundError(path)
 

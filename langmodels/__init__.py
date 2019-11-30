@@ -21,7 +21,12 @@ def _get_version():
         return version_file.read().strip()
 
 
+def _get_major_version():
+    return int(__version__.split('.')[0])
+
+
 __version__ = _get_version()
+__major_version__ = _get_major_version()
 
 user_data_dir = appdirs.user_data_dir(app_name, appauthor=False, version=_get_version())
 MODEL_ZOO_PATH = os.path.join(user_data_dir, 'modelzoo')

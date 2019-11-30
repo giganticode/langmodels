@@ -9,10 +9,10 @@ import dataprep.api.corpus as corpus_api
 from dataprep.api.corpus import PreprocessedCorpus
 from fastai.text import AWD_LSTM, Transformer, TransformerXL, Activation
 
-from langmodels import MODEL_ZOO_PATH
+from langmodels import MODEL_ZOO_PATH, __version__, __major_version__
 from langmodels.nn import GRU
 
-CONFIG_VERSION = '1.0.0'
+CONFIG_VERSION = __major_version__ if __major_version__ > 0 else __version__
 
 HOME = os.environ['HOME']
 

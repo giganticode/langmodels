@@ -137,7 +137,7 @@ Check our [vsc plugin](https://github.com/giganticode/vsc-extension) for highlig
 
 **TBD**
 
-## Training from scratch
+## Training from scratch (Not supported on OSx)
 
 ### Python API
 

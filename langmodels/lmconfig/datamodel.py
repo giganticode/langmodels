@@ -63,7 +63,7 @@ class CosineLRSchedule(TrainingSchedule):
 
 @dataclass(frozen=True)
 class Corpus(object):
-    path: str = os.path.join(HOME, 'dev/raw_datasets/allamanis/langmodel-large-split')
+    path: str
     extensions: str = 'java'  # in format "py" or "java|c|py"
 
 

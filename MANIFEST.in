@@ -1,5 +1,5 @@
-include dataprep/VERSION
-include dataprep/*.yaml
+include langmodels/VERSION
+include langmodels/*.yaml
 include *.md
 include *.txt
 include LICENSE

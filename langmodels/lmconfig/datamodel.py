@@ -90,7 +90,7 @@ class PrepFunction(object):
     def apply(self) -> ParametrizedPrepCallable:
         def prep_corpus(corpus: Corpus, **kwargs) -> PreprocessedCorpus:
             return self.callable(corpus.path, *self.params, **asdict(self.options), **kwargs,
-                                 calc_vocab=True, extensions=corpus.extensions)
+                                 extensions=corpus.extensions)
 
         return prep_corpus
 

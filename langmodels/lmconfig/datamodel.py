@@ -63,7 +63,7 @@ class CosineLRSchedule(TrainingSchedule):
 
 @dataclass(frozen=True)
 class Corpus(object):
-    path: str
+    path: str = os.path.join(HOME, 'dataset')
     extensions: str = 'java'  # in format "py" or "java|c|py"
 
 
@@ -177,7 +177,7 @@ class DeviceOptions(object):
 
 @dataclass(frozen=True)
 class LMTrainingConfig(object):
-    corpus: Corpus
+    corpus: Corpus = Corpus()
     base_model: Optional[str] = None
     bs: int = 32
     prep_function: PrepFunction = PrepFunction()

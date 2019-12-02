@@ -169,7 +169,7 @@ Below you can see all the default parameters specified explicitly:
 
 >>> train(LMTrainingConfig(base_model=None, 
                        bs=32, 
-                       corpus=Corpus(path=os.path.join(HOME, '/path/to/the/dataset'), extensions="java"), 
+                       corpus=Corpus(path=os.path.join(HOME, 'dataset'), extensions="java"), 
                        prep_function=PrepFunction(corpus_api.bpe, ['10k'], 
                                                   {'no_com': False, 'no_unicode': True, 
                                                    'no_spaces': True, 'max_str_length': sys.maxsize}), 
@@ -206,13 +206,15 @@ The json with the default parameters would look like follows:
  "out_bias": true, "qrnn": false, "reg_fn": {"alpha": 2.0, "beta": 1.0},
  "tie_weights": true}, "base_model": null, "bptt": 200, "bs": 32,
  "config_version": "1.0.0", "corpus": {"extensions": "java", "path":
- "/home/hlib/dev/raw_datasets/allamanis/langmodel-large-split"},
+ "/home/<my_username>/dataset"},
  "prep_function": {"callable": "bpe", "params": ["10k"], "options":
  {"max_str_length": 9223372036854775807, "no_com": false, "no_spaces": true,
  "no_str": false, "no_unicode": true}}, "training_procedure": {"schedule":
  {"init_lr": 0.0001, "max_epochs": 50, "max_lr_reduction_times": 6,
  "mult_coeff": 0.5}, "weight_decay": 1e-06}}
 ```
+
+Most probably, you would have to override at least the `corpus.path` value.
 
 For more options, run:
 ```shell script
@@ -299,6 +301,12 @@ from langmodels.evaluation.metrics import TokenTypes
 
 
 ```
+
+## Release Notes
+
+### 0.0.1-alpha.0
+
+Initial PyPI release
 
 ## References
 

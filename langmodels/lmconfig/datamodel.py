@@ -177,9 +177,9 @@ class DeviceOptions(object):
 
 @dataclass(frozen=True)
 class LMTrainingConfig(object):
+    corpus: Corpus
     base_model: Optional[str] = None
     bs: int = 32
-    corpus: Corpus = Corpus()
     prep_function: PrepFunction = PrepFunction()
     arch: Union[LstmArch, GruArch, TransformerArch] = LstmArch()
     bptt: int = 200

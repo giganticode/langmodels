@@ -120,7 +120,7 @@ def evaluate_model_on_file(model: TrainedModel, file: Path,
                            token_types: Optional[Set[TokenTypes]] = None,
                            metrics: Optional[Union[Set[Metric], Set[str]]] = None,
                            result_per_line: bool = True) -> Union[List[Evaluation], Evaluation]:
-    suffix: str = file.suffix
+    suffix: str = file.suffix[1:]
     model.check_inference_possible_for_file_type(suffix)
     text = read_file_contents(file)
     result = evaluate_model_on_string(model, text, suffix, token_types, metrics,

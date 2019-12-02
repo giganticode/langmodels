@@ -297,7 +297,7 @@ class TrainedModel(object):
                                 tags=self.tags)
 
     def check_inference_possible_for_file_type(self, extension):
-        if extension[1:] not in normalize_extension_string(self.config.corpus.extensions):
+        if extension not in normalize_extension_string(self.config.corpus.extensions):
             raise ValueError(f'The model was not trained on .{extension} files. Cannot do inference.')
 
     def __str__(self) -> str:

@@ -1,6 +1,8 @@
 import logging
 import os
 from collections import OrderedDict
+from threading import Lock
+
 from dataclasses import dataclass, asdict
 
 from dataprep.subtokens import is_terminal_subtoken
@@ -149,6 +151,9 @@ class ModelDescription(object):
         return list(map(lambda a: self.__getattribute__(a), ModelDescription.get_attribute_list()))
 
 
+lock = Lock()
+
+
 class TrainedModel(object):
     STARTING_TOKEN = placeholders['ect']
 
@@ -232,49 +237,53 @@ class TrainedModel(object):
 
         prep_text, metadata = self.prep_text(text, return_metadata=True, force_reinit_bpe_data=False)
         context_tensor = torch.tensor([self.vocab.numericalize(prep_text)], device=get_device(self.force_use_cpu))
-        _ = get_last_layer_activations(self.model, context_tensor[:,:-1])
-        self.last_predicted_token_tensor = context_tensor[:,-1:]
+        with lock:
+            _ = get_last_layer_activations(self.model, context_tensor[:,:-1])
+            self.last_predicted_token_tensor = context_tensor[:,-1:]
 
     def get_entropies_for_prep_text(self, prep_text: List[str]) -> List[float]:
         """
         changes hidden states of the model!!
         """
-        self._check_model_loaded()
+        with lock:
+            self._check_model_loaded()
 
-        if not prep_text:
-            return []
+            if not prep_text:
+                return []
 
-        loss_list = []
-        max_subtokens_per_chunk = 1000
-        # if the line is too big, we break it down to chunks to fit it into gpu memory
-        # big chunks require more memory, small chunks require more time
-        n_chunks = (len(prep_text)-1) // max_subtokens_per_chunk + 1
-        for i in range(n_chunks):
-            pt = prep_text[i*max_subtokens_per_chunk:(i+1)*max_subtokens_per_chunk]
-            numericalized_prep_text = torch.tensor([self.vocab.numericalize(pt)],
-                                                   device=get_device(self.force_use_cpu))
+            loss_list = []
+            max_subtokens_per_chunk = 1000
+            # if the line is too big, we break it down to chunks to fit it into gpu memory
+            # big chunks require more memory, small chunks require more time
+            n_chunks = (len(prep_text)-1) // max_subtokens_per_chunk + 1
+            for i in range(n_chunks):
+                pt = prep_text[i*max_subtokens_per_chunk:(i+1)*max_subtokens_per_chunk]
+                numericalized_prep_text = torch.tensor([self.vocab.numericalize(pt)],
+                                                       device=get_device(self.force_use_cpu))
 
-            last_layer = get_last_layer_activations(self.model, torch.cat([self.last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))
-            loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
-                                   numericalized_prep_text.view(-1),
-                                   reduction='none')
-            binary_loss = to_binary_entropy(loss)
-            loss_list.extend(binary_loss.tolist())
-            self.last_predicted_token_tensor = numericalized_prep_text[:, -1:]
-        return loss_list
+                last_layer = get_last_layer_activations(self.model, torch.cat([self.last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))
+                loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
+                                       numericalized_prep_text.view(-1),
+                                       reduction='none')
+                binary_loss = to_binary_entropy(loss)
+                loss_list.extend(binary_loss.tolist())
+                self.last_predicted_token_tensor = numericalized_prep_text[:, -1:]
+            return loss_list
 
     def reset(self) -> None:
-        self._check_model_loaded()
+        with lock:
+            self._check_model_loaded()
 
-        self.model.reset()
-        self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
+            self.model.reset()
+            self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
                                                         device=get_device(self.force_use_cpu))
 
     def predict_next_full_token(self, n_suggestions: int, include_debug_tokens: bool = False) -> List[Tuple[str, float]]:
-        self._check_model_loaded()
+        with lock:
+            self._check_model_loaded()
 
-        subtokens, scores = beam_search(self.model, self.last_predicted_token_tensor[0], self.first_nonterm_token, n_suggestions, self.beam_size)
-        return [(to_full_token_string(self.vocab, st, include_debug_tokens=include_debug_tokens), 1 / exp(score.item())) for st, score in zip(subtokens, scores)]
+            subtokens, scores = beam_search(self.model, self.last_predicted_token_tensor[0], self.first_nonterm_token, n_suggestions, self.beam_size)
+            return [(to_full_token_string(self.vocab, st, include_debug_tokens=include_debug_tokens), 1 / exp(score.item())) for st, score in zip(subtokens, scores)]
 
     def _format_layers_config(self) -> str:
         if isinstance(self.config.arch, TransformerArch):

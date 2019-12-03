@@ -308,6 +308,10 @@ from langmodels.evaluation.metrics import TokenTypes
 
 Initial PyPI release
 
+### 0.0.1-alpha.1
+
+Make methods of `TrainedModel` that change underlying PyTorch model thread-safe
+
 ## References
 
 <a id="1">[1]</a> Ray, B., Hellendoorn, V., Godhane, S., Tu, Z., Bacchelli, A., & Devanbu, P. (2016, May). 

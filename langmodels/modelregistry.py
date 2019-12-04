@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import os
+from threading import Lock
 
 import requests
 from columnar import columnar
@@ -13,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 MODEL_DIR_URL = 'https://www.inf.unibz.it/~hbabii/pretrained_models'
 MODEL_LIST_URL = MODEL_DIR_URL + '.list'
+
+
+lock = Lock()
 
 
 def _download_file(url: str, path: str, check_md5: bool = False):
@@ -100,22 +104,23 @@ def load_from_path(path: str, force_use_cpu: bool = False, load_description_only
 
 
 def load_model_by_id(id: str, force_use_cpu: bool = False, load_description_only: bool = False) -> TrainedModel:
-    path = os.path.join(MODEL_ZOO_PATH, id)
-    if not os.path.exists(os.path.join(path, 'best.pth')):
-        if id not in _get_all_model_ids():
-            raise ValueError(f'Model with id {id} is not found on the server.')
-        url_to_model_dir = MODEL_DIR_URL + '/' + id
-        if not os.path.exists(path):
-            os.makedirs(path)
-        _download_file(url_to_model_dir + '/config', os.path.join(path, 'config'))
-        _download_file(url_to_model_dir + '/metrics', os.path.join(path, 'metrics'))
-        _download_file(url_to_model_dir + '/tags', os.path.join(path, 'tags'))
-        if not load_description_only:
-            logger.info(f'Model is not found in cache. Downloading from {url_to_model_dir} ...')
-            _download_file(url_to_model_dir + '/best.pth', os.path.join(path, 'best.pth'), check_md5=True)
-            _download_file(url_to_model_dir + '/vocab', os.path.join(path, 'vocab'), check_md5=True)
+    with lock:
+        path = os.path.join(MODEL_ZOO_PATH, id)
+        if not os.path.exists(os.path.join(path, 'best.pth')):
+            if id not in _get_all_model_ids():
+                raise ValueError(f'Model with id {id} is not found on the server.')
+            url_to_model_dir = MODEL_DIR_URL + '/' + id
+            if not os.path.exists(path):
+                os.makedirs(path)
+            _download_file(url_to_model_dir + '/config', os.path.join(path, 'config'))
+            _download_file(url_to_model_dir + '/metrics', os.path.join(path, 'metrics'))
+            _download_file(url_to_model_dir + '/tags', os.path.join(path, 'tags'))
+            if not load_description_only:
+                logger.info(f'Model is not found in cache. Downloading from {url_to_model_dir} ...')
+                _download_file(url_to_model_dir + '/best.pth', os.path.join(path, 'best.pth'), check_md5=True)
+                _download_file(url_to_model_dir + '/vocab', os.path.join(path, 'vocab'), check_md5=True)
 
-    return load_from_path(path, force_use_cpu, load_description_only)
+        return load_from_path(path, force_use_cpu, load_description_only)
 
 
 def load_model_with_tag(tag: str, force_use_cpu: bool = False):

@@ -304,13 +304,19 @@ from langmodels.evaluation.metrics import TokenTypes
 
 ## Release Notes
 
-### 0.0.1-alpha.0
+### 0.0.1-alpha.2 (NOT backward-compatible with 0.0.1-alpha.1)
 
-Initial PyPI release
+- Make downloading model from the repository thread-safe
+- Force to specify the extension which corresponds to the type of the code fed into
+the `TrainedModel`. **API change**: `trained_model.feed_text(text: str)` -> `trained_model.feed_text(text: str, extension: str)`
 
 ### 0.0.1-alpha.1
 
 Make methods of `TrainedModel` that change underlying PyTorch model thread-safe
+
+### 0.0.1-alpha.0
+
+Initial PyPI release
 
 ## References
 

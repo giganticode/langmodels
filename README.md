@@ -102,7 +102,7 @@ Example
 >>> from langmodels.modelregistry import load_default_model
 
 >>> trained_model = load_default_model()
->>> trained_model.feed_text('public static main() { if')
+>>> trained_model.feed_text('public static main() { if', extension='java')
 
 # this does not change the state of the model:
 >>> predictions = trained_model.predict_next_full_token(n_suggestions=5)
@@ -110,7 +110,7 @@ Example
 [('(', 0.9334765834402862), ('.', 0.01540983953864937), ('=', 0.008939018331858162), (',', 0.005372771784601065), ('the', 0.00309070517292041)]
 
 # adding more context, if the user types '(':
->>> trained_model.feed_text('(')
+>>> trained_model.feed_text('(', extension='java')
 [('(', 0.14554535082422237), ('c', 0.018005003646104294), ('!', 0.01614662429123089)]
 
 

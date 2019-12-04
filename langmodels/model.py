@@ -220,10 +220,11 @@ class TrainedModel(object):
     def prep_corpus(self, corpus: Corpus, **kwargs) -> PreprocessedCorpus:
         return self._prep_function.apply(corpus, **kwargs)
 
-    def prep_text(self, text, **kwargs) -> Union[Tuple[List[str], PreprocessingMetadata], List[str]]:
+    def prep_text(self, text: str, extension: str, **kwargs) -> Union[Tuple[List[str], PreprocessingMetadata], List[str]]:
         import dataprep.api.text as text_api
         text_callable = getattr(text_api, self._prep_function.callable.__name__)
-        prep_text, metadata = text_callable(text, *self._prep_function.params, **asdict(self._prep_function.options), **kwargs)
+        prep_text, metadata = text_callable(text, extension=extension,
+                                            *self._prep_function.params, **asdict(self._prep_function.options), **kwargs)
         check_metadata_validity(prep_text, metadata)
         return (prep_text, metadata) if 'return_metadata' in kwargs and kwargs['return_metadata'] else prep_text
 
@@ -232,14 +233,19 @@ class TrainedModel(object):
             raise RuntimeError("Operation not supported. Only model's description is loaded. "
                                "Prease reload the model with param load_only_description set to False.")
 
-    def feed_text(self, text: str) -> None:
+    def feed_prep_tokens(self, prep_tokens: List[str]) -> None:
         self._check_model_loaded()
-
-        prep_text, metadata = self.prep_text(text, return_metadata=True, force_reinit_bpe_data=False)
-        context_tensor = torch.tensor([self.vocab.numericalize(prep_text)], device=get_device(self.force_use_cpu))
+        context_tensor = torch.tensor([self.vocab.numericalize(prep_tokens)], device=get_device(self.force_use_cpu))
         with lock:
-            _ = get_last_layer_activations(self.model, context_tensor[:,:-1])
-            self.last_predicted_token_tensor = context_tensor[:,-1:]
+            _ = get_last_layer_activations(self.model, context_tensor[:, :-1])
+            self.last_predicted_token_tensor = context_tensor[:, -1:]
+
+    def feed_text(self, text: str, extension: str) -> None:
+        self.check_inference_possible_for_file_type(extension)
+
+        prep_text, metadata = self.prep_text(text, extension=extension,
+                                             return_metadata=True, force_reinit_bpe_data=False)
+        self.feed_prep_tokens(prep_text)
 
     def get_entropies_for_prep_text(self, prep_text: List[str]) -> List[float]:
         """
@@ -305,7 +311,7 @@ class TrainedModel(object):
                                 best_epoch=self.metrics.best_epoch if self.metrics else -1,
                                 tags=self.tags)
 
-    def check_inference_possible_for_file_type(self, extension):
+    def check_inference_possible_for_file_type(self, extension: str) -> None:
         if extension not in normalize_extension_string(self.config.corpus.extensions):
             raise ValueError(f'The model was not trained on .{extension} files. Cannot do inference.')
 

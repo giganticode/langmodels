@@ -141,7 +141,7 @@ def mrr(model: TrainedModel,
                 count += 1
             else:
                 inverse_ranks.extend([None for i in range(len(full_token))])
-            model.feed_text(actual_token)
+            model.feed_prep_tokens(full_token)
         result[EvaluationScenario('mrr', tt)] = EvaluationResult(inverse_ranks, inverse_rank_sum / count if count else 0., count)
 
     return result

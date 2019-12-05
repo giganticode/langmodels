@@ -27,6 +27,7 @@ from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, \
 from langmodels.lmconfig.serialization import dump_config, dump_config_to_string, dump_config_to_json
 from langmodels.model import TrainedModel, create_custom_config
 from langmodels.modelregistry import load_from_path
+from langmodels.nn import get_param_number
 from langmodels.tensor_ops import mrr
 from langmodels.training.data import EmptyDataBunch, create_databunch
 from langmodels.training.schedule import ReduceLRCallback
@@ -78,7 +79,7 @@ def save_experiment_input(run: ExperimentRun, learner: Learner, vocab: Vocab):
     vocab.save(os.path.join(run.path_to_trained_model, VOCAB_FILE_NAME))
     dump_config(run.config, os.path.join(run.path_to_trained_model, CONFIG_FILE_NAME))
     if run.comet_experiment:
-        save_params_to_comet(run.comet_experiment, run.config, vocab, get_param_number(learner))
+        save_params_to_comet(run.comet_experiment, run.config, vocab, get_param_number(learner.model))
 
 
 def check_run_prerequisites(run: ExperimentRun) -> None:
@@ -110,10 +111,6 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
 
     return validate(trained_model.model, databunch.valid_dl, loss_func=FlattenedLoss(CrossEntropyLoss),
                     cb_handler=CallbackHandler([DetupleCallback()]))
-
-
-def get_param_number(learner: Learner) -> int:
-    return sum(p.numel() for p in learner.model.parameters() if p.requires_grad)
 
 
 def save_params_to_comet(experiment: Experiment, lm_training_config: LMTrainingConfig,

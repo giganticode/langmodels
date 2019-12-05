@@ -97,3 +97,7 @@ def add_gru_to_model_data():
     from fastai.text.learner import _model_meta
     gru_meta_data = {k:v for k, v in _model_meta[AWD_LSTM].items()}
     _model_meta[GRU] = gru_meta_data
+
+
+def get_param_number(model: SequentialRNN) -> int:
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)

@@ -260,3 +260,5 @@ class LMTrainingMetrics(object):
     training_time_minutes_per_epoch: int
     n_epochs: int
     best_epoch: int
+    trainable_params: int
+    size_on_disk_mb: int

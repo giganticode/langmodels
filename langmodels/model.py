@@ -24,7 +24,6 @@ from langmodels.beamsearch import beam_search
 from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig, GruArch, \
     LMTrainingMetrics
 from langmodels.lmconfig.serialization import load_config_from_file, read_value_from_file
-from langmodels.migration import pth_to_torch
 from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
 from langmodels.util import to_binary_entropy
 from langmodels.cuda_util import get_device, get_map_location
@@ -138,6 +137,7 @@ class ModelDescription(object):
     training_time_minutes_per_epoch: int
     n_epochs: int
     best_epoch: int
+    size_on_disk_mb: int
     tags: List[str]
 
     def is_tagged_by(self, tag: str) -> bool:
@@ -297,7 +297,7 @@ class TrainedModel(object):
         n_layers = self.config.arch.n_layers
         emb_size = self.config.arch.emb_sz
         n_hid = self.config.arch.n_hid
-        return f'{emb_size}/{n_layers}/{n_hid}'
+        return f'{emb_size}/{n_layers}/{n_hid}={self.metrics.trainable_params}'
 
     def get_model_description(self) -> ModelDescription:
         return ModelDescription(id=self.id,
@@ -309,6 +309,7 @@ class TrainedModel(object):
                                 if self.metrics else 0,
                                 n_epochs=self.metrics.n_epochs if self.metrics else 0,
                                 best_epoch=self.metrics.best_epoch if self.metrics else -1,
+                                size_on_disk_mb=self.metrics.size_on_disk_mb,
                                 tags=self.tags)
 
     def check_inference_possible_for_file_type(self, extension: str) -> None:

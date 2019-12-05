@@ -32,13 +32,13 @@ from langmodels.training.data import EmptyDataBunch, create_databunch
 from langmodels.training.schedule import ReduceLRCallback
 from langmodels.training.subepoch_files import EpochFileLoader
 from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, RetryingSaveModelCalback
+from langmodels.util import HOME
 
 logger = logging.getLogger(__name__)
 
 VOCAB_FILE_NAME = 'vocab'
 CONFIG_FILE_NAME = 'config'
 
-HOME = os.environ['HOME']
 PATH_TO_PREP_DATASETS = os.environ['PATH_TO_PREP_DATASETS'] if 'PATH_TO_PREP_DATASETS' in os.environ \
     else os.path.join(HOME, 'prep-datasets')
 

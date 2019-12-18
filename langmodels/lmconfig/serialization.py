@@ -38,6 +38,10 @@ def dump_config(config: LMTrainingConfig, file: str) -> str:
     return config_str
 
 
+def load_config_form_dict(s: Dict[str, str]) -> Union[LMTrainingConfig, LMTrainingMetrics]:
+    return jsons.load(s, Union[LMTrainingConfig, LMTrainingMetrics], strict=True)
+
+
 def load_config_from_string(s: str) -> Union[LMTrainingConfig, LMTrainingMetrics]:
     return jsons.loads(s, Union[LMTrainingConfig, LMTrainingMetrics], strict=True)
 

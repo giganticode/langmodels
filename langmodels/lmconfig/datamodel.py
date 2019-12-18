@@ -188,8 +188,8 @@ class LMTrainingConfig(object):
     def __post_init__(self):
         if self.config_version != CONFIG_VERSION:
             raise TypeError(f'Trying to deserealize '
-                            f'CONFIG_VERSION {self.config_version} '
-                            f'to CONFIG_VERSION {CONFIG_VERSION} object')
+                            f'{self.__name__} {self.config_version} '
+                            f'to {self.__name__} {CONFIG_VERSION} object')
 
     def get_arch_class(self) -> Union[Type[AWD_LSTM], Type[GRU], Type[Transformer]]:
         if isinstance(self.arch, LstmArch):
@@ -262,3 +262,10 @@ class LMTrainingMetrics(object):
     best_epoch: int
     trainable_params: int
     size_on_disk_mb: int
+    config_version: str = CONFIG_VERSION
+
+    def __post_init__(self):
+        if self.config_version != CONFIG_VERSION:
+            raise TypeError(f'Trying to deserealize '
+                            f'{self.__name__} {self.config_version} '
+                            f'to {self.__name__} {CONFIG_VERSION} object')

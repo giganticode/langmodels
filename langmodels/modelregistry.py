@@ -3,21 +3,20 @@ import logging
 import os
 from getpass import getpass
 from threading import Lock
+from typing import List, Optional, Tuple
 
 import pysftp
 import requests
 from columnar import columnar
-from typing import List, Optional, Mapping, Tuple
-
-from langmodels import MODEL_ZOO_PATH
-from langmodels.model import TrainedModel, ModelDescription
+from langmodels import MODEL_ZOO_PATH, MODEL_DIR_URL
+from langmodels.lmconfig.convert import convert_file_version
+from langmodels.lmconfig.datamodel import CONFIG_VERSION
+from langmodels.model import ModelDescription, TrainedModel
 from langmodels.util import HOME
 
 logger = logging.getLogger(__name__)
 
-SERVER_URL = 'https://www.inf.unibz.it'
-MODEL_DIR_URL = SERVER_URL + '/~hbabii/pretrained_models'
-LIST_PREFIX = '.list'
+LIST_PREFIX = '_list'
 MODEL_LIST_URL = MODEL_DIR_URL + LIST_PREFIX
 
 SERVER_HOST_NAME = 'actarus.inf.unibz.it'
@@ -30,19 +29,32 @@ lock = Lock()
 remote_lock = Lock()
 
 
-def _download_file(url: str, path: str, check_md5: bool = False):
+def _download_file(url: str, path: str) -> None:
     response = requests.get(url, stream=True)
-    with open(path + '.tmp', "wb") as f:
+    with open(path, "wb") as f:
         for chunk in response.iter_content(chunk_size=512):
             if chunk:
                 f.write(chunk)
 
-    if check_md5:
-        correct_md5 = requests.get(url + ".md5").content.decode(encoding='utf8').rstrip('\n')
-        md5 = hashlib.md5(open(path + '.tmp', 'rb').read()).hexdigest()
-        if md5 != correct_md5:
-            logger.warning(f'The md5 checksum for {url} is not correct: {md5}. Downloading the file again...')
-            _download_file(url, path, check_md5=True)
+
+def download_metadata(url: str, path: str, file_name: str, version_to_convert_to: str) -> None:
+    path = os.path.join(path, file_name)
+    tmp_path = path + '.tmp'
+    _download_file(url, tmp_path)
+    
+    convert_file_version(tmp_path, file_name, version_to_convert_to)
+
+    os.replace(tmp_path, path)
+
+
+def download_model(url: str, path: str) -> None:
+    _download_file(url, path  + '.tmp')
+
+    correct_md5 = requests.get(url + ".md5").content.decode(encoding='utf8').rstrip('\n')
+    md5 = hashlib.md5(open(path + '.tmp', 'rb').read()).hexdigest()
+    if md5 != correct_md5:
+        logger.warning(f'The md5 checksum for {url} is not correct: {md5}. Downloading the file again...')
+        download_model(url, path)
 
     os.replace(path + '.tmp', path)
 
@@ -124,16 +136,17 @@ def load_model_by_id(id: str, force_use_cpu: bool = False, load_description_only
         if not os.path.exists(os.path.join(path, 'best.pth')):
             if id not in _get_all_model_ids():
                 raise ValueError(f'Model with id {id} is not found on the server.')
-            url_to_model_dir = MODEL_DIR_URL + '/' + id
+            url_to_model_dir = f'{MODEL_DIR_URL}/{id}'
             if not os.path.exists(path):
                 os.makedirs(path)
             for model_metadata_file in MODEL_METADATA_FILES:
-                _download_file(f'{url_to_model_dir}/{model_metadata_file}', os.path.join(path, model_metadata_file))
+                download_metadata(f'{url_to_model_dir}/{model_metadata_file}', path, model_metadata_file,
+                                  version_to_convert_to=CONFIG_VERSION)
             if not load_description_only:
                 logger.info(f'Model is not found in cache. Downloading from {url_to_model_dir} ...')
                 for model_data_file in MODEL_DATA_FILES:
-                    _download_file(f'{url_to_model_dir}/{model_data_file}',
-                                   os.path.join(path, model_data_file), check_md5=True)
+                    download_model(f'{url_to_model_dir}/{model_data_file}',
+                                   os.path.join(path, model_data_file))
 
         return load_from_path(path, force_use_cpu, load_description_only)
 

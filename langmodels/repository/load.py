@@ -80,6 +80,3 @@ def load_model_with_tag(tag: str, force_use_cpu: bool = False) -> TrainedModel:
 
 def load_default_model(force_use_cpu: bool = False) -> TrainedModel:
     return load_model_with_tag('DEFAULT', force_use_cpu=force_use_cpu)
-
-
-list_pretrained_models()

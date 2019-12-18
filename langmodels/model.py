@@ -166,6 +166,7 @@ class TrainedModel(object):
         self.metrics = None
         self.config = None
         self.tags = []
+        self.context: List[str] = []
         try:
             self.config: LMTrainingConfig = load_config_from_file(path_to_config_file)
         except FileNotFoundError:
@@ -217,6 +218,16 @@ class TrainedModel(object):
 
         return model, vocab
 
+    SAVE_CONTEXT_LIMIT = 1000
+
+    def save_context(self, prep_tokens: List[str]) -> None:
+        self.context.extend(prep_tokens)
+        if len(self.context) > TrainedModel.SAVE_CONTEXT_LIMIT:
+            self.context = self.context[-TrainedModel.SAVE_CONTEXT_LIMIT:]
+
+    def reset_context(self) -> None:
+        self.context = []
+
     def prep_corpus(self, corpus: Corpus, **kwargs) -> PreprocessedCorpus:
         return self._prep_function.apply(corpus, **kwargs)
 
@@ -237,6 +248,7 @@ class TrainedModel(object):
         self._check_model_loaded()
         context_tensor = torch.tensor([self.vocab.numericalize(prep_tokens)], device=get_device(self.force_use_cpu))
         with lock:
+            self.save_context(prep_tokens)
             _ = get_last_layer_activations(self.model, context_tensor[:, :-1])
             self.last_predicted_token_tensor = context_tensor[:, -1:]
 
@@ -267,6 +279,7 @@ class TrainedModel(object):
                 numericalized_prep_text = torch.tensor([self.vocab.numericalize(pt)],
                                                        device=get_device(self.force_use_cpu))
 
+                self.save_context(pt)
                 last_layer = get_last_layer_activations(self.model, torch.cat([self.last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))
                 loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
                                        numericalized_prep_text.view(-1),
@@ -281,6 +294,7 @@ class TrainedModel(object):
             self._check_model_loaded()
 
             self.model.reset()
+            self.reset_context()
             self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
                                                         device=get_device(self.force_use_cpu))
 

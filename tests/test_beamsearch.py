@@ -3,7 +3,7 @@ import os
 import torch
 
 from langmodels import project_dir
-from langmodels.modelregistry import load_from_path
+from langmodels.repository import load_from_path
 
 
 def test_hidden_state_not_changed_after_beam_search():

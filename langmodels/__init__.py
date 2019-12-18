@@ -5,6 +5,7 @@ import os
 import appdirs
 import yaml
 import matplotlib
+
 matplotlib.use('PS')  # to avoid error on OSX - this should go here, before other imports
 
 from langmodels.nn import add_gru_to_model_data
@@ -48,6 +49,3 @@ logging.getLogger('everett').setLevel(logging.INFO)
 logging.getLogger('urllib3.connectionpool').setLevel(logging.INFO)
 
 add_gru_to_model_data()
-
-SERVER_URL = 'https://www.inf.unibz.it'
-MODEL_DIR_URL = SERVER_URL + '/~hbabii/pretrained_models'

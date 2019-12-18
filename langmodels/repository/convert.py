@@ -5,16 +5,14 @@ import jsons
 import requests
 import semver
 
-from langmodels import app_name, MODEL_DIR_URL
+from langmodels import app_name
 from langmodels.lmconfig.datamodel import LMTrainingMetrics, LMTrainingConfig
 from langmodels.lmconfig.serialization import dump_config, load_config_form_dict
+from langmodels.repository.settings import CONVERTERS_URL
 
 logger = logging.getLogger(__name__)
 
 CONVERTABLE_METADATA_FILES = ['config', 'metrics']
-
-CONVERTERS_PREFIX = '_converters'
-CONVERTERS_URL= MODEL_DIR_URL + CONVERTERS_PREFIX
 
 
 def fetch_convertion_json(version: str) -> Dict[str, str]:

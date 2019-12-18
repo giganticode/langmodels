@@ -26,7 +26,7 @@ from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, \
     RafaelsTrainingSchedule, TrainingProcedure, CosineLRSchedule, ExperimentRun, DeviceOptions
 from langmodels.lmconfig.serialization import dump_config, dump_config_to_string, dump_config_to_json
 from langmodels.model import TrainedModel, create_custom_config
-from langmodels.modelregistry import load_from_path
+from langmodels.repository.load import load_from_path
 from langmodels.nn import get_param_number
 from langmodels.tensor_ops import mrr
 from langmodels.training.data import EmptyDataBunch, create_databunch

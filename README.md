@@ -34,8 +34,8 @@ pip install -r requirements.txt
 ## Using existing pre-trained models
 ### Loading a default pre-trained model
 ```python
->>> import langmodels.modelregistry as reg
->>> trained_model = reg.load_default_model()
+>>> import langmodels.repository as repo
+>>> trained_model = repo.load_default_model()
 
 2019-10-29 12:01:21,699 [langmodels.modelregistry] INFO: Model is not found in cache. Downloading from https://www.inf.unibz.it/~hbabii/pretrained_models/langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344 ...
 2019-10-29 12:01:35,732 [langmodels.model] DEBUG: Loading model from: /home/hlib/.local/share/langmodels/0.0.1/modelzoo/langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344/best.pth ...
@@ -48,8 +48,8 @@ pip install -r requirements.txt
 
 Set `cached` parameter to `True` (default is `False`) to display only cached LMs (e.g. if offline).
 ```python
->>> import langmodels.modelregistry as reg
->>> reg.list_pretrained_models(cached=False)
+>>> import langmodels.repository as repo
+>>> repo.list_pretrained_models(cached=False)
 
   ID                                                                    BPE_MERGES  LAYERS_CONFIG  ARCH      BIN_ENTROPY    TRAINING_TIME_MINUTES_PER_EPOCH  N_EPOCHS  BEST_EPOCH  TAGS                 
     
@@ -66,7 +66,8 @@ Set `cached` parameter to `True` (default is `False`) to display only cached LMs
 
 Use `query_all_models` method to get a list of `ModelDescription` objects
 ```python
->>> reg.query_all_models()[0]
+import langmodels.repository as repo
+>>> repo.query_all_models()[0]
 ModelDescription(id='langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344', bpe_merges='10k', layers_config='1024/2/1024', arch='AWD_LSTM', bin_entropy=2.1455788479, training_time_minutes_per_epoch=1429, n_epochs=6, best_epoch=5, tags=['BEST', 'DEFAULT'])
 ```
 
@@ -75,7 +76,7 @@ ModelDescription(id='langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-
 You can specify if you want to load a model to CPU despite having cuda-supported GPU with `force_use_cpu` parameter 
 (defaults to `False`). If cuda-supported GPU is not available, this parameter is disregarded.
 ```python
->>> trained_model = reg.load_model_with_tag('BEST')
+>>> trained_model = repo.load_model_with_tag('BEST')
 
 2019-10-29 11:00:04,792 [langmodels.modelregistry] INFO: Model is not found in cache. Downloading from https://www.inf.unibz.it/~hbabii/pretrained_models/langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344 ...
 2019-10-29 11:00:20,136 [langmodels.model] DEBUG: Loading model from: /home/hlib/.local/share/langmodels/0.0.1/modelzoo/langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344/best.pth ...
@@ -90,7 +91,7 @@ You can specify if you want to load a model to CPU despite having cuda-supported
 
 Also, you can use a lower-level API to load a model by path :
 ```python
-trained_model = reg.load_from_path('/home/hlib/.local/share/langmodels/0.0.1/modelzoo/dev_10k_1_10_190923.132328')
+trained_model = repo.load_from_path('/home/hlib/.local/share/langmodels/0.0.1/modelzoo/dev_10k_1_10_190923.132328')
 ```
 
 ## Inference
@@ -99,9 +100,9 @@ trained_model = reg.load_from_path('/home/hlib/.local/share/langmodels/0.0.1/mod
 Example
 
 ```python
->>> from langmodels.modelregistry import load_default_model
+>>> import langmodels.repository as repo
 
->>> trained_model = load_default_model()
+>>> trained_model = repo.load_default_model()
 >>> trained_model.feed_text('public static main() { if', extension='java')
 
 # this does not change the state of the model:
@@ -234,10 +235,10 @@ on the state of the model. Use methods `reset` and `feed_text` to reset the mode
 to initial state and change the context of the model respectively.
 
 ```python
->>> from langmodels.modelregistry import load_default_model 
+>>> import langmodels.repository as repo 
 >>> from langmodels.evaluation import evaluate_model_on_string    
 
->>> model = load_default_model
+>>> model = repo.load_default_model
 >>> evaluate_model_on_string(model, 'public class MyClass {')
 
 [Evaluation(
@@ -257,10 +258,10 @@ Similarly, `evaluate_model_on_file` will return a list of `Evaluation` object (1
 Evaluation can be run on a set of files with `evaluate_model_on_path` method
 
 ```python
->>> from langmodels.modelregistry import load_default_model 
+>>> import langmodels.repository as repo 
 >>> from langmodels.evaluation import evaluate_model_on_path
 
->>> model = load_default_model
+>>> model = repo.load_default_model()
 >>> evaluate_model_on_path(model, '/path/to/file')
 
 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 67/67 [00:29<00:00,  2.82it/s, full_token_entropy/all=4.19 (n=48691)]
@@ -276,10 +277,10 @@ Thus, the average full-token-entropy is ~ 4.16 evaluated on 49.4k tokens.
 You can specify the evaluation metrics
 
 ```python
->>> from langmodels.modelregistry import load_default_model 
+>>> import langmodels.repository as repo 
 >>> from langmodels.evaluation import evaluate_model_on_path
 
->>> model = load_default_model
+>>> model = repo.load_default_model()
 >>> evaluate_model_on_path(model, '/path/to/file', metrics={'full_token_entropy', 'mrr'})
 
 {full_token_entropy/all: (2.367707431204745, 710), mrr/all: (0.25260753937415537, 710)}
@@ -291,12 +292,12 @@ Similarly token types to run evaluation on can be specified. Possible values are
 Default value is {TokenTypes.ALL}
 
 ```python
->>> from langmodels.modelregistry import load_default_model 
+>>> import langmodels.repository as repo 
 >>> from langmodels.evaluation import evaluate_model_on_path
 >>>
 from langmodels.evaluation.metrics import TokenTypes
 
->>> model = load_default_model
+>>> model = repo.load_default_model()
 >>> evaluate_model_on_path(model, '/path/to/file', metrics={'full_token_entropy', 'mrr'}, token_types={TokenTypes.ALL, TokenTypes.ONLY_COMMENTS, TokenTypes.ALL_BUT_COMMENTS})
 
 

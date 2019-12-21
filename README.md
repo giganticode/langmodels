@@ -295,7 +295,7 @@ Default value is {TokenTypes.ALL}
 >>> import langmodels.repository as repo 
 >>> from langmodels.evaluation import evaluate_model_on_path
 >>>
-from langmodels.evaluation.metrics import TokenTypes
+from langmodels.evaluation.metrics import TokenTypeSubset
 
 >>> model = repo.load_default_model()
 >>> evaluate_model_on_path(model, '/path/to/file', metrics={'full_token_entropy', 'mrr'}, token_types={TokenTypes.ALL, TokenTypes.ONLY_COMMENTS, TokenTypes.ALL_BUT_COMMENTS})

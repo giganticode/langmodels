@@ -1,24 +1,106 @@
 import logging
-from enum import Enum
+from functools import reduce
+from typing import List, Callable, Any, Type, Union, Set, Iterable, FrozenSet
 
-from typing import List, Callable, Any, Type, Union
+from dataclasses import dataclass, field
 
-from dataprep.parse.model.metadata import PreprocessingMetadata
-from dataprep.parse.model.placeholders import placeholders
+from dataprep.preprocess.metadata import PreprocessingMetadata
+from dataprep.preprocess.placeholders import placeholders
 from dataprep.subtokens import FullTokenIterator, is_terminal_subtoken, SubtokenIterator
+from dataprep.tokens.containers import Comment, SplitContainer, OneLineComment
+from dataprep.tokens.rootclasses import ParsedToken
 
 logger = logging.getLogger(__name__)
 
 MetricName = str
 
 
-class TokenTypes(str, Enum):
-    ALL = 'all'
-    ONLY_COMMENTS = 'only_comments'
-    ALL_BUT_COMMENTS = 'all_but_comments'
+def all_subclasses(classes: Iterable[Type]) -> Set[Type]:
+    """
+    >>> subclasses = all_subclasses([ParsedToken])
+    >>> sorted(map(lambda t: t.__name__, subclasses))
+    ['Comment', 'KeyWord', 'MultilineComment', 'NewLine', 'NonCodeChar', 'NonEng', 'NonProcessibleToken', \
+'Number', 'OneLineComment', 'Operator', 'ParsedToken', 'ProcessableTokenContainer', 'SpaceInString', 'SpecialToken', \
+'SplitContainer', 'StringLiteral', 'Tab', 'TextContainer', 'Whitespace']
+    """
+    return reduce(set.union, [{cls}.union(
+        [s for c in cls.__subclasses__() for s in all_subclasses([c])])
+        for cls in classes], set())
+
+
+@dataclass(eq=True, frozen=True)
+class TokenTypeSubset(object):
+    """
+    >>> class A(object): pass
+    >>> class B(A): pass
+    >>> class C(A): pass
+    >>> class D(object): pass
+
+    >>> token_types = TokenTypeSubset.Builder().add({A, D}).remove({B, D}).build()
+    >>> token_types.summary()
+    "A,D[except:B,D] -> ['A', 'C']"
+    >>> token_types.contains(A)
+    True
+    >>> token_types.contains(B)
+    False
+    >>> token_types.contains(C)
+    True
+    >>> token_types.contains(D)
+    False
+
+
+    """
+    all_included_types: FrozenSet[Type]
+    short_summary: str
+
+    @dataclass()
+    class Builder(object):
+        included: Set[Type] = field(default_factory=set)
+        excluded: Set[Type] = field(default_factory=set)
+
+        def _short_summary(self) -> str:
+            res = ','.join(sorted(map(lambda t: t.__name__, self.included)))
+            if self.excluded:
+                res += f'[except:{",".join(sorted(map(lambda x: x.__name__, self.excluded)))}]'
+            return res
+
+        def add(self, types: Union[Type, Iterable[Type]]) -> 'TokenTypeSubset.Builder':
+            self.included = self.included.union(set(types) if isinstance(types, Iterable) else {types})
+            return self
+
+        def remove(self, types: Union[Type, Iterable[Type]]) -> 'TokenTypeSubset.Builder':
+            self.excluded = self.excluded.union(set(types) if isinstance(types, Iterable) else {types})
+            return self
+
+        def build(self) -> 'TokenTypeSubset':
+            all_included = all_subclasses(self.included)
+            all_excluded = all_subclasses(self.excluded)
+            return TokenTypeSubset(all_included_types=frozenset(all_included.difference(all_excluded)),
+                                   short_summary=self._short_summary())
+
+    def summary(self) -> str:
+        return f'{self.short_summary} -> {sorted(map(lambda x: x.__name__, self.all_included_types))}'
 
     def __str__(self) -> str:
-        return self.value
+        return self.short_summary
+
+    def __repr__(self):
+        return str(self)
+    
+    @classmethod
+    def full_set(cls) -> 'TokenTypeSubset':
+        return cls.Builder().add(ParsedToken).build()
+
+    @classmethod
+    def full_set_without_comments(cls) -> 'TokenTypeSubset':
+        return cls.Builder().add(ParsedToken).remove(Comment).build()
+
+    @classmethod
+    def only_comments(cls) -> 'TokenTypeSubset':
+        return cls.Builder().add(Comment).build()
+
+    def contains(self, type: Type) -> bool:
+        return type in self.all_included_types
 
 
 def to_full_token_string(subtokens: List[str], include_debug_tokens: bool = False):
@@ -51,45 +133,42 @@ TokenIterator = Union[SubtokenIterator, FullTokenIterator]
 
 class FilteringTokenIterator(object):
     """
-    >>> from langmodels.evaluation.metrics import inclusion_func_dict
-    >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], comments=[(1,3)])
-    >>> [token for token in FilteringTokenIterator(['hi', '/', '/'], metadata, inclusion_function=inclusion_func_dict[TokenTypes.ALL_BUT_COMMENTS])]
+    >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], token_types=[SplitContainer, OneLineComment])
+    >>> token_type_subset = TokenTypeSubset.full_set_without_comments()
+    >>> [token for token in FilteringTokenIterator(['hi', '/', '/'], metadata, token_type_subset)]
     ['hi']
 
-    >>> from langmodels.evaluation.metrics import inclusion_func_dict
-    >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], comments=[(1,3)])
+    >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], token_types=[SplitContainer, OneLineComment])
     >>> [token for token in FilteringTokenIterator(['hi', '/', '/'], metadata)]
     ['hi', '//']
 
-    >>> from langmodels.evaluation.metrics import inclusion_func_dict
-    >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], comments=[(1,3)])
-    >>> it = FilteringTokenIterator(['hi', '/', '/'], metadata, token_iterator_type=SubtokenIterator, agg=lambda l: l[0])
+    >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], token_types=[SplitContainer, OneLineComment])
+    >>> it = FilteringTokenIterator(['hi', '/', '/'], metadata, token_iterator_type=SubtokenIterator)
     >>> [token for token in it]
     ['hi', '/', '/']
 
-    >>> from langmodels.evaluation.metrics import inclusion_func_dict
-    >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], comments=[(1,3)])
-    >>> it = FilteringTokenIterator(['hi', '/', '/'], metadata, inclusion_function=inclusion_func_dict[TokenTypes.ONLY_COMMENTS], token_iterator_type=SubtokenIterator, agg=lambda l: l[0])
+    >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], token_types=[SplitContainer, OneLineComment])
+    >>> it = FilteringTokenIterator(['hi', '/', '/'], metadata, token_type_subset=TokenTypeSubset.only_comments(), \
+token_iterator_type=SubtokenIterator)
     >>> [token for token in it]
     ['/', '/']
     """
     def __init__(self, subwords: List[Any], metadata: PreprocessingMetadata,
-                 inclusion_function: Callable[[PreprocessingMetadata, int], bool] = lambda m, i: True,
+                 token_type_subset: TokenTypeSubset = TokenTypeSubset.full_set(),
                  token_iterator_type: Type[TokenIterator] = FullTokenIterator,
-                 agg: Callable[[List[str]], Any] = lambda s: ''.join(s)):
-        self.full_token_iterator = token_iterator_type(subwords, metadata.word_boundaries, agg=lambda s: (s, len(s)))
-        self.inclusion_function = inclusion_function
+                 format: Callable[[List[str]], Any] = lambda s: ''.join(s)):
+        self.full_token_iterator = token_iterator_type(subwords, metadata.word_boundaries,
+                                                       format=lambda l:l, return_full_token_index=True)
+        self.token_type_subset = token_type_subset
         self.metadata = metadata
-        self.agg = agg
-        self.current_index = 0
+        self.format = format
+        self.current_full_token = 0
 
     def __iter__(self):
         return self
 
     def __next__(self):
         while True:
-            next_full_token, n_subtokens = next(self.full_token_iterator)
-            current_index = self.current_index
-            self.current_index += n_subtokens
-            if self.inclusion_function(self.metadata, current_index):
-                return self.agg(next_full_token)
+            current_full_token_ind, next_full_token = next(self.full_token_iterator)
+            if self.token_type_subset.contains(self.metadata.token_types[current_full_token_ind]):
+                return self.format(next_full_token)

@@ -4,9 +4,10 @@ from dataclasses import dataclass
 import numpy as np
 from typing import List, Tuple, Optional, Set, Callable, Dict, Type
 
-from dataprep.parse.model.metadata import PreprocessingMetadata
+from dataprep.preprocess.metadata import PreprocessingMetadata
+from dataprep.tokens.containers import Comment
 from langmodels.evaluation.filtering import FullTokenIterator, to_full_token_string, FilteringTokenIterator, \
-    TokenIterator, SubtokenIterator, MetricName, TokenTypes
+    TokenIterator, SubtokenIterator, MetricName, TokenTypeSubset
 from langmodels.model import TrainedModel
 
 DEFAULT_N_MODEL_SUGGESTIONS = 100
@@ -14,48 +15,43 @@ DEFAULT_N_MODEL_SUGGESTIONS = 100
 
 logger = logging.getLogger(__name__)
 
-InclusionFunction = Callable[[PreprocessingMetadata, int], bool]
-AverageFunction = Callable[[List[float], PreprocessingMetadata, InclusionFunction], Tuple[float, int]]
-
 
 def conditional_average(subword_entropies: List[float],
                         metadata: PreprocessingMetadata,
-                        inclusion_function: InclusionFunction = lambda m, i: True,
+                        token_type_subset: TokenTypeSubset = TokenTypeSubset.full_set(),
                         token_iterator_type: Type[TokenIterator] = FullTokenIterator) \
         -> Tuple[float, int]:
     """evaluator
-    >>> conditional_average([], PreprocessingMetadata(set(), [0]))
+    >>> conditional_average([], PreprocessingMetadata(set(), [0], []))
     (0.0, 0)
 
-    >>> conditional_average([1.0, 2.0, 3.0], PreprocessingMetadata(set(), word_boundaries=[0, 1, 3]))
+    >>> from dataprep.tokens.containers import SplitContainer
+    >>> metadata = PreprocessingMetadata(set(), word_boundaries=[0, 1, 3], token_types=[Comment, SplitContainer])
+    >>> conditional_average([1.0, 2.0, 3.0], metadata)
     (3.0, 2)
 
-    >>> metadata = PreprocessingMetadata(set(), word_boundaries=[0, 1, 3], comments=[(0, 1)])
-    >>> conditional_average([1.0, 2.0, 3.0], metadata, inclusion_func_dict[TokenTypes.ONLY_COMMENTS])
+    >>> metadata = PreprocessingMetadata(set(), word_boundaries=[0, 1, 3], token_types=[Comment, SplitContainer])
+    >>> token_type_subset = TokenTypeSubset.only_comments()
+    >>> conditional_average([1.0, 2.0, 3.0], metadata, token_type_subset)
     (1.0, 1)
 
-    >>> metadata = PreprocessingMetadata(set(), word_boundaries=[0, 1, 3], comments=[(0, 1)])
-    >>> conditional_average([1.0, 2.0, 3.0], metadata, inclusion_func_dict[TokenTypes.ALL_BUT_COMMENTS])
+    >>> metadata = PreprocessingMetadata(set(), word_boundaries=[0, 1, 3], token_types=[Comment, SplitContainer])
+    >>> token_type_subset = TokenTypeSubset.full_set_without_comments()
+    >>> conditional_average([1.0, 2.0, 3.0], metadata, token_type_subset)
     (5.0, 1)
 
-    >>> metadata = PreprocessingMetadata(set(), word_boundaries=[0, 1, 3], comments=[(0, 1)])
-    >>> conditional_average([1.0, 2.0, 3.0], metadata, inclusion_func_dict[TokenTypes.ALL_BUT_COMMENTS], SubtokenIterator)
+    >>> metadata = PreprocessingMetadata(set(), word_boundaries=[0, 1, 3], token_types=[Comment, SplitContainer])
+    >>> token_type_subset = TokenTypeSubset.full_set_without_comments()
+    >>> conditional_average([1.0, 2.0, 3.0], metadata, token_type_subset, SubtokenIterator)
     (2.5, 2)
     """
-    word_entropies = [we for we in FilteringTokenIterator(subword_entropies, metadata, inclusion_function,
-                                                          token_iterator_type=token_iterator_type, agg=sum)]
+    word_entropies = [we for we in FilteringTokenIterator(subword_entropies, metadata, token_type_subset,
+                                                          token_iterator_type=token_iterator_type, format=sum)]
     if not word_entropies:
         return .0, 0
 
     n_full_tokens = len(word_entropies)
     return sum(word_entropies) / n_full_tokens, n_full_tokens
-
-
-inclusion_func_dict: Dict[TokenTypes, InclusionFunction] = {
-    TokenTypes.ALL: lambda m, i: True,
-    TokenTypes.ONLY_COMMENTS: lambda m, i: m.is_comment_at_index(i),
-    TokenTypes.ALL_BUT_COMMENTS: lambda m, i: not m.is_comment_at_index(i)
-}
 
 
 @dataclass(frozen=True)
@@ -68,10 +64,10 @@ class EvaluationResult(object):
 @dataclass(frozen=True)
 class EvaluationScenario(object):
     metric_name: MetricName
-    token_types: TokenTypes
+    token_type_subset: TokenTypeSubset
 
     def __str__(self):
-        return f'{self.metric_name}/{self.token_types}'
+        return f'{self.metric_name}/{self.token_type_subset}'
 
     def __repr__(self):
         return str(self)
@@ -86,27 +82,26 @@ class Evaluation(object):
 
 
 def bin_entropy(model: TrainedModel, prep_line: List[str], prep_metadata: PreprocessingMetadata,
-                token_types: Optional[Set[TokenTypes]] = None,
+                token_types_subsets: Optional[Set[TokenTypeSubset]] = None,
                 token_iterator_types: Set[Type[TokenIterator]] = None) -> Dict[EvaluationScenario, EvaluationResult]:
     """
     Changes the state of the model!
     """
-    token_types = token_types or [TokenTypes.ALL]
+    token_types_subsets = token_types_subsets or [TokenTypeSubset.full_set()]
     token_iterator_types = token_iterator_types or {FullTokenIterator}
 
     iterator_to_metric_map = {FullTokenIterator: 'full_token_entropy', SubtokenIterator: 'subtoken_entropy'}
 
     all_entropies = model.get_entropies_for_prep_text(prep_line)
     evaluation_results = {}
-    for tt in token_types:
+    for token_types_subset in token_types_subsets:
         for token_iterator_type in token_iterator_types:
             filtered_entropies = []
-            inclusion_func = inclusion_func_dict[tt]
-            for ind, e in enumerate(all_entropies):
-                filtered_entropies.append(e if inclusion_func(prep_metadata, ind) else None)
+            for ind, e in FullTokenIterator(all_entropies, prep_metadata.word_boundaries, format=lambda x:x, return_full_token_index=True):
+                filtered_entropies.extend(e if token_types_subset.contains(prep_metadata.token_types[ind]) else [None] * len(e))
             aggregated_entropy, n_full_tokens = conditional_average(filtered_entropies, prep_metadata,
-                                                                    inclusion_func, token_iterator_type)
-            evaluation_results[EvaluationScenario(iterator_to_metric_map[token_iterator_type], tt)] = \
+                                                                    token_types_subset, token_iterator_type)
+            evaluation_results[EvaluationScenario(iterator_to_metric_map[token_iterator_type], token_types_subset)] = \
                 EvaluationResult(filtered_entropies, aggregated_entropy, n_full_tokens)
     return evaluation_results
 
@@ -114,22 +109,21 @@ def bin_entropy(model: TrainedModel, prep_line: List[str], prep_metadata: Prepro
 def mrr(model: TrainedModel,
         prep_line: List[str],
         metadata: PreprocessingMetadata,
-        token_types: Optional[Set[TokenTypes]] = None) -> Dict[EvaluationScenario, EvaluationResult]:
+        token_types_subsets: Optional[Set[TokenTypeSubset]] = None) -> Dict[EvaluationScenario, EvaluationResult]:
     """
     Changes the state of the model!
     """
-    token_types = token_types or [TokenTypes.ALL]
+    token_types_subsets = token_types_subsets or [TokenTypeSubset.full_set()]
     result: Dict[EvaluationScenario, EvaluationResult] = {}
-    for tt in token_types:
-        incl_func = inclusion_func_dict[tt]
+    for token_types_subset in token_types_subsets:
         inverse_rank_sum = .0
         count = 0
         inverse_ranks: List[Optional[float]] = []
-        for full_token in FilteringTokenIterator(prep_line, metadata, lambda m, i: True, agg=lambda l:l):
+        for full_token in FilteringTokenIterator(prep_line, metadata, token_types_subset, format=lambda l:l):
             predictions = model.predict_next_full_token(n_suggestions=DEFAULT_N_MODEL_SUGGESTIONS)
             predicted_tokens = list(map(lambda p: p[0], predictions))
             actual_token = to_full_token_string(full_token)
-            if incl_func(metadata, len(inverse_ranks)):
+            if token_types_subset.contains(metadata.token_types[count]):
                 try:
                     rank = predicted_tokens.index(actual_token) + 1
                     inverse_rank = 1. / rank
@@ -142,7 +136,7 @@ def mrr(model: TrainedModel,
             else:
                 inverse_ranks.extend([None for i in range(len(full_token))])
             model.feed_prep_tokens(full_token)
-        result[EvaluationScenario('mrr', tt)] = EvaluationResult(inverse_ranks, inverse_rank_sum / count if count else 0., count)
+        result[EvaluationScenario('mrr', token_types_subset)] = EvaluationResult(inverse_ranks, inverse_rank_sum / count if count else 0., count)
 
     return result
 
@@ -170,7 +164,7 @@ def average_entropy(values: List[float], weights: List[int] = None) -> Tuple[flo
     return np.average(values, weights=weights), sum(weights)
 
 
-Metric = Callable[[TrainedModel, List[str], PreprocessingMetadata, Optional[Set[TokenTypes]], Type[TokenIterator]],
+Metric = Callable[[TrainedModel, List[str], PreprocessingMetadata, Optional[Set[TokenTypeSubset]], Type[TokenIterator]],
                   Dict[EvaluationScenario, EvaluationResult]]
 MetricAggregator = Callable[[List[float], List[int]], Tuple[float, int]]
 

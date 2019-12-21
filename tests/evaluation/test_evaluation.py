@@ -1,12 +1,12 @@
 from unittest import mock
+from unittest.mock import MagicMock, Mock
 
 from pytest_mock import MockFixture
 
-from dataprep.parse.model.metadata import PreprocessingMetadata
-from unittest.mock import MagicMock, Mock
-
+from dataprep.preprocess.metadata import PreprocessingMetadata
+from dataprep.tokens.containers import SplitContainer
 from langmodels.evaluation import evaluate_model_on_string
-from langmodels.evaluation.filtering import TokenTypes
+from langmodels.evaluation.filtering import TokenTypeSubset
 from langmodels.evaluation.metrics import EvaluationResult, EvaluationScenario, Evaluation
 from langmodels.model import TrainedModel
 
@@ -17,7 +17,7 @@ def test_evaluate_model_on_string_empty():
 
     expected = [Evaluation(
         '', [], PreprocessingMetadata(),
-        {EvaluationScenario('full_token_entropy', TokenTypes.ALL): EvaluationResult([], 0., 0)}
+        {EvaluationScenario('full_token_entropy', TokenTypeSubset.full_set()): EvaluationResult([], 0., 0)}
     )]
     actual = evaluate_model_on_string(trained_model_mock, '')
 
@@ -28,8 +28,8 @@ def test_evaluate_on_string_default_args(mocker: MockFixture):
     # given
     text = 'MyClass'
     prep_line = ['My', 'Class</t>']
-    metadata = PreprocessingMetadata(word_boundaries=[0, 2])
-    scenarios = {EvaluationScenario('full_token_entropy', TokenTypes.ALL): EvaluationResult([1.0, 2.0], 3.0, 1)}
+    metadata = PreprocessingMetadata(word_boundaries=[0, 2], token_types=[SplitContainer])
+    scenarios = {EvaluationScenario('full_token_entropy', TokenTypeSubset.full_set()): EvaluationResult([1.0, 2.0], 3.0, 1)}
 
     trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.prep_text.return_value = (prep_line, metadata)
@@ -53,7 +53,7 @@ def test_evaluate_on_string_default_args_not_result_per_line(mocker: MockFixture
     text = 'MyClass\n{'
     prep_line = ['My', 'Class</t>']
     metadata = Mock(spec=PreprocessingMetadata)
-    scenarios = {EvaluationScenario('full_token_entropy', TokenTypes.ALL): Mock(spec=EvaluationResult)}
+    scenarios = {EvaluationScenario('full_token_entropy', TokenTypeSubset.full_set()): Mock(spec=EvaluationResult)}
 
     trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.prep_text.return_value = (prep_line, metadata)
@@ -78,7 +78,7 @@ def test_evaluate_on_string_non_default_token_types_and_metrics_multiline(mocker
     prep_lines = [['My', 'Class</t>'], ['{']]
     metadata_list = [Mock(spec=PreprocessingMetadata) for i in range(len(prep_lines))]
     metrics = {'full_token_entropy', 'mrr'}
-    token_types_list = {TokenTypes.ALL, TokenTypes.ALL_BUT_COMMENTS}
+    token_types_list = {TokenTypeSubset.full_set(), TokenTypeSubset.full_set_without_comments()}
     scenarios = [[{EvaluationScenario(metric, token_types): Mock(spec=EvaluationResult)
                    for token_types in token_types_list} for i in range(len(prep_lines))] for metric in metrics]
     mocked_metrics = [Mock(spec=callable, side_effect=scenario) for scenario in scenarios]

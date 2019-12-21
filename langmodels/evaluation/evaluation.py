@@ -7,7 +7,7 @@ from typing import List, Tuple, Callable, Optional, Union, Dict, Set
 
 from langmodels.file_util import get_all_files, read_file_contents, get_file_extension
 from langmodels.evaluation.metrics import bin_entropy, mrr, get_metric_aggregator_by_name, Metric, \
-    get_metric_func_by_name, TokenTypes, EvaluationScenario, Evaluation
+    get_metric_func_by_name, TokenTypeSubset, EvaluationScenario, Evaluation
 from langmodels.model import TrainedModel
 
 logger = logging.getLogger(__name__)
@@ -95,7 +95,7 @@ DEFAULT_METRIC = bin_entropy
 
 
 def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
-                             token_types: Optional[Set[TokenTypes]] = None,
+                             token_types: Optional[Set[TokenTypeSubset]] = None,
                              metrics: Optional[Union[Set[Metric], Set[str]]] = None,
                              result_per_line=True, append_eof: bool = False) -> List[Evaluation]:
     metrics = metrics_from_strings(metrics) or {DEFAULT_METRIC}
@@ -117,7 +117,7 @@ def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
 
 
 def evaluate_model_on_file(model: TrainedModel, file: Path,
-                           token_types: Optional[Set[TokenTypes]] = None,
+                           token_types: Optional[Set[TokenTypeSubset]] = None,
                            metrics: Optional[Union[Set[Metric], Set[str]]] = None,
                            result_per_line: bool = True) -> Union[List[Evaluation], Evaluation]:
     suffix: str = file.suffix[1:]
@@ -138,7 +138,7 @@ def _format_postfix(current_metrics: Dict[EvaluationScenario, Tuple[float, int]]
 
 
 def evaluate_model_on_project_set(model: TrainedModel, path: str,
-                                  token_types: Optional[Set[TokenTypes]] = None,
+                                  token_types: Optional[Set[TokenTypeSubset]] = None,
                                   metrics: Optional[List[Metric]] = None) \
         -> Dict[str, Dict[EvaluationScenario, Tuple[float, int]]]:
     result: Dict[str, Dict[EvaluationScenario, Tuple[float, int]]] = {}
@@ -149,10 +149,10 @@ def evaluate_model_on_project_set(model: TrainedModel, path: str,
     return result
 
 
-def evaluate_model_on_path(model: TrainedModel, path: str, token_types: Optional[Set[TokenTypes]] = None,
+def evaluate_model_on_path(model: TrainedModel, path: str, token_types: Optional[Set[TokenTypeSubset]] = None,
                            metrics: Optional[Union[Set[Metric], Set[str]]] = None) \
         -> Dict[EvaluationScenario, Tuple[float, int]]:
-    token_types = token_types or {TokenTypes.ALL}
+    token_types = token_types or {TokenTypeSubset.full_set()}
 
     logger.info("Counting total file number ...")
     all_files = [f for f in get_all_files(path)]

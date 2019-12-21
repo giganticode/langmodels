@@ -5,17 +5,16 @@ from threading import Lock
 
 from dataclasses import dataclass, asdict
 
+from dataprep.pipeline.dataset import normalize_extension_string
+from dataprep.preprocess.metadata import check_metadata_validity, PreprocessingMetadata
+from dataprep.preprocess.placeholders import placeholders
 from dataprep.subtokens import is_terminal_subtoken
 
-from dataprep.infrastructure.dataset import normalize_extension_string
-
-from dataprep.parse.model.metadata import PreprocessingMetadata, check_metadata_validity
 from math import exp
 from typing import List, Dict, Any, Tuple, Optional, Union
 
 import torch
 from dataprep.api.corpus import PreprocessedCorpus
-from dataprep.parse.model.placeholders import placeholders
 from fastai.text import SequentialRNN, get_language_model, F, Vocab, awd_lstm_lm_config, convert_weights
 from fastai.text.models.transformer import init_transformer
 from torch import cuda

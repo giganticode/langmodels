@@ -106,3 +106,6 @@ venv.bak/
 langmodels/mongocreds.py
 langmodels/mongocreds_test.py
 
+# Pycharm
+**/.idea/workspace.xml
+**/.idea/tasks.xml

@@ -3,21 +3,20 @@ from unittest.mock import MagicMock, Mock
 
 from pytest_mock import MockFixture
 
-from dataprep.preprocess.metadata import PreprocessingMetadata
 from dataprep.tokens.containers import SplitContainer
-from langmodels.evaluation import evaluate_model_on_string
-from langmodels.evaluation.filtering import TokenTypeSubset
+from langmodels.evaluation.evaluation import evaluate_model_on_string
+from langmodels.evaluation.filtering import TokenTypeSubset, EvaluationCustomization
 from langmodels.evaluation.metrics import EvaluationResult, EvaluationScenario, Evaluation
 from langmodels.model import TrainedModel
 
 
 def test_evaluate_model_on_string_empty():
     trained_model_mock = MagicMock(spec=TrainedModel)
-    trained_model_mock.prep_text.return_value = ([], PreprocessingMetadata())
+    trained_model_mock.get_entropies_for_text.return_value = ([], [], [])
 
     expected = [Evaluation(
-        '', [], PreprocessingMetadata(),
-        {EvaluationScenario('full_token_entropy', TokenTypeSubset.full_set()): EvaluationResult([], 0., 0)}
+        '',
+        {EvaluationScenario('full_token_entropy'): EvaluationResult([], [], 0.)}
     )]
     actual = evaluate_model_on_string(trained_model_mock, '')
 
@@ -25,89 +24,67 @@ def test_evaluate_model_on_string_empty():
 
 
 def test_evaluate_on_string_default_args(mocker: MockFixture):
-    # given
     text = 'MyClass'
     prep_line = ['My', 'Class</t>']
-    metadata = PreprocessingMetadata(word_boundaries=[0, 2], token_types=[SplitContainer])
-    scenarios = {EvaluationScenario('full_token_entropy', TokenTypeSubset.full_set()): EvaluationResult([1.0, 2.0], 3.0, 1)}
+    result = EvaluationResult(prep_line, [1.0, 2.0], 3.0)
+    scenarios = {EvaluationScenario('full_token_entropy'): result}
 
     trained_model_mock = Mock(spec=TrainedModel)
-    trained_model_mock.prep_text.return_value = (prep_line, metadata)
+    trained_model_mock.get_entropies_for_text.return_value = ([1.0, 2.0], prep_line, [SplitContainer, SplitContainer])
 
-    mocked_metric = Mock(spec=callable, return_value=scenarios)
-    mocker.patch('langmodels.evaluation.evaluation.DEFAULT_METRIC', new=mocked_metric)
+    mocked_metric = Mock(spec=callable, return_value={EvaluationCustomization.no_customization(): result})
+    mocker.patch('langmodels.evaluation.evaluation._get_metric_by_name', new=lambda x: mocked_metric)
+    mocker.patch('langmodels.evaluation.evaluation.get_metrics_name', new=lambda x: 'full_token_entropy')
 
-    # when
     actual = evaluate_model_on_string(trained_model_mock, text)
 
-    # then
-    trained_model_mock.prep_text.assert_has_calls([mock.call('MyClass', extension='java',
-                                                             force_reinit_bpe_data=False,
-                                                             return_metadata=True, append_eof=False)])
-    mocked_metric.assert_called_with(trained_model_mock, prep_line, metadata, None)
-    assert actual == [Evaluation(text, prep_line, metadata, scenarios)]
+    mocked_metric.assert_called_with(trained_model_mock, text, 'java', False, None)
+    assert actual == [Evaluation(text, scenarios)]
 
 
 def test_evaluate_on_string_default_args_not_result_per_line(mocker: MockFixture):
     # given
     text = 'MyClass\n{'
-    prep_line = ['My', 'Class</t>']
-    metadata = Mock(spec=PreprocessingMetadata)
-    scenarios = {EvaluationScenario('full_token_entropy', TokenTypeSubset.full_set()): Mock(spec=EvaluationResult)}
+    result = Mock(spec=EvaluationResult)
+    scenarios = {EvaluationScenario('full_token_entropy'): result}
 
     trained_model_mock = Mock(spec=TrainedModel)
-    trained_model_mock.prep_text.return_value = (prep_line, metadata)
 
-    mocked_metric = Mock(spec=callable, return_value=scenarios)
-    mocker.patch('langmodels.evaluation.evaluation.DEFAULT_METRIC', new=mocked_metric)
+    mocked_metric = Mock(spec=callable, return_value={EvaluationCustomization.no_customization(): result})
+    mocker.patch('langmodels.evaluation.evaluation._get_metric_by_name', new=lambda x: mocked_metric)
+    mocker.patch('langmodels.evaluation.evaluation.get_metrics_name', new=lambda x: 'full_token_entropy')
 
     # when
     actual = evaluate_model_on_string(trained_model_mock, text, result_per_line=False)
 
     # then
-    trained_model_mock.prep_text.assert_has_calls([mock.call('MyClass\n{', extension='java',
-                                                             force_reinit_bpe_data=False,
-                                                             return_metadata=True, append_eof=False)])
-    mocked_metric.assert_called_with(trained_model_mock, prep_line, metadata, None)
-    assert actual == [Evaluation(text, prep_line, metadata, scenarios)]
+    mocked_metric.assert_called_with(trained_model_mock, text, 'java', False, None)
+    assert actual == Evaluation(text, scenarios)
 
 
 def test_evaluate_on_string_non_default_token_types_and_metrics_multiline(mocker: MockFixture):
-    # given
     text = 'MyClass\n{'
-    prep_lines = [['My', 'Class</t>'], ['{']]
-    metadata_list = [Mock(spec=PreprocessingMetadata) for i in range(len(prep_lines))]
+    evaluation_customizations = {
+        EvaluationCustomization(type_subset=TokenTypeSubset.full_set()),
+        EvaluationCustomization(type_subset=TokenTypeSubset.full_set_without_comments())
+    }
     metrics = {'full_token_entropy', 'mrr'}
-    token_types_list = {TokenTypeSubset.full_set(), TokenTypeSubset.full_set_without_comments()}
-    scenarios = [[{EvaluationScenario(metric, token_types): Mock(spec=EvaluationResult)
-                   for token_types in token_types_list} for i in range(len(prep_lines))] for metric in metrics]
-    mocked_metrics = [Mock(spec=callable, side_effect=scenario) for scenario in scenarios]
+    scenarios = {EvaluationScenario(metric, evaluation_customization)
+                   for evaluation_customization in evaluation_customizations for metric in metrics}
 
     trained_model_mock = Mock(spec=TrainedModel)
-    trained_model_mock.prep_text.side_effect = list(zip(prep_lines, metadata_list))
 
-    mocked_metrics_from_strings = Mock(spec=callable, return_value=mocked_metrics)
-    mocker.patch('langmodels.evaluation.evaluation.metrics_from_strings', new=mocked_metrics_from_strings)
+    evaluation_mocks = [Mock(spec=Evaluation)] * 2
+    mocked_evaluate_on_line = Mock(spec=callable)
+    mocked_evaluate_on_line.side_effect = evaluation_mocks
+    mocker.patch('langmodels.evaluation.evaluation._evaluate_model_on_line', new=mocked_evaluate_on_line)
 
-    # when
-    actual = evaluate_model_on_string(trained_model_mock, text,
-                                      token_types=token_types_list,
-                                      metrics=metrics,
+    actual = evaluate_model_on_string(trained_model_mock, text, 'java', metrics, evaluation_customizations,
                                       result_per_line=True, append_eof=True)
 
-    # then
-    trained_model_mock.prep_text.assert_has_calls([mock.call('MyClass', extension='java',
-                                                             force_reinit_bpe_data=False,
-                                                             return_metadata=True, append_eof=False)])
-    trained_model_mock.prep_text.assert_has_calls([mock.call('{', extension='java',
-                                                             force_reinit_bpe_data=False,
-                                                             return_metadata=True, append_eof=True)])
+    mocked_evaluate_on_line.assert_has_calls([
+        mock.call(trained_model_mock, 'MyClass', 'java', metrics, evaluation_customizations, False),
+        mock.call(trained_model_mock, '{', 'java', metrics, evaluation_customizations, True)
+    ])
 
-    for mocked_metric in mocked_metrics:
-        for prep_line, metadata in zip(prep_lines, metadata_list):
-            mocked_metric.assert_has_calls([mock.call(trained_model_mock, prep_line, metadata, token_types_list)])
-
-    assert actual == [Evaluation('MyClass', prep_lines[0], metadata_list[0],
-                                 {k: v for ss in [scenarios[0][0], scenarios[1][0]] for k, v in ss.items()}),
-                      Evaluation('{', prep_lines[1], metadata_list[1],
-                                 {k: v for ss in [scenarios[0][1], scenarios[1][1]] for k, v in ss.items()})]
+    assert actual == evaluation_mocks

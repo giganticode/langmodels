@@ -2,30 +2,27 @@ import logging
 import os
 from collections import OrderedDict
 from threading import Lock
+from typing import List, Dict, Any, Tuple, Optional, Union, Type, Generator
 
+import torch
 from dataclasses import dataclass, asdict
+from fastai.text import SequentialRNN, get_language_model, F, Vocab, awd_lstm_lm_config, convert_weights
+from fastai.text.models.transformer import init_transformer
+from math import exp
+from torch import cuda
 
+from dataprep.api.corpus import PreprocessedCorpus
 from dataprep.pipeline.dataset import normalize_extension_string
 from dataprep.preprocess.metadata import check_metadata_validity, PreprocessingMetadata
 from dataprep.preprocess.placeholders import placeholders
-from dataprep.subtokens import is_terminal_subtoken
-
-from math import exp
-from typing import List, Dict, Any, Tuple, Optional, Union
-
-import torch
-from dataprep.api.corpus import PreprocessedCorpus
-from fastai.text import SequentialRNN, get_language_model, F, Vocab, awd_lstm_lm_config, convert_weights
-from fastai.text.models.transformer import init_transformer
-from torch import cuda
-
+from dataprep.subtokens import is_terminal_subtoken, FullTokenIterator, SubtokenIterator
 from langmodels.beamsearch import beam_search
+from langmodels.cuda_util import get_device, get_map_location
 from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig, GruArch, \
     LMTrainingMetrics
 from langmodels.lmconfig.serialization import load_config_from_file, read_value_from_file
 from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
 from langmodels.util import to_binary_entropy
-from langmodels.cuda_util import get_device, get_map_location
 
 logger = logging.getLogger(__name__)
 
@@ -116,15 +113,18 @@ def to_full_token_string(vocab: Vocab, subtokens_num: torch.LongTensor, include_
     except ValueError: pass
 
     sep = '|' if include_debug_tokens else ''
-    textified = vocab.textify(subtokens_num, sep=sep)
+    # noinspection PyTypeChecker
+    textified: str = vocab.textify(subtokens_num, sep=sep)
     cwe = placeholders['compound_word_end']
     if textified in placeholders.values():
         return textified
 
     if not is_terminal_subtoken(textified):
         raise ValueError(f'{textified} ({subtokens_num}) is not a full token')
-    return textified if include_debug_tokens else textified[:-len(cwe)]
+    return textified
 
+
+PredictionList = List[Tuple[str, float]]
 
 @dataclass
 class ModelDescription(object):
@@ -157,6 +157,8 @@ class TrainedModel(object):
     STARTING_TOKEN = placeholders['ect']
 
     def __init__(self, path: str, force_use_cpu: bool = False, load_only_description: bool = False):
+        if not os.path.exists(path):
+            raise FileNotFoundError(f'Path does not exist: {path}')
         self.force_use_cpu = force_use_cpu
         self.id = os.path.basename(path)
         path_to_config_file = os.path.join(path, 'config')
@@ -219,7 +221,7 @@ class TrainedModel(object):
 
     SAVE_CONTEXT_LIMIT = 1000
 
-    def save_context(self, prep_tokens: List[str]) -> None:
+    def _save_context(self, prep_tokens: List[str]) -> None:
         self.context.extend(prep_tokens)
         if len(self.context) > TrainedModel.SAVE_CONTEXT_LIMIT:
             self.context = self.context[-TrainedModel.SAVE_CONTEXT_LIMIT:]
@@ -233,32 +235,62 @@ class TrainedModel(object):
     def prep_text(self, text: str, extension: str, **kwargs) -> Union[Tuple[List[str], PreprocessingMetadata], List[str]]:
         import dataprep.api.text as text_api
         text_callable = getattr(text_api, self._prep_function.callable.__name__)
-        prep_text, metadata = text_callable(text, extension=extension,
+        prep_text, metadata = text_callable(text, extension=extension, force_reinit_bpe_data=False,
                                             *self._prep_function.params, **asdict(self._prep_function.options), **kwargs)
         check_metadata_validity(prep_text, metadata)
         return (prep_text, metadata) if 'return_metadata' in kwargs and kwargs['return_metadata'] else prep_text
+
+    def get_predictions_and_feed(self, text: str, extension: str, n_suggestions: int, append_eof: bool)\
+            -> Generator[Tuple[PredictionList, str, Type], None, None]:
+        prep_text, metadata = self.prep_text(text, extension, return_metadata=True, append_eof=append_eof)
+
+        for ind, prep_token in FullTokenIterator(prep_text, metadata.word_boundaries, return_full_token_index=True):
+            predictions = self.predict_next_full_token(n_suggestions)
+            self._feed_prep_tokens([prep_token])
+
+            yield predictions, prep_token, metadata.token_types[ind]
 
     def _check_model_loaded(self, only_description=False):
         if not only_description and self.load_only_description:
             raise RuntimeError("Operation not supported. Only model's description is loaded. "
                                "Prease reload the model with param load_only_description set to False.")
 
-    def feed_prep_tokens(self, prep_tokens: List[str]) -> None:
+    def _feed_prep_tokens(self, prep_tokens: List[str]) -> None:
         self._check_model_loaded()
         context_tensor = torch.tensor([self.vocab.numericalize(prep_tokens)], device=get_device(self.force_use_cpu))
         with lock:
-            self.save_context(prep_tokens)
+            self._save_context(prep_tokens)
             _ = get_last_layer_activations(self.model, context_tensor[:, :-1])
             self.last_predicted_token_tensor = context_tensor[:, -1:]
 
     def feed_text(self, text: str, extension: str) -> None:
         self.check_inference_possible_for_file_type(extension)
 
-        prep_text, metadata = self.prep_text(text, extension=extension,
-                                             return_metadata=True, force_reinit_bpe_data=False)
-        self.feed_prep_tokens(prep_text)
+        prep_text, metadata = self.prep_text(text, extension=extension, return_metadata=True)
+        self._feed_prep_tokens(prep_text)
 
-    def get_entropies_for_prep_text(self, prep_text: List[str]) -> List[float]:
+    def get_entropies_for_text(self, text: str, extension: str, full_tokens: bool, append_eof: bool) \
+            -> Tuple[List[float], List[str], List[Type]]:
+        tokens, metadata = self.prep_text(text, extension, return_metadata=True, append_eof=append_eof)
+        subtoken_entropies = self._get_entropies_for_prep_text(tokens)
+
+        iterator_type = FullTokenIterator if full_tokens else SubtokenIterator
+
+        def formatter(lst: List[Tuple[float, str]]) -> Tuple[float, str]:
+            entropies, tokens = tuple(zip(*lst))
+            return sum(entropies), "".join(tokens)
+
+        iterator = iterator_type(list(zip(subtoken_entropies, tokens)), metadata.word_boundaries,
+                                 format=formatter, return_full_token_index=True)
+        e, t, tt = [], [], []
+        for ind, (entropy, token) in iterator:
+            e.append(entropy)
+            t.append(token)
+            tt.append(metadata.token_types[ind])
+        return e, t, tt
+
+
+    def _get_entropies_for_prep_text(self, prep_text: List[str]) -> List[float]:
         """
         changes hidden states of the model!!
         """
@@ -278,7 +310,7 @@ class TrainedModel(object):
                 numericalized_prep_text = torch.tensor([self.vocab.numericalize(pt)],
                                                        device=get_device(self.force_use_cpu))
 
-                self.save_context(pt)
+                self._save_context(pt)
                 last_layer = get_last_layer_activations(self.model, torch.cat([self.last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))
                 loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
                                        numericalized_prep_text.view(-1),
@@ -297,7 +329,7 @@ class TrainedModel(object):
             self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
                                                         device=get_device(self.force_use_cpu))
 
-    def predict_next_full_token(self, n_suggestions: int, include_debug_tokens: bool = False) -> List[Tuple[str, float]]:
+    def predict_next_full_token(self, n_suggestions: int, include_debug_tokens: bool = False) -> PredictionList:
         with lock:
             self._check_model_loaded()
 

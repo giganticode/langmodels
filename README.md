@@ -82,7 +82,7 @@ You can specify if you want to load a model to CPU despite having cuda-supported
 2019-10-29 11:00:20,136 [langmodels.model] DEBUG: Loading model from: /home/hlib/.local/share/langmodels/0.0.1/modelzoo/langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344/best.pth ...
 2019-10-29 11:00:25,479 [langmodels.model] DEBUG: Using GPU for inference
 
->>> trained_model = reg.load_model_by_id('dev_10k_1_10_190923.132328', force_use_cpu=True)
+>>> trained_model = repo.load_model_by_id('dev_10k_1_10_190923.132328_new', force_use_cpu=True)
 
 2019-10-29 11:26:12,070 [langmodels.model] DEBUG: Loading model from: /home/hlib/.local/share/langmodels/0.0.1/modelzoo/dev_10k_1_10_190923.132328/best.pth ...
 2019-10-29 11:26:12,073 [langmodels.model] DEBUG: Using CPU for inference
@@ -91,7 +91,7 @@ You can specify if you want to load a model to CPU despite having cuda-supported
 
 Also, you can use a lower-level API to load a model by path :
 ```python
-trained_model = repo.load_from_path('/home/hlib/.local/share/langmodels/0.0.1/modelzoo/dev_10k_1_10_190923.132328')
+trained_model = repo.load_from_path('/home/hlib/.local/share/langmodels/0.0.1/modelzoo/dev_10k_1_10_190923.132328_new')
 ```
 
 ## Inference
@@ -224,8 +224,8 @@ For more options, run:
 
 ## LM Evaluation
 
-When training a language model, it is important to have ability to evaluate LM's performance
-In this section we describe about different ways to ways to validate the performance using this library. 
+When training a language model, it is important to be able to evaluate LM's performance.
+In this section we describe different ways to do this using `langmodels` library. 
 You can also use our [tool](https://github.com/giganticode/vsc-extension-backend) to visualize the evaluation.
 
 ### Evaluation on a string / file
@@ -235,19 +235,23 @@ on the state of the model. Use methods `reset` and `feed_text` to reset the mode
 to initial state and change the context of the model respectively.
 
 ```python
->>> import langmodels.repository as repo 
+
+
+
+    >>> import langmodels.repository as repo 
 >>> from langmodels.evaluation import evaluate_model_on_string    
 
 >>> model = repo.load_default_model
 >>> evaluate_model_on_string(model, 'public class MyClass {')
 
 [Evaluation(
-text='public class MyClass {', 
-prep_text=['public</t>', 'class</t>', 'My', 'Class</t>', '{</t>'], 
-prep_metadata=({'public', '{', 'class'}, [0, 1, 2, 4, 5], []), 
-scenarios={
-    full_token_entropy/all: EvaluationResult(subtoken_values=[8.684514999389648, 0.27599671483039856, 5.689223766326904, 3.430007219314575, 0.21710264682769775], average=4.574211336672306, n_samples=4)
-})]
+    text='public class MyClass {', 
+    scenarios={full_token_entropy/ParsedToken/default_weights: EvaluationResult(
+        tokens=['public</t>', 'class</t>', 'MyClass</t>', '{</t>'],
+        values=[9.847663879394531, 4.116138458251953, 0.5376469194889069, 0.20130464434623718],
+        aggregated_value=3.675688475370407)}
+)]
+
 
 ```
 
@@ -264,17 +268,17 @@ Evaluation can be run on a set of files with `evaluate_model_on_path` method
 >>> model = repo.load_default_model()
 >>> evaluate_model_on_path(model, '/path/to/file')
 
-100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 67/67 [00:29<00:00,  2.82it/s, full_token_entropy/all=4.19 (n=48691)]
-{full_token_entropy/all: (4.160669008602462, 49401)}
+100%|████████████████████████████████████████████████████████████████████████████| 28/28 [00:11<00:00,  2.35it/s]
+{full_token_entropy/ParsedToken/default_weights: (5.859160765187885, 5745)}
 ```
 
-In `full_token_entropy/all`: `full_token_entropy` is a metric used to evaluate the performance; `all` means that
-all the tokens were considered when evaluating (See the next section for more details).
-Thus, the average full-token-entropy is ~ 4.16 evaluated on 49.4k tokens.
+In `full_token_entropy/ParsedToken/default_weights`: `full_token_entropy` is a metric used to evaluate the performance; 
+`ParsedToken` means that all the tokens were considered when evaluating (See the next section for more details).
+Thus, the average full-token-entropy is ~ 5.85 evaluated on 5.7k tokens.
 
-### Specifying metrics and token types
+### Specifying metrics
 
-You can specify the evaluation metrics
+You can specify based on which metrics the model is to be evaluated.
 
 ```python
 >>> import langmodels.repository as repo 
@@ -282,25 +286,9 @@ You can specify the evaluation metrics
 
 >>> model = repo.load_default_model()
 >>> evaluate_model_on_path(model, '/path/to/file', metrics={'full_token_entropy', 'mrr'})
-
-{full_token_entropy/all: (2.367707431204745, 710), mrr/all: (0.25260753937415537, 710)}
 ```
 
 Possible metric values are `full_token_entropy`, `subtoken_entropy`, `mrr`. Default metric set is `{full_token_entropy}`
-
-Similarly token types to run evaluation on can be specified. Possible values are `TokenTypes.ALL`, `TokenTypes.ALL_BUT_COMMENTS`, `TOKEN_TYPES.ONLY_COMENTS`. 
-Default value is {TokenTypes.ALL}
-
-```python
->>> import langmodels.repository as repo 
->>> from langmodels.evaluation import evaluate_model_on_path
->>>
-from langmodels.evaluation.metrics import TokenTypeSubset
-
->>> model = repo.load_default_model()
->>> evaluate_model_on_path(model, '/path/to/file', metrics={'full_token_entropy', 'mrr'}, token_types={TokenTypes.ALL, TokenTypes.ONLY_COMMENTS, TokenTypes.ALL_BUT_COMMENTS})
-
-
 ```
 
 ## Release Notes

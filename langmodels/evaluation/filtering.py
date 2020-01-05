@@ -1,6 +1,6 @@
 import logging
 from functools import reduce
-from typing import List, Callable, Any, Type, Union, Set, Iterable, FrozenSet
+from typing import List, Callable, Any, Type, Union, Set, Iterable, FrozenSet, Tuple, Optional, Dict
 
 from dataclasses import dataclass, field
 
@@ -11,8 +11,6 @@ from dataprep.tokens.containers import Comment, SplitContainer, OneLineComment
 from dataprep.tokens.rootclasses import ParsedToken
 
 logger = logging.getLogger(__name__)
-
-MetricName = str
 
 
 def all_subclasses(classes: Iterable[Type]) -> Set[Type]:
@@ -134,20 +132,21 @@ TokenIterator = Union[SubtokenIterator, FullTokenIterator]
 class FilteringTokenIterator(object):
     """
     >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], token_types=[SplitContainer, OneLineComment])
+
     >>> token_type_subset = TokenTypeSubset.full_set_without_comments()
     >>> [token for token in FilteringTokenIterator(['hi', '/', '/'], metadata, token_type_subset)]
     ['hi']
 
-    >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], token_types=[SplitContainer, OneLineComment])
     >>> [token for token in FilteringTokenIterator(['hi', '/', '/'], metadata)]
     ['hi', '//']
 
-    >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], token_types=[SplitContainer, OneLineComment])
+    >>> [token for token in FilteringTokenIterator(['hi', '/', '/'], metadata, return_token_type=True)]
+    [('hi', <class 'dataprep.tokens.containers.SplitContainer'>), ('//', <class 'dataprep.tokens.containers.OneLineComment'>)]
+
     >>> it = FilteringTokenIterator(['hi', '/', '/'], metadata, token_iterator_type=SubtokenIterator)
     >>> [token for token in it]
     ['hi', '/', '/']
 
-    >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], token_types=[SplitContainer, OneLineComment])
     >>> it = FilteringTokenIterator(['hi', '/', '/'], metadata, token_type_subset=TokenTypeSubset.only_comments(), \
 token_iterator_type=SubtokenIterator)
     >>> [token for token in it]
@@ -156,19 +155,53 @@ token_iterator_type=SubtokenIterator)
     def __init__(self, subwords: List[Any], metadata: PreprocessingMetadata,
                  token_type_subset: TokenTypeSubset = TokenTypeSubset.full_set(),
                  token_iterator_type: Type[TokenIterator] = FullTokenIterator,
-                 format: Callable[[List[str]], Any] = lambda s: ''.join(s)):
+                 format: Callable[[List[str]], Any] = lambda s: ''.join(s),
+                 return_token_type: bool = False):
         self.full_token_iterator = token_iterator_type(subwords, metadata.word_boundaries,
                                                        format=lambda l:l, return_full_token_index=True)
         self.token_type_subset = token_type_subset
         self.metadata = metadata
         self.format = format
         self.current_full_token = 0
+        self.return_token_type = return_token_type
 
     def __iter__(self):
         return self
 
-    def __next__(self):
+    def __next__(self) -> Union[Any, Tuple[Any, Type]]:
         while True:
             current_full_token_ind, next_full_token = next(self.full_token_iterator)
-            if self.token_type_subset.contains(self.metadata.token_types[current_full_token_ind]):
-                return self.format(next_full_token)
+            token_type = self.metadata.token_types[current_full_token_ind]
+            if self.token_type_subset.contains(token_type):
+                formatted_value = self.format(next_full_token)
+                return (formatted_value, token_type) if self.return_token_type else formatted_value
+
+
+@dataclass(frozen=True)
+class TokenTypeWeights(object):
+    non_default_weights: Optional[Dict[Type, float]] = None
+
+    def __getitem__(self, item: Type) -> float:
+        return self.non_default_weights[item] if self.non_default_weights is not None else 1.
+
+    def __str__(self):
+        return f'{self.non_default_weights}' if self.non_default_weights is not None else 'default_weights'
+
+    def __repr__(self):
+        return str(self)
+
+
+@dataclass(frozen=True)
+class EvaluationCustomization(object):
+    type_subset: TokenTypeSubset = TokenTypeSubset.full_set()
+    weights: TokenTypeWeights = TokenTypeWeights()
+
+    def __str__(self):
+        return f'{self.type_subset}/{self.weights}'
+
+    def __repr__(self):
+        return str(self)
+
+    @classmethod
+    def no_customization(cls):
+        return EvaluationCustomization()

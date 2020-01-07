@@ -333,7 +333,7 @@ class TrainedModel(object):
             self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
                                                         device=get_device(self.force_use_cpu))
 
-    def predict_next_full_token(self, n_suggestions: int, include_debug_tokens: bool = False) -> PredictionList:
+    def predict_next_full_token(self, n_suggestions: int = 1, include_debug_tokens: bool = False) -> PredictionList:
         with lock:
             self._check_model_loaded()
 

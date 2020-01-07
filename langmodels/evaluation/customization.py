@@ -151,9 +151,12 @@ token_iterator_type=SubtokenIterator)
                 return (formatted_value, token_type) if self.return_token_type else formatted_value
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=True)
 class TokenTypeWeights(object):
     non_default_weights: Optional[Dict[Type, float]] = None
+
+    def __hash__(self):
+        return hash(frozenset(self.non_default_weights.items()) if self.non_default_weights else None)
 
     def __getitem__(self, item: Type) -> float:
         return self.non_default_weights[item] if self.non_default_weights is not None else 1.
@@ -165,7 +168,7 @@ class TokenTypeWeights(object):
         return str(self)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=True)
 class EvaluationCustomization(object):
     type_subset: TokenTypeSubset = TokenTypeSubset.full_set()
     weights: TokenTypeWeights = TokenTypeWeights()

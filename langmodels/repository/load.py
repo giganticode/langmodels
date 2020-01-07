@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 def _get_all_model_ids(cached: bool = False) -> List[str]:
+    if not os.path.exists(MODEL_ZOO_PATH):
+        os.makedirs(MODEL_ZOO_PATH)
+
     if cached:
         root, dirs, files = next(os.walk(MODEL_ZOO_PATH))
         return [d for d in dirs if os.path.exists(os.path.join(root, d, 'best.pth'))]

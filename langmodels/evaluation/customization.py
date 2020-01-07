@@ -182,3 +182,8 @@ class EvaluationCustomization(object):
     @classmethod
     def no_customization(cls):
         return EvaluationCustomization()
+
+
+def separate_customization_for_each_class() -> Set[EvaluationCustomization]:
+    all_parsed_token_subclasses = all_subclasses([ParsedToken])
+    return {EvaluationCustomization(TokenTypeSubset.Builder().add(clazz).build()) for clazz in all_parsed_token_subclasses}

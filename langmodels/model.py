@@ -104,9 +104,6 @@ def _check_is_term_vocab(vocab: Vocab, first_non_term: int) -> None:
                              f"that has index {vocab.itos.index(token)}")
 
 
-DEFAULT_BEAM_SIZE = 500
-
-
 def to_full_token_string(subtokens: List[str], include_debug_tokens=False) -> str:
     """
     >>> to_full_token_string(['the', 're</t>'], include_debug_tokens=True)
@@ -163,51 +160,78 @@ class TrainedModel(object):
     def __init__(self, path: str, force_use_cpu: bool = False, load_only_description: bool = False):
         if not os.path.exists(path):
             raise FileNotFoundError(f'Path does not exist: {path}')
-        self.force_use_cpu = force_use_cpu
-        self.id = os.path.basename(path)
+        self._force_use_cpu = force_use_cpu
+        self._id = os.path.basename(path)
         path_to_config_file = os.path.join(path, 'config')
         path_to_metrics_file = os.path.join(path, 'metrics')
         path_to_tags_file = os.path.join(path, 'tags')
-        self.metrics = None
-        self.config = None
-        self.tags = []
-        self.context: List[str] = []
+        self._metrics = None
+        self._config = None
+        self._tags = []
+        self._context: List[str] = []
         try:
-            self.config: LMTrainingConfig = load_config_from_file(path_to_config_file)
+            self._config: LMTrainingConfig = load_config_from_file(path_to_config_file)
         except FileNotFoundError:
             logger.warning(f'Config file not found: {path_to_config_file}')
         try:
-            self.metrics: LMTrainingMetrics = load_config_from_file(os.path.join(path, 'metrics'))
+            self._metrics: LMTrainingMetrics = load_config_from_file(os.path.join(path, 'metrics'))
         except FileNotFoundError:
             logger.warning(f'File with metrics not found: {path_to_metrics_file}')
         if os.path.exists(path_to_tags_file):
             value = read_value_from_file(path_to_tags_file, value_type=str)
             if value != '':
-                self.tags = value.split(',')
-        self._prep_function = self.config.prep_function
+                self._tags = value.split(',')
+        self._prep_function = self._config.prep_function
 
-        self.load_only_description = load_only_description
+        self._load_only_description = load_only_description
         if not load_only_description:
             # we might want to load only description without loading actual weights when we want
             # to save time when loading multiple models to choose one of them to work with
 
-            self.original_vocab = Vocab.load(os.path.join(path, 'vocab'))
-            term_vocab, self.first_nonterm_token = _create_term_vocab(self.original_vocab)
-            self.model, self.vocab = self._load_model(path, term_vocab)
-            to_test_mode(self.model)
+            self._original_vocab = Vocab.load(os.path.join(path, 'vocab'))
+            term_vocab, self._first_nonterm_token = _create_term_vocab(self._original_vocab)
+            self._model, self._vocab = self._load_model(path, term_vocab)
+            to_test_mode(self._model)
 
             # last_predicted_token_tensor is a rank-2 tensor!
-            self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
-                                                            device=get_device(self.force_use_cpu))
-            self.beam_size = DEFAULT_BEAM_SIZE
+            self._last_predicted_token_tensor = torch.tensor([self._vocab.numericalize([self.STARTING_TOKEN])],
+                                                             device=get_device(self._force_use_cpu))
+
+    @property
+    def id(self):
+        return self._id
+
+    @property
+    def metrics(self):
+        return self._metrics
+
+    @property
+    def config(self):
+        return self._config
+
+    @property
+    def tags(self):
+        return self._tags
+
+    @property
+    def context(self):
+        return self._context
+
+    @property
+    def model(self):
+        return self._model
+
+    @property
+    def vocab(self):
+        return self._vocab
 
     def _load_model(self, path: str, custom_vocab: Optional[Vocab] = None) -> Tuple[SequentialRNN, Vocab]:
         path_to_model = os.path.join(path, 'best.pth')
         logger.debug(f"Loading model from: {path_to_model} ...")
 
-        vocab = custom_vocab if custom_vocab else self.original_vocab
-        model = get_language_model(self.config.get_arch_class(), len(vocab.itos), create_custom_config(self.config))
-        map_location = get_map_location(self.force_use_cpu)
+        vocab = custom_vocab if custom_vocab else self._original_vocab
+        model = get_language_model(self._config.get_arch_class(), len(vocab.itos), create_custom_config(self._config))
+        map_location = get_map_location(self._force_use_cpu)
         if cuda.is_available():
             model.cuda()
         state_dict = torch.load(path_to_model, map_location=map_location)
@@ -218,20 +242,21 @@ class TrainedModel(object):
         # update: it appeared that it's quite simple to load weights. So maybe not worth it loading a learner?
         weights = OrderedDict(state_dict['model'] if ('model' in state_dict) else state_dict)
         if custom_vocab:
-            weights = convert_weights(weights, self.original_vocab.stoi, custom_vocab.itos)
+            weights = convert_weights(weights, self._original_vocab.stoi, custom_vocab.itos)
         model.load_state_dict(weights, strict=True)
 
         return model, vocab
 
+    BEAM_SIZE = 500
     SAVE_CONTEXT_LIMIT = 1000
 
     def _save_context(self, prep_tokens: List[str]) -> None:
-        self.context.extend(prep_tokens)
-        if len(self.context) > TrainedModel.SAVE_CONTEXT_LIMIT:
-            self.context = self.context[-TrainedModel.SAVE_CONTEXT_LIMIT:]
+        self._context.extend(prep_tokens)
+        if len(self._context) > TrainedModel.SAVE_CONTEXT_LIMIT:
+            self._context = self._context[-TrainedModel.SAVE_CONTEXT_LIMIT:]
 
     def reset_context(self) -> None:
-        self.context = []
+        self._context = []
 
     def prep_corpus(self, corpus: Corpus, **kwargs) -> PreprocessedCorpus:
         return self._prep_function.apply(corpus, **kwargs)
@@ -255,20 +280,27 @@ class TrainedModel(object):
             yield predictions, prep_token, metadata.token_types[ind]
 
     def _check_model_loaded(self, only_description=False):
-        if not only_description and self.load_only_description:
+        if not only_description and self._load_only_description:
             raise RuntimeError("Operation not supported. Only model's description is loaded. "
                                "Prease reload the model with param load_only_description set to False.")
 
     def _feed_prep_tokens(self, prep_tokens: List[str]) -> None:
         self._check_model_loaded()
-        context_tensor = torch.tensor([self.vocab.numericalize(prep_tokens)], device=get_device(self.force_use_cpu))
+        context_tensor = torch.tensor([self._vocab.numericalize(prep_tokens)], device=get_device(self._force_use_cpu))
         with lock:
             self._save_context(prep_tokens)
-            _ = get_last_layer_activations(self.model, context_tensor[:, :-1])
-            self.last_predicted_token_tensor = context_tensor[:, -1:]
+            _ = get_last_layer_activations(self._model, context_tensor[:, :-1])
+            self._last_predicted_token_tensor = context_tensor[:, -1:]
+
+    def check_inference_possible_for_file_type(self, extension: str) -> bool:
+        try:
+            self._assert_inference_possible_for_file_type(extension)
+            return True
+        except ValueError:
+            return False
 
     def feed_text(self, text: str, extension: str) -> None:
-        self.check_inference_possible_for_file_type(extension)
+        self._assert_inference_possible_for_file_type(extension)
 
         prep_text, metadata = self.prep_text(text, extension=extension, return_metadata=True)
         self._feed_prep_tokens(prep_text)
@@ -311,33 +343,33 @@ class TrainedModel(object):
             n_chunks = (len(prep_text)-1) // max_subtokens_per_chunk + 1
             for i in range(n_chunks):
                 pt = prep_text[i*max_subtokens_per_chunk:(i+1)*max_subtokens_per_chunk]
-                numericalized_prep_text = torch.tensor([self.vocab.numericalize(pt)],
-                                                       device=get_device(self.force_use_cpu))
+                numericalized_prep_text = torch.tensor([self._vocab.numericalize(pt)],
+                                                       device=get_device(self._force_use_cpu))
 
                 self._save_context(pt)
-                last_layer = get_last_layer_activations(self.model, torch.cat([self.last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))
+                last_layer = get_last_layer_activations(self._model, torch.cat([self._last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))
                 loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
                                        numericalized_prep_text.view(-1),
                                        reduction='none')
                 binary_loss = to_binary_entropy(loss)
                 loss_list.extend(binary_loss.tolist())
-                self.last_predicted_token_tensor = numericalized_prep_text[:, -1:]
+                self._last_predicted_token_tensor = numericalized_prep_text[:, -1:]
             return loss_list
 
     def reset(self) -> None:
         with lock:
             self._check_model_loaded()
 
-            self.model.reset()
+            self._model.reset()
             self.reset_context()
-            self.last_predicted_token_tensor = torch.tensor([self.vocab.numericalize([self.STARTING_TOKEN])],
-                                                        device=get_device(self.force_use_cpu))
+            self._last_predicted_token_tensor = torch.tensor([self._vocab.numericalize([self.STARTING_TOKEN])],
+                                                             device=get_device(self._force_use_cpu))
 
     def predict_next_full_token(self, n_suggestions: int = 1, include_debug_tokens: bool = False) -> PredictionList:
         with lock:
             self._check_model_loaded()
 
-            numericalized_subtokens_list, scores = beam_search(self.model, self.last_predicted_token_tensor[0], self.first_nonterm_token, n_suggestions, self.beam_size)
+            numericalized_subtokens_list, scores = beam_search(self._model, self._last_predicted_token_tensor[0], self._first_nonterm_token, n_suggestions, self.BEAM_SIZE)
             suggestions: PredictionList = []
             for numericalized_subtokens, score in zip(numericalized_subtokens_list, scores):
                 try:
@@ -345,34 +377,34 @@ class TrainedModel(object):
                 except ValueError:
                     start_of_empty_numbers = len(numericalized_subtokens)
                 numericalized_subtokens = numericalized_subtokens[:start_of_empty_numbers]
-                subtokens = self.vocab.textify(numericalized_subtokens, sep=None)
+                subtokens = self._vocab.textify(numericalized_subtokens, sep=None)
                 full_token = (to_full_token_string(subtokens, include_debug_tokens))
                 suggestions.append((full_token,  1 / exp(score.item())))
             return suggestions
 
     def _format_layers_config(self) -> str:
-        if isinstance(self.config.arch, TransformerArch):
+        if isinstance(self._config.arch, TransformerArch):
             return "transformer"  # TODO add proper layer description
-        n_layers = self.config.arch.n_layers
-        emb_size = self.config.arch.emb_sz
-        n_hid = self.config.arch.n_hid
-        return f'{emb_size}/{n_layers}/{n_hid}={self.metrics.trainable_params}'
+        n_layers = self._config.arch.n_layers
+        emb_size = self._config.arch.emb_sz
+        n_hid = self._config.arch.n_hid
+        return f'{emb_size}/{n_layers}/{n_hid}={self._metrics.trainable_params}'
 
     def get_model_description(self) -> ModelDescription:
-        return ModelDescription(id=self.id,
-                                bpe_merges=self.config.prep_function.params[0],
+        return ModelDescription(id=self._id,
+                                bpe_merges=self._config.prep_function.params[0],
                                 layers_config=self._format_layers_config(),
-                                arch=str(self.config.get_arch_class().__name__),
-                                bin_entropy=self.metrics.bin_entropy if self.metrics else 1e+6,
-                                training_time_minutes_per_epoch=self.metrics.training_time_minutes_per_epoch
-                                if self.metrics else 0,
-                                n_epochs=self.metrics.n_epochs if self.metrics else 0,
-                                best_epoch=self.metrics.best_epoch if self.metrics else -1,
-                                size_on_disk_mb=self.metrics.size_on_disk_mb,
-                                tags=self.tags)
+                                arch=str(self._config.get_arch_class().__name__),
+                                bin_entropy=self._metrics.bin_entropy if self._metrics else 1e+6,
+                                training_time_minutes_per_epoch=self._metrics.training_time_minutes_per_epoch
+                                if self._metrics else 0,
+                                n_epochs=self._metrics.n_epochs if self._metrics else 0,
+                                best_epoch=self._metrics.best_epoch if self._metrics else -1,
+                                size_on_disk_mb=self._metrics.size_on_disk_mb,
+                                tags=self._tags)
 
-    def check_inference_possible_for_file_type(self, extension: str) -> None:
-        if extension not in normalize_extension_string(self.config.corpus.extensions):
+    def _assert_inference_possible_for_file_type(self, extension: str) -> None:
+        if extension not in normalize_extension_string(self._config.corpus.extensions):
             raise ValueError(f'The model was not trained on .{extension} files. Cannot do inference.')
 
     def __str__(self) -> str:

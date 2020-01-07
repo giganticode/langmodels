@@ -3,8 +3,8 @@ from typing import List, Optional, Set, Callable, Dict, Type
 
 from dataclasses import dataclass
 
-from langmodels.evaluation.filtering import EvaluationCustomization
-from langmodels.evaluation.filtering import TokenTypeSubset
+from langmodels.evaluation.customization import EvaluationCustomization
+from langmodels.evaluation.customization import TokenTypeSubset
 from langmodels.model import TrainedModel
 
 DEFAULT_N_MODEL_SUGGESTIONS = 100
@@ -106,12 +106,6 @@ def mrr(model: TrainedModel, line: str, extension: str, append_eof: bool,
 
 Metric = Callable[[TrainedModel, List[str], str, bool, Optional[Set[TokenTypeSubset]], Dict[Type, float]],
                   Dict[EvaluationCustomization, EvaluationResult]]
-
-metric_dict: Dict[MetricName, Metric] = {
-    'subtoken_entropy': lambda m, s, ext, eof, evc: bin_entropy(m, s, ext, eof, evc, False),
-    'full_token_entropy': bin_entropy,
-    'mrr': mrr
-}
 
 
 def entropy_to_probability(entropy: float) -> float:

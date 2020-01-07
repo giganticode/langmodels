@@ -5,8 +5,7 @@ from typing import List, Callable, Any, Type, Union, Set, Iterable, FrozenSet, T
 from dataclasses import dataclass, field
 
 from dataprep.preprocess.metadata import PreprocessingMetadata
-from dataprep.preprocess.placeholders import placeholders
-from dataprep.subtokens import FullTokenIterator, is_terminal_subtoken, SubtokenIterator
+from dataprep.subtokens import FullTokenIterator, SubtokenIterator
 from dataprep.tokens.containers import Comment, SplitContainer, OneLineComment
 from dataprep.tokens.rootclasses import ParsedToken
 
@@ -99,31 +98,6 @@ class TokenTypeSubset(object):
 
     def contains(self, type: Type) -> bool:
         return type in self.all_included_types
-
-
-def to_full_token_string(subtokens: List[str], include_debug_tokens: bool = False):
-    """
-    >>> to_full_token_string(['the', 're</t>'], include_debug_tokens=True)
-    'the|re</t>'
-
-    >>> to_full_token_string(['re', 'vol', 'v', 'er</t>'])
-    'revolver'
-
-    >>> to_full_token_string([placeholders['olc_end']])
-    '<EOL>'
-    """
-    if not isinstance(subtokens, List):
-        raise TypeError(f'This methods accept a list of strings, however {type(subtokens)} was passed')
-
-    if len(subtokens) == 1 and subtokens[0] in placeholders.values():
-        return subtokens[0]
-
-    sep = '|' if include_debug_tokens else ''
-    joined = sep.join(subtokens)
-    cwe = placeholders['compound_word_end']
-    if not is_terminal_subtoken(joined):
-        raise ValueError(f'{joined} ({subtokens}) is not a full token')
-    return joined if include_debug_tokens else joined[:-len(cwe)]
 
 
 TokenIterator = Union[SubtokenIterator, FullTokenIterator]

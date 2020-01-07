@@ -5,7 +5,7 @@ from pytest_mock import MockFixture
 
 from dataprep.tokens.containers import SplitContainer
 from langmodels.evaluation.evaluation import evaluate_model_on_string
-from langmodels.evaluation.filtering import TokenTypeSubset, EvaluationCustomization
+from langmodels.evaluation.customization import TokenTypeSubset, EvaluationCustomization
 from langmodels.evaluation.metrics import EvaluationResult, EvaluationScenario, Evaluation
 from langmodels.model import TrainedModel
 

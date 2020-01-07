@@ -1,7 +1,7 @@
 from unittest.mock import Mock
 
 from dataprep.tokens.containers import SplitContainer, OneLineComment
-from langmodels.evaluation.filtering import TokenTypeSubset, EvaluationCustomization
+from langmodels.evaluation.customization import TokenTypeSubset, EvaluationCustomization
 from langmodels.evaluation.metrics import bin_entropy, mrr, EvaluationResult
 from langmodels.model import TrainedModel
 

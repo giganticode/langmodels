@@ -6,13 +6,21 @@ from typing import List, Tuple, Optional, Union, Dict, Set
 import numpy as np
 from tqdm import tqdm
 
-from langmodels.evaluation.filtering import EvaluationCustomization
-from langmodels.evaluation.metrics import mrr, Metric, EvaluationScenario, Evaluation, metric_dict, EvaluationResult, \
+from langmodels.evaluation.metrics import bin_entropy
+from langmodels.evaluation.customization import EvaluationCustomization
+from langmodels.evaluation.metrics import mrr, Metric, EvaluationScenario, Evaluation, EvaluationResult, \
     MetricName
 from langmodels.file_util import get_all_files, read_file_contents
 from langmodels.model import TrainedModel
 
 logger = logging.getLogger(__name__)
+
+
+metric_dict: Dict[MetricName, Metric] = {
+    'subtoken_entropy': lambda m, s, ext, eof, evc: bin_entropy(m, s, ext, eof, evc, False),
+    'full_token_entropy': bin_entropy,
+    'mrr': mrr
+}
 
 
 def _get_metric_by_name(name: str) -> Metric:
@@ -47,10 +55,6 @@ def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
                              result_per_line=True, append_eof: bool = False) -> Union[List[Evaluation], Evaluation]:
 
     metrics = metrics or {DEFAULT_METRIC_NAME}
-    # metrics_to_customization_map: Dict[Metric, Set[EvaluationCustomization]] = defaultdict(set)
-    # for evaluation_scenario in evaluation_scenarios:
-    #     metric = _get_metric_by_name(evaluation_scenario.metric_name)
-    #     metrics_to_customization_map[metric].add(evaluation_scenario.evaluation_customization)
 
     show_progress = result_per_line and mrr in metrics
 
@@ -74,14 +78,6 @@ def evaluate_model_on_file(model: TrainedModel, file: Path, metrics: Optional[Se
                                       result_per_line=result_per_line, append_eof=True)
 
 
-def _format_postfix(current_metrics: Dict[EvaluationScenario, Tuple[float, int]]) -> Dict[str, str]:
-    if current_metrics:
-        return {}
-
-    return {str(eval_scenario): f'{value:.2f} (n={n_samples})'
-            for eval_scenario, (value, n_samples) in current_metrics.items()}
-
-
 def evaluate_model_on_project_set(model: TrainedModel, path: Path, metrics: Optional[Set[str]] = None,
                                   evaluation_customizations: Optional[Set[EvaluationCustomization]] = None) \
         -> Dict[str, Dict[EvaluationScenario, Tuple[float, int]]]:
@@ -99,6 +95,14 @@ def evaluate_model_on_project_set(model: TrainedModel, path: Path, metrics: Opti
         result[directory] = evaluate_model_on_path(model, Path(os.path.join(root, directory)),
                                                    metrics, evaluation_customizations)
     return result
+
+
+def _format_postfix(current_metrics: Dict[EvaluationScenario, Tuple[float, int]]) -> Dict[str, str]:
+    if current_metrics:
+        return {}
+
+    return {str(eval_scenario): f'{value:.2f} (n={n_samples})'
+            for eval_scenario, (value, n_samples) in current_metrics.items()}
 
 
 def evaluate_model_on_path(model: TrainedModel, path: Path, metrics: Optional[Set[str]] = None,

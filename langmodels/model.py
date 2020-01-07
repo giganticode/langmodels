@@ -107,21 +107,25 @@ def _check_is_term_vocab(vocab: Vocab, first_non_term: int) -> None:
 DEFAULT_BEAM_SIZE = 500
 
 
-def to_full_token_string(vocab: Vocab, subtokens_num: torch.LongTensor, include_debug_tokens=False) -> str:
-    try:
-        subtokens_num = subtokens_num[:subtokens_num.tolist().index(TORCH_LONG_MIN_VAL)]
-    except ValueError: pass
+def to_full_token_string(subtokens: List[str], include_debug_tokens=False) -> str:
+    """
+    >>> to_full_token_string(['the', 're</t>'], include_debug_tokens=True)
+    'the|re</t>'
 
-    sep = '|' if include_debug_tokens else ''
-    # noinspection PyTypeChecker
-    textified: str = vocab.textify(subtokens_num, sep=sep)
-    cwe = placeholders['compound_word_end']
-    if textified in placeholders.values():
-        return textified
+    >>> to_full_token_string(['re', 'vol', 'v', 'er</t>'])
+    'revolver</t>'
 
-    if not is_terminal_subtoken(textified):
-        raise ValueError(f'{textified} ({subtokens_num}) is not a full token')
-    return textified
+    >>> to_full_token_string([placeholders['olc_end']])
+    '<EOL>'
+    """
+    separator = '|' if include_debug_tokens else ''
+    full_token = separator.join(subtokens)
+    if full_token in placeholders.values():
+        return full_token
+
+    if not is_terminal_subtoken(full_token):
+        raise ValueError(f'{full_token} is not a full token')
+    return full_token
 
 
 PredictionList = List[Tuple[str, float]]
@@ -333,8 +337,18 @@ class TrainedModel(object):
         with lock:
             self._check_model_loaded()
 
-            subtokens, scores = beam_search(self.model, self.last_predicted_token_tensor[0], self.first_nonterm_token, n_suggestions, self.beam_size)
-            return [(to_full_token_string(self.vocab, st, include_debug_tokens=include_debug_tokens), 1 / exp(score.item())) for st, score in zip(subtokens, scores)]
+            numericalized_subtokens_list, scores = beam_search(self.model, self.last_predicted_token_tensor[0], self.first_nonterm_token, n_suggestions, self.beam_size)
+            suggestions: PredictionList = []
+            for numericalized_subtokens, score in zip(numericalized_subtokens_list, scores):
+                try:
+                    start_of_empty_numbers = numericalized_subtokens.tolist().index(TORCH_LONG_MIN_VAL)
+                except ValueError:
+                    start_of_empty_numbers = len(numericalized_subtokens)
+                numericalized_subtokens = numericalized_subtokens[:start_of_empty_numbers]
+                subtokens = self.vocab.textify(numericalized_subtokens, sep=None)
+                full_token = (to_full_token_string(subtokens, include_debug_tokens))
+                suggestions.append((full_token,  1 / exp(score.item())))
+            return suggestions
 
     def _format_layers_config(self) -> str:
         if isinstance(self.config.arch, TransformerArch):

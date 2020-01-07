@@ -1,6 +1,6 @@
 import logging
 from typing import List, Optional, Set, Callable, Dict, Type
-
+from pprint import pformat
 from dataclasses import dataclass
 
 from langmodels.evaluation.customization import EvaluationCustomization
@@ -39,6 +39,12 @@ class EvaluationScenario(object):
 class Evaluation(object):
     text: str
     scenarios: Dict[EvaluationScenario, EvaluationResult]
+
+    def __str__(self):
+        return f'{self.text}\n{pformat(self.scenarios)}'
+
+    def __repr__(self):
+        return str(self)
 
 
 def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool,

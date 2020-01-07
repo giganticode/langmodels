@@ -120,13 +120,18 @@ def evaluate_model_on_path(model: TrainedModel, path: Path, metrics: Optional[Se
         evaluation: Evaluation = evaluate_model_on_file(model, file, metrics,
                                                         evaluation_customizations, result_per_line=False)
 
-        current_file_metrics = {scenario: (eval_result.aggregated_value, len(eval_result.values))
+        current_file_metrics = {scenario: (eval_result.aggregated_value, sum(x is not None for x in eval_result.values))
                                 for scenario, eval_result in evaluation.scenarios.items()}
 
         if cumulative_metrics:
             for scenario, cumulative_eval_result in cumulative_metrics.items():
-                avg_func = lambda v, w: (np.average(v, weights=w), sum(w))
-                cumulative_metrics[scenario] = avg_func(*zip(cumulative_eval_result, current_file_metrics[scenario]))
+                def avg(v, w):
+                    total_count = sum(w)
+                    if total_count == 0:
+                        return 0.0, 0
+                    return np.average(v, weights=w), total_count
+
+                cumulative_metrics[scenario] = avg(*zip(cumulative_eval_result, current_file_metrics[scenario]))
         else:
             cumulative_metrics = current_file_metrics
     if not cumulative_metrics:

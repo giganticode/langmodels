@@ -263,11 +263,13 @@ class TrainedModel(object):
 
     def prep_text(self, text: str, extension: str, **kwargs) -> Union[Tuple[List[str], PreprocessingMetadata], List[str]]:
         import dataprep.api.text as text_api
+        return_metadata: bool = 'return_metadata' in kwargs and kwargs['return_metadata']
         text_callable = getattr(text_api, self._prep_function.callable.__name__)
-        prep_text, metadata = text_callable(text, extension=extension, force_reinit_bpe_data=False,
+        preprocessing_result = text_callable(text, extension=extension, force_reinit_bpe_data=False,
                                             *self._prep_function.params, **asdict(self._prep_function.options), **kwargs)
-        check_metadata_validity(prep_text, metadata)
-        return (prep_text, metadata) if 'return_metadata' in kwargs and kwargs['return_metadata'] else prep_text
+        if return_metadata:
+            check_metadata_validity(*preprocessing_result)
+        return preprocessing_result
 
     def get_predictions_and_feed(self, text: str, extension: str, n_suggestions: int, append_eof: bool)\
             -> Generator[Tuple[PredictionList, str, Type], None, None]:

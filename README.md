@@ -156,7 +156,7 @@ More parameters to customize corpus pre-processing, NN architecture, and the tra
 >>> from langmodels.lmconfig.datamodel import *
 
 >>> train(LMTrainingConfig(corpus=Corpus(path='/path/to/the/dataset'), 
-                            prep_function=PrepFunction({'no_com': False, 'no_unicode': True}),
+                            prep_function=PrepFunction(options=PrepFunctionOptions(no_com=False, no_unicode=True)),
                             arch=GRU(n_layers=2),
                             training_procedure=TrainingProcedure(weight_decay=5e-6)
 ))
@@ -172,8 +172,8 @@ Below you can see all the default parameters specified explicitly:
                        bs=32, 
                        corpus=Corpus(path=os.path.join(HOME, 'dataset'), extensions="java"), 
                        prep_function=PrepFunction(corpus_api.bpe, ['10k'], 
-                                                  {'no_com': False, 'no_unicode': True, 
-                                                   'no_spaces': True, 'max_str_length': sys.maxsize}), 
+                                                  PrepFunctionOptions(no_com=False, no_unicode=True, 
+                                                                    no_spaces=True, max_str_length=sys.maxsize)), 
                        arch=LstmArch(
                            bidir=False, qrnn=False, emb_sz=1024, n_hid=1024, n_layers=3, 
                            adam_betas=(0.7, 0.99), clip=0.3, reg_fn=RegFn(alpha=2, beta=1), 

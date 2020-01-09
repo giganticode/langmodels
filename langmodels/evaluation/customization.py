@@ -16,9 +16,10 @@ def all_subclasses(classes: Iterable[Type]) -> Set[Type]:
     """
     >>> subclasses = all_subclasses([ParsedToken])
     >>> sorted(map(lambda t: t.__name__, subclasses))
-    ['Comment', 'KeyWord', 'MultilineComment', 'NewLine', 'NonCodeChar', 'NonEng', 'NonProcessibleToken', \
-'Number', 'OneLineComment', 'Operator', 'ParsedToken', 'ProcessableTokenContainer', 'SpaceInString', 'SpecialToken', \
-'SplitContainer', 'StringLiteral', 'Tab', 'TextContainer', 'Whitespace']
+    ['ClosingBracket', 'ClosingCurlyBracket', 'Comment', 'KeyWord', 'MultilineComment', 'NewLine', 'NonCodeChar', \
+'NonEng', 'NonProcessibleToken', 'Number', 'One', 'OneLineComment', 'OpeningBracket', 'OpeningCurlyBracket', \
+'Operator', 'ParsedToken', 'ProcessableTokenContainer', 'Semicolon', 'SpaceInString', 'SpecialToken', \
+'SplitContainer', 'StringLiteral', 'Tab', 'TextContainer', 'Whitespace', 'Zero']
     """
     return reduce(set.union, [{cls}.union(
         [s for c in cls.__subclasses__() for s in all_subclasses([c])])

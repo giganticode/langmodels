@@ -32,7 +32,8 @@ from langmodels.tensor_ops import mrr
 from langmodels.training.data import EmptyDataBunch, create_databunch
 from langmodels.training.schedule import ReduceLRCallback
 from langmodels.training.subepoch_files import EpochFileLoader
-from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, RetryingSaveModelCalback
+from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, RetryingSaveModelCalback, \
+    SaveTimePerEpochCallback
 from langmodels.util import HOME
 
 logger = logging.getLogger(__name__)
@@ -125,9 +126,7 @@ def save_params_to_comet(experiment: Experiment, lm_training_config: LMTrainingC
 
 
 def add_callbacks(experiment_run: ExperimentRun, learner: Learner, vocab: Vocab, tune: bool) -> None:
-    comet_experiment: Optional[Experiment] = experiment_run.comet_experiment
-    if comet_experiment:
-        learner.callbacks.append(LrLogger(learner, comet_experiment))
+    learner.callbacks.append(LrLogger(learner, experiment_run))
 
     first_model_trained_callback = FirstModelTrainedCallback(learner, experiment_run)
     learner.callbacks.append(first_model_trained_callback)
@@ -136,6 +135,9 @@ def add_callbacks(experiment_run: ExperimentRun, learner: Learner, vocab: Vocab,
     learner.callbacks.append(save_every_epoch_callback)
     save_best_model_callback = RetryingSaveModelCalback(learner, every='improvement', name='best')
     learner.callbacks.append(save_best_model_callback)
+
+    save_time_per_epoch_callback = SaveTimePerEpochCallback(learner, experiment_run)
+    learner.callbacks.append(save_time_per_epoch_callback)
 
     if tune:
         logger.warning("Tune mode is ON!")

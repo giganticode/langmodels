@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 
 from comet_ml import Experiment
 from fastai.basic_train import LearnerCallback, Learner
@@ -41,17 +42,36 @@ class FirstModelTrainedCallback(LearnerCallback):
                 report_successful_experiment_to_comet(self.experiment_run.comet_experiment)
 
 
+class SaveTimePerEpochCallback(LearnerCallback):
+    def __init__(self, learner: Learner, experiment_run: ExperimentRun):
+        super().__init__(learner)
+        self.experiment_run = experiment_run
+        self.n_epochs = 0
+        self.total_time_minutes = 0
+
+    def on_epoch_begin(self, **kwargs:Any) ->None:
+        self.start_epoch_time = time.time()
+
+    def on_epoch_end(self, **kwargs:Any) -> None:
+        self.n_epochs += 1
+        self.total_time_minutes += (time.time() - self.start_epoch_time) / 60
+        comet_experiment = self.experiment_run.comet_experiment
+        if comet_experiment:
+            comet_experiment.log_metric("minutes_per_epoch", int(self.total_time_minutes / self.n_epochs), epoch=self.n_epochs-1)
+
+
 class LrLogger(Callback):
-    def __init__(self, learner, experiment: Experiment = None):
+    def __init__(self, learner, experiment_run: ExperimentRun = None):
         super().__init__()
         self.learn = learner
-        self.experiment = experiment
+        self.experiment_run = experiment_run
 
     def on_batch_end(self, **kwargs):
         num_batch = kwargs['num_batch']
         epoch = kwargs['epoch']
-
-        self.experiment.log_metric('lr', self.learn.opt.lr, step=num_batch, epoch=epoch)
+        comet_experiment = self.experiment_run.comet_experiment
+        if comet_experiment:
+            comet_experiment.log_metric('lr', self.learn.opt.lr, step=num_batch, epoch=epoch)
 
 
 class RetryingSaveModelCalback(SaveModelCallback):

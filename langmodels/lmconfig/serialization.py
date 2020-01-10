@@ -5,7 +5,7 @@ import jsons
 from langmodels.lmconfig.datamodel import LMTrainingConfig, LMTrainingMetrics
 
 
-def dump_to_file(config: LMTrainingConfig, file: str) -> str:
+def dump_to_file(config: Union[LMTrainingConfig, LMTrainingMetrics], file: str) -> str:
     config_str = jsons.dumps(config)
     with open(file, 'w') as f:
         f.write(config_str)

@@ -102,9 +102,9 @@ class RetryingSaveModelCalback(SaveModelCallback):
     def on_epoch_end(self, epoch: int, **kwargs: Any) -> None:
         super().on_epoch_end(epoch, **kwargs)
         if self.get_monitor_value() < self.experiment_run.metric_values.bin_entropy:
-            self.experiment_run.metric_values.bin_entropy = self.get_monitor_value()
-            self.experiment_run.metric_values.best_epoch = self.on_epoch_end
-        self.experiment_run.metric_values.n_epochs = self.epoch
+            self.experiment_run.metric_values.bin_entropy = float(self.get_monitor_value())
+            self.experiment_run.metric_values.best_epoch = epoch
+        self.experiment_run.metric_values.n_epochs = epoch
 
     @retry(retry_on_exception=_retry_if_io_error, wait_exponential_multiplier=WAIT_MULTIPLIER, wait_exponential_max=WAIT_MAX)
     def on_train_end(self, **kwargs):

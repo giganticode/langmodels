@@ -1,8 +1,8 @@
-import logging
 import os
 from pprint import pformat
 
 import jsons
+import logging
 import torch
 from comet_ml import Experiment
 from fastai.basic_data import DataBunch
@@ -23,12 +23,11 @@ from dataprep.api.corpus import PreprocessedCorpus
 from dataprep.util import to_literal_str
 from langmodels.cuda_util import get_device_id
 from langmodels.file_util import check_path_exists, check_path_writable, get_all_files
-from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, \
-    RafaelsTrainingSchedule, TrainingProcedure, CosineLRSchedule, ExperimentRun, DeviceOptions, LMTrainingMetrics
-from langmodels.lmconfig.serialization import dump_to_file
-from langmodels.model import TrainedModel, create_custom_config, BEST_MODEL_FILE_NAME
-from langmodels.repository.load import load_from_path
+from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, RafaelsTrainingSchedule, TrainingProcedure, \
+    CosineLRSchedule, ExperimentRun, DeviceOptions, LMTrainingMetrics
+from langmodels.model import TrainedModel, create_custom_config, BEST_MODEL_FILE_NAME, METRICS_FILE_NAME
 from langmodels.nn import get_param_number
+from langmodels.repository.load import load_from_path
 from langmodels.tensor_ops import mrr
 from langmodels.training.data import EmptyDataBunch, create_databunch
 from langmodels.training.schedule import ReduceLRCallback
@@ -36,7 +35,8 @@ from langmodels.training.subepoch_files import EpochFileLoader
 from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, RetryingSaveModelCalback, \
     SaveTimePerEpochCallback
 from langmodels.util import HOME
-from langmodels.model import METRICS_FILE_NAME, CONFIG_FILE_NAME, VOCAB_FILE_NAME
+from langmodels.model import CONFIG_FILE_NAME, VOCAB_FILE_NAME
+from lmconfig.serialization import dump_to_file
 
 logger = logging.getLogger(__name__)
 
@@ -134,9 +134,9 @@ def add_callbacks(experiment_run: ExperimentRun, learner: Learner, vocab: Vocab,
     first_model_trained_callback = FirstModelTrainedCallback(learner, experiment_run)
     learner.callbacks.append(first_model_trained_callback)
 
-    save_every_epoch_callback = RetryingSaveModelCalback(learner, every='epoch', name='epoch')
+    save_every_epoch_callback = RetryingSaveModelCalback(learner, experiment_run, every='epoch', name='epoch')
     learner.callbacks.append(save_every_epoch_callback)
-    save_best_model_callback = RetryingSaveModelCalback(learner, every='improvement', name='best')
+    save_best_model_callback = RetryingSaveModelCalback(learner, experiment_run, every='improvement', name='best')
     learner.callbacks.append(save_best_model_callback)
 
     save_time_per_epoch_callback = SaveTimePerEpochCallback(learner, experiment_run)
@@ -191,8 +191,8 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
 
     model_file = os.path.join(experiment_run.path_to_trained_model, BEST_MODEL_FILE_NAME)
     size_of_model_file_in_bytes = os.stat(model_file).st_size
-    experiment_run.metrics.size_on_disk_mb = size_of_model_file_in_bytes * BYTES_IN_MB
-    save_metric_results(experiment_run.metrics, experiment_run.path_to_trained_model)
+    experiment_run.metric_values.size_on_disk_mb = size_of_model_file_in_bytes // BYTES_IN_MB
+    save_metric_results(experiment_run.metric_values, experiment_run.path_to_trained_model)
 
     # TODO export learner?
     return load_from_path(experiment_run.path_to_trained_model, force_use_cpu=True)

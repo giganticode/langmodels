@@ -1,13 +1,13 @@
 import logging
 import os
-import time
+import sys
+from typing import Any
 
+import time
 from comet_ml import Experiment
 from fastai.basic_train import LearnerCallback, Learner
-from fastai.callback import Callback
 from fastai.callbacks import SaveModelCallback
 from retrying import retry
-from typing import Any
 
 from langmodels.lmconfig.datamodel import ExperimentRun
 
@@ -29,10 +29,15 @@ def report_successful_experiment_to_comet(experiment: Experiment):
     experiment.log_parameter("model_available", True)
 
 
-class FirstModelTrainedCallback(LearnerCallback):
+class TrackingCallback(LearnerCallback):
     def __init__(self, learner: Learner, experiment_run: ExperimentRun):
         super().__init__(learner)
         self.experiment_run = experiment_run
+
+
+class FirstModelTrainedCallback(TrackingCallback):
+    def __init__(self, learner: Learner, experiment_run: ExperimentRun):
+        super().__init__(learner, experiment_run)
 
     def on_epoch_end(self, epoch: int, **kwargs: Any) -> None:
         if epoch == 0:
@@ -42,10 +47,9 @@ class FirstModelTrainedCallback(LearnerCallback):
                 report_successful_experiment_to_comet(self.experiment_run.comet_experiment)
 
 
-class SaveTimePerEpochCallback(LearnerCallback):
+class SaveTimePerEpochCallback(TrackingCallback):
     def __init__(self, learner: Learner, experiment_run: ExperimentRun):
-        super().__init__(learner)
-        self.experiment_run = experiment_run
+        super().__init__(learner, experiment_run)
         self.n_epochs = 0
         self.total_time_minutes = 0
 
@@ -55,16 +59,16 @@ class SaveTimePerEpochCallback(LearnerCallback):
     def on_epoch_end(self, **kwargs:Any) -> None:
         self.n_epochs += 1
         self.total_time_minutes += (time.time() - self.start_epoch_time) / 60
+        minutes_per_epoch = int(self.total_time_minutes / self.n_epochs)
+        self.experiment_run.metric_values.training_time_minutes_per_epoch = minutes_per_epoch
         comet_experiment = self.experiment_run.comet_experiment
         if comet_experiment:
-            comet_experiment.log_metric("minutes_per_epoch", int(self.total_time_minutes / self.n_epochs), epoch=self.n_epochs-1)
+            comet_experiment.log_metric("minutes_per_epoch", minutes_per_epoch, epoch=self.n_epochs-1)
 
 
-class LrLogger(Callback):
+class LrLogger(TrackingCallback):
     def __init__(self, learner, experiment_run: ExperimentRun = None):
-        super().__init__()
-        self.learn = learner
-        self.experiment_run = experiment_run
+        super().__init__(learner, experiment_run)
 
     def on_batch_end(self, **kwargs):
         num_batch = kwargs['num_batch']
@@ -75,9 +79,11 @@ class LrLogger(Callback):
 
 
 class RetryingSaveModelCalback(SaveModelCallback):
-    def __init__(self, learn: Learner, monitor: str = 'valid_loss', mode: str = 'auto', every: str = 'improvement',
-                 name: str = 'bestmodel'):
+    def __init__(self, learn: Learner, experiment_run: ExperimentRun, monitor: str = 'valid_loss',
+                 mode: str = 'auto', every: str = 'improvement', name: str = 'bestmodel'):
         super().__init__(learn, monitor, mode, every, name)
+        self.experiment_run = experiment_run
+        self.experiment_run.metric_values.bin_entropy = sys.maxsize
 
     def _retry_if_io_error(exception):
         """Return True if we should retry (in this case when it's an IOError), False otherwise"""
@@ -95,6 +101,10 @@ class RetryingSaveModelCalback(SaveModelCallback):
     @retry(retry_on_exception=_retry_if_io_error, wait_exponential_multiplier=WAIT_MULTIPLIER, wait_exponential_max=WAIT_MAX)
     def on_epoch_end(self, epoch: int, **kwargs: Any) -> None:
         super().on_epoch_end(epoch, **kwargs)
+        if self.get_monitor_value() < self.experiment_run.metric_values.bin_entropy:
+            self.experiment_run.metric_values.bin_entropy = self.get_monitor_value()
+            self.experiment_run.metric_values.best_epoch = self.on_epoch_end
+        self.experiment_run.metric_values.n_epochs = self.epoch
 
     @retry(retry_on_exception=_retry_if_io_error, wait_exponential_multiplier=WAIT_MULTIPLIER, wait_exponential_max=WAIT_MAX)
     def on_train_end(self, **kwargs):

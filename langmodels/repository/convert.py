@@ -7,12 +7,13 @@ import semver
 
 from langmodels import app_name
 from langmodels.lmconfig.datamodel import LMTrainingMetrics, LMTrainingConfig
-from langmodels.lmconfig.serialization import dump_config, load_config_form_dict
+from langmodels.lmconfig.serialization import dump_to_file, load_config_or_metrics_form_dict
 from langmodels.repository.settings import CONVERTERS_URL
+from langmodels.model import CONFIG_FILE_NAME, METRICS_FILE_NAME
 
 logger = logging.getLogger(__name__)
 
-CONVERTABLE_METADATA_FILES = ['config', 'metrics']
+CONVERTABLE_METADATA_FILES = [CONFIG_FILE_NAME, METRICS_FILE_NAME]
 
 
 def fetch_convertion_json(version: str) -> Dict[str, str]:
@@ -63,5 +64,5 @@ def convert_file_version(path: str, file_name: str, version_to_convert_to: str) 
         loaded_dict = jq(jq_transformation_string).transform(loaded_dict)
         version_in_file = loaded_dict['config_version']
 
-    converted_config: Union[LMTrainingMetrics, LMTrainingConfig] = load_config_form_dict(loaded_dict)
-    dump_config(converted_config, path)
+    converted_config: Union[LMTrainingMetrics, LMTrainingConfig] = load_config_or_metrics_form_dict(loaded_dict)
+    dump_to_file(converted_config, path)

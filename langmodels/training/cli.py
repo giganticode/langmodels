@@ -6,7 +6,7 @@ module = importlib.import_module('comet_ml')
 import jsons
 
 from langmodels.lmconfig.patch import patch_config
-from langmodels.lmconfig.serialization import load_config_from_file
+from langmodels.lmconfig.serialization import load_config_or_metrics_from_file
 
 from typing import Dict, Optional, Any
 
@@ -60,7 +60,7 @@ def handle_train(args) -> None:
     device = int(device) if device else 0
     path_to_config = get_option(args, '--config')
     try:
-        lm_training_config = load_config_from_file(path_to_config) if path_to_config else LMTrainingConfig()
+        lm_training_config = load_config_or_metrics_from_file(path_to_config) if path_to_config else LMTrainingConfig()
     except jsons.exceptions.DecodeError:
         raise ValueError(f"Could not deserialize a valid config from {path_to_config}")
 

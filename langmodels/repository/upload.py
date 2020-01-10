@@ -12,6 +12,7 @@ from langmodels.repository.load import _get_all_model_ids, MODEL_DATA_FILES, MOD
 from langmodels.repository.settings import MODEL_LIST_URL, PATH_TO_MODELS_ON_SERVER, SERVER_HOST_NAME, \
     PATH_TO_LOGS_ON_SERVER
 from langmodels.util import HOME
+from langmodels.model import TAGS_FILE_NAME
 
 
 def upload_model_to_registry(id: str, tags: Optional[List[str]] = None,
@@ -26,9 +27,8 @@ def upload_model_to_registry(id: str, tags: Optional[List[str]] = None,
 
         path_on_server_to_model = f'{PATH_TO_MODELS_ON_SERVER}/{id}'
         tags = tags if tags else []
-        with open(os.path.join(local_path_to_model, 'tags')) as f:
+        with open(os.path.join(local_path_to_model, TAGS_FILE_NAME)) as f:
             f.write(','.join(tags))
-        open(os.path.join(local_path_to_model, 'metrics')).close()
         md5_checksums = {}
         for file in MODEL_DATA_FILES:
             md5 = hashlib.md5(open(os.path.join(local_path_to_model, file)).read()).hexdigest()

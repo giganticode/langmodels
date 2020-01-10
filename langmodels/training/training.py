@@ -2,6 +2,7 @@ import logging
 import os
 from pprint import pformat
 
+import jsons
 import torch
 from comet_ml import Experiment
 from fastai.basic_data import DataBunch
@@ -23,9 +24,9 @@ from dataprep.util import to_literal_str
 from langmodels.cuda_util import get_device_id
 from langmodels.file_util import check_path_exists, check_path_writable, get_all_files
 from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, \
-    RafaelsTrainingSchedule, TrainingProcedure, CosineLRSchedule, ExperimentRun, DeviceOptions
-from langmodels.lmconfig.serialization import dump_config, dump_config_to_string, dump_config_to_json
-from langmodels.model import TrainedModel, create_custom_config
+    RafaelsTrainingSchedule, TrainingProcedure, CosineLRSchedule, ExperimentRun, DeviceOptions, LMTrainingMetrics
+from langmodels.lmconfig.serialization import dump_to_file
+from langmodels.model import TrainedModel, create_custom_config, BEST_MODEL_FILE_NAME
 from langmodels.repository.load import load_from_path
 from langmodels.nn import get_param_number
 from langmodels.tensor_ops import mrr
@@ -35,11 +36,11 @@ from langmodels.training.subepoch_files import EpochFileLoader
 from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, RetryingSaveModelCalback, \
     SaveTimePerEpochCallback
 from langmodels.util import HOME
+from langmodels.model import METRICS_FILE_NAME, CONFIG_FILE_NAME, VOCAB_FILE_NAME
 
 logger = logging.getLogger(__name__)
 
-VOCAB_FILE_NAME = 'vocab'
-CONFIG_FILE_NAME = 'config'
+BYTES_IN_MB = 1 << 20
 
 PATH_TO_PREP_DATASETS = os.environ['PATH_TO_PREP_DATASETS'] if 'PATH_TO_PREP_DATASETS' in os.environ \
     else os.path.join(HOME, 'prep-datasets')
@@ -78,14 +79,16 @@ def load_base_model_if_needed(learner: Learner, lm_training_config: LMTrainingCo
 
 def save_experiment_input(run: ExperimentRun, learner: Learner, vocab: Vocab):
     vocab.save(os.path.join(run.path_to_trained_model, VOCAB_FILE_NAME))
-    dump_config(run.config, os.path.join(run.path_to_trained_model, CONFIG_FILE_NAME))
+    dump_to_file(run.config, os.path.join(run.path_to_trained_model, CONFIG_FILE_NAME))
+    trainable_param_number = get_param_number(learner.model)
+    run.metric_values.trainable_params = trainable_param_number
     if run.comet_experiment:
-        save_params_to_comet(run.comet_experiment, run.config, vocab, get_param_number(learner.model))
+        save_params_to_comet(run.comet_experiment, run.config, vocab, trainable_param_number)
 
 
 def check_run_prerequisites(run: ExperimentRun) -> None:
     if run.config.base_model:
-        check_path_exists(os.path.join(run.config.base_model, 'best.pth'))
+        check_path_exists(os.path.join(run.config.base_model, BEST_MODEL_FILE_NAME))
     check_path_writable(run.path_to_trained_model)
 
 
@@ -116,7 +119,7 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
 
 def save_params_to_comet(experiment: Experiment, lm_training_config: LMTrainingConfig,
                          vocab: Vocab, trainable_params: int) -> Experiment:
-    flat_config = FlatDict(dump_config_to_json(lm_training_config))
+    flat_config = FlatDict(jsons.dump(lm_training_config))
     for name, value in flat_config.items():
         experiment.log_parameter(name, value)
     experiment.log_parameter("vocabulary", len(vocab.itos))
@@ -144,10 +147,14 @@ def add_callbacks(experiment_run: ExperimentRun, learner: Learner, vocab: Vocab,
         learner.callbacks.append(StopAfterNBatches(n_batches=2))
 
 
+def save_metric_results(metrics: LMTrainingMetrics, path_to_model: str):
+    dump_to_file(metrics, os.path.join(path_to_model, METRICS_FILE_NAME))
+
+
 def train(training_config: LMTrainingConfig = LMTrainingConfig(),
           device_options: DeviceOptions() = DeviceOptions(),
           tune=False, comet=True) -> TrainedModel:
-    logger.info(f'Using the following config: \n{pformat(dump_config_to_string(training_config))}')
+    logger.info(f'Using the following config: \n{pformat(jsons.dumps(training_config))}')
     experiment_run = ExperimentRun.with_config(training_config, device_options=device_options, comet=comet)
     check_run_prerequisites(experiment_run)
 
@@ -181,6 +188,11 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     print(f"Starting training... Model will be saved to {experiment_run.perm_path_to_model} "
           f"(Saving config and vocab to {experiment_run.path_to_trained_model} before getting the first trained model)")
     choose_schedule_and_fit(learner, training_config.training_procedure)
+
+    model_file = os.path.join(experiment_run.path_to_trained_model, BEST_MODEL_FILE_NAME)
+    size_of_model_file_in_bytes = os.stat(model_file).st_size
+    experiment_run.metrics.size_on_disk_mb = size_of_model_file_in_bytes * BYTES_IN_MB
+    save_metric_results(experiment_run.metrics, experiment_run.path_to_trained_model)
 
     # TODO export learner?
     return load_from_path(experiment_run.path_to_trained_model, force_use_cpu=True)

@@ -20,7 +20,7 @@ from langmodels.beamsearch import beam_search
 from langmodels.cuda_util import get_device, get_map_location
 from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig, GruArch, \
     LMTrainingMetrics
-from langmodels.lmconfig.serialization import load_config_from_file, read_value_from_file
+from langmodels.lmconfig.serialization import load_config_or_metrics_from_file, read_value_from_file
 from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
 from langmodels.util import to_binary_entropy
 
@@ -28,6 +28,12 @@ logger = logging.getLogger(__name__)
 
 
 PAD_TOKEN_INDEX = 1
+
+BEST_MODEL_FILE_NAME = 'best.pth'
+METRICS_FILE_NAME = 'metrics'
+CONFIG_FILE_NAME = 'config'
+VOCAB_FILE_NAME = 'vocab'
+TAGS_FILE_NAME = 'tags'
 
 
 def create_custom_lstm_or_gru_config(arch: Union[GruArch, LstmArch]):
@@ -162,19 +168,19 @@ class TrainedModel(object):
             raise FileNotFoundError(f'Path does not exist: {path}')
         self._force_use_cpu = force_use_cpu
         self._id = os.path.basename(path)
-        path_to_config_file = os.path.join(path, 'config')
-        path_to_metrics_file = os.path.join(path, 'metrics')
-        path_to_tags_file = os.path.join(path, 'tags')
+        path_to_config_file = os.path.join(path, CONFIG_FILE_NAME)
+        path_to_metrics_file = os.path.join(path, METRICS_FILE_NAME)
+        path_to_tags_file = os.path.join(path, TAGS_FILE_NAME)
         self._metrics = None
         self._config = None
         self._tags = []
         self._context: List[str] = []
         try:
-            self._config: LMTrainingConfig = load_config_from_file(path_to_config_file)
+            self._config: LMTrainingConfig = load_config_or_metrics_from_file(path_to_config_file)
         except FileNotFoundError:
             logger.warning(f'Config file not found: {path_to_config_file}')
         try:
-            self._metrics: LMTrainingMetrics = load_config_from_file(os.path.join(path, 'metrics'))
+            self._metrics: LMTrainingMetrics = load_config_or_metrics_from_file(os.path.join(path, METRICS_FILE_NAME))
         except FileNotFoundError:
             logger.warning(f'File with metrics not found: {path_to_metrics_file}')
         if os.path.exists(path_to_tags_file):
@@ -188,7 +194,7 @@ class TrainedModel(object):
             # we might want to load only description without loading actual weights when we want
             # to save time when loading multiple models to choose one of them to work with
 
-            self._original_vocab = Vocab.load(os.path.join(path, 'vocab'))
+            self._original_vocab = Vocab.load(os.path.join(path, VOCAB_FILE_NAME))
             term_vocab, self._first_nonterm_token = _create_term_vocab(self._original_vocab)
             self._model, self._vocab = self._load_model(path, term_vocab)
             to_test_mode(self._model)
@@ -226,7 +232,7 @@ class TrainedModel(object):
         return self._vocab
 
     def _load_model(self, path: str, custom_vocab: Optional[Vocab] = None) -> Tuple[SequentialRNN, Vocab]:
-        path_to_model = os.path.join(path, 'best.pth')
+        path_to_model = os.path.join(path, BEST_MODEL_FILE_NAME)
         logger.debug(f"Loading model from: {path_to_model} ...")
 
         vocab = custom_vocab if custom_vocab else self._original_vocab

@@ -1,9 +1,11 @@
 import os
+
+import jsons
 import sys
 from dataclasses import dataclass, field, asdict
 
 from comet_ml import Experiment
-from typing import Optional, Callable, Tuple, Union, List, Type
+from typing import Optional, Callable, Tuple, Union, List, Type, Dict
 
 import dataprep.api.corpus as corpus_api
 from dataprep.api.corpus import PreprocessedCorpus
@@ -92,6 +94,25 @@ class PrepFunction(object):
                                  extensions=corpus.extensions)
 
         return prep_corpus
+
+
+def prep_function_serializer(prep_function: PrepFunction, **kwargs):
+    return {'callable': prep_function.callable.__name__,
+            'params': prep_function.params,
+            'options':  jsons.dump(prep_function.options)}
+
+
+def prep_function_deserializer(dct: Dict, cls: Type[PrepFunction], **kwargs) -> PrepFunction:
+    import dataprep.api.corpus as api
+    return cls(
+        callable=getattr(api, dct['callable']),
+        params=dct['params'],
+        options=jsons.load(dct['options'], PrepFunctionOptions)
+    )
+
+
+jsons.set_serializer(prep_function_serializer, PrepFunction)
+jsons.set_deserializer(prep_function_deserializer, cls=PrepFunction)
 
 
 @dataclass(frozen=True)
@@ -203,24 +224,44 @@ class LMTrainingConfig(object):
 
 
 def create_comet_experiment(run_id: str):
-    experiment = Experiment()
+    experiment = Experiment('8KN4SL1OwKieQYocdsDFX5Oi5')
     experiment.set_name(run_id)
     return experiment
 
 
+@dataclass
+class LMTrainingMetrics(object):
+    bin_entropy: Optional[float] = None
+    training_time_minutes_per_epoch: Optional[int] = None
+    n_epochs: Optional[int] = None
+    best_epoch: Optional[int] = None
+    trainable_params: Optional[int] = None
+    size_on_disk_mb: Optional[int] = None
+    config_version: str = CONFIG_VERSION
+
+    def __post_init__(self):
+        if self.config_version != CONFIG_VERSION:
+            raise TypeError(f'Trying to deserealize '
+                            f'{self.__name__} {self.config_version} '
+                            f'to {self.__name__} {CONFIG_VERSION} object')
+
+
 class ExperimentRun:
-    def __init__(self, run_id: str, config: LMTrainingConfig, device_options: DeviceOptions, comet_experiment: Optional):
+    def __init__(self, run_id: str, config: LMTrainingConfig,
+                 device_options: DeviceOptions, comet_experiment: Optional, metric_values: LMTrainingMetrics):
         self.id = run_id
         self.config = config
         self.gpu = device_options
         self.comet_experiment: Optional[Experiment] = comet_experiment
         self.first_model_trained = False
+        self.metric_values = metric_values
 
     @classmethod
     def with_config(cls, config: LMTrainingConfig, device_options: DeviceOptions = DeviceOptions(), comet: bool = True):
         run_id = ExperimentRun._generate_run_id(config)
         comet_experiment = create_comet_experiment(run_id) if comet else None
-        return cls(run_id, config, device_options, comet_experiment)
+        metric_values = LMTrainingMetrics()
+        return cls(run_id, config, device_options, comet_experiment, metric_values)
 
     def set_first_model_trained(self):
         self.first_model_trained = True
@@ -252,20 +293,3 @@ class ExperimentRun:
     @property
     def perm_path_to_model(self) -> str:
         return os.path.join(MODEL_ZOO_PATH, self.id)
-
-
-@dataclass
-class LMTrainingMetrics(object):
-    bin_entropy: float
-    training_time_minutes_per_epoch: int
-    n_epochs: int
-    best_epoch: int
-    trainable_params: int
-    size_on_disk_mb: int
-    config_version: str = CONFIG_VERSION
-
-    def __post_init__(self):
-        if self.config_version != CONFIG_VERSION:
-            raise TypeError(f'Trying to deserealize '
-                            f'{self.__name__} {self.config_version} '
-                            f'to {self.__name__} {CONFIG_VERSION} object')

@@ -36,7 +36,7 @@ from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, Re
     SaveTimePerEpochCallback
 from langmodels.util import HOME
 from langmodels.model import CONFIG_FILE_NAME, VOCAB_FILE_NAME
-from lmconfig.serialization import dump_to_file
+from langmodels.lmconfig.serialization import dump_to_file
 
 logger = logging.getLogger(__name__)
 

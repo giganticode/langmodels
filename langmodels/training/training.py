@@ -29,7 +29,7 @@ from langmodels.model import TrainedModel, create_custom_config, BEST_MODEL_FILE
 from langmodels.nn import get_param_number
 from langmodels.repository.load import load_from_path
 from langmodels.tensor_ops import mrr
-from langmodels.training.data import EmptyDataBunch, create_databunch
+from langmodels.training.data import EmptyDataBunch, create_databunch, binary_cross_entropy_flat
 from langmodels.training.schedule import ReduceLRCallback
 from langmodels.training.subepoch_files import EpochFileLoader
 from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, RetryingSaveModelCalback, \
@@ -113,7 +113,7 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
             """Save the extra outputs for later and only returns the true output."""
             return {'last_output': last_output[0]}
 
-    return validate(trained_model.model, databunch.valid_dl, loss_func=FlattenedLoss(CrossEntropyLoss),
+    return validate(trained_model.model, databunch.valid_dl, loss_func=binary_cross_entropy_flat(),
                     cb_handler=CallbackHandler([DetupleCallback()]))
 
 

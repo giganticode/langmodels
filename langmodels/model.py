@@ -345,7 +345,7 @@ class TrainedModel(object):
                 return []
 
             loss_list = []
-            max_subtokens_per_chunk = 1000
+            max_subtokens_per_chunk = 200
             # if the line is too big, we break it down to chunks to fit it into gpu memory
             # big chunks require more memory, small chunks require more time
             n_chunks = (len(prep_text)-1) // max_subtokens_per_chunk + 1

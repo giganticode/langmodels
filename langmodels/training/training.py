@@ -128,14 +128,14 @@ def save_params_to_comet(experiment: Experiment, lm_training_config: LMTrainingC
     return experiment
 
 
-def add_callbacks(experiment_run: ExperimentRun, learner: Learner, vocab: Vocab, tune: bool) -> None:
+def add_callbacks(experiment_run: ExperimentRun, learner: Learner, vocab: Vocab, tune: bool, save_every_epoch: bool) -> None:
     learner.callbacks.append(LrLogger(learner, experiment_run))
 
     first_model_trained_callback = FirstModelTrainedCallback(learner, experiment_run)
     learner.callbacks.append(first_model_trained_callback)
-
-    save_every_epoch_callback = RetryingSaveModelCalback(learner, experiment_run, every='epoch', name='epoch')
-    learner.callbacks.append(save_every_epoch_callback)
+    if save_every_epoch:
+        save_every_epoch_callback = RetryingSaveModelCalback(learner, experiment_run, every='epoch', name='epoch')
+        learner.callbacks.append(save_every_epoch_callback)
     save_best_model_callback = RetryingSaveModelCalback(learner, experiment_run, every='improvement', name='best')
     learner.callbacks.append(save_best_model_callback)
 
@@ -153,7 +153,7 @@ def save_metric_results(metrics: LMTrainingMetrics, path_to_model: str):
 
 def train(training_config: LMTrainingConfig = LMTrainingConfig(),
           device_options: DeviceOptions() = DeviceOptions(),
-          tune=False, comet=True) -> TrainedModel:
+          tune: bool = False, comet: bool = True, save_every_epoch: bool = False) -> TrainedModel:
     logger.info(f'Using the following config: \n{pformat(jsons.dumps(training_config))}')
     experiment_run = ExperimentRun.with_config(training_config, device_options=device_options, comet=comet)
     check_run_prerequisites(experiment_run)
@@ -182,7 +182,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
 
     save_experiment_input(experiment_run, learner, vocab)
 
-    add_callbacks(experiment_run, learner, vocab, tune)
+    add_callbacks(experiment_run, learner, vocab, tune, save_every_epoch=save_every_epoch)
 
     load_base_model_if_needed(learner, training_config)
 

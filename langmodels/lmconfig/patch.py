@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from typing import Dict, Union, TypeVar
 
@@ -54,8 +54,8 @@ def patch_object(a: T, params_to_be_patched: TreeLikeDict) -> T:
     >>> patch_object(A(), {})
     A(a=1, b='2', c=C(d=3.0), d=True)
 
-    >>> patch_object(A(), {'c': {'d': '91.0'}, 'b': '89', 'd': 'False'})
-    A(a=1, b='89', c=C(d=91.0), d=False)
+    >>> patch_object(A(a=79), {'c': {'d': '91.0'}, 'b': '89', 'd': 'False'})
+    A(a=79, b='89', c=C(d=91.0), d=False)
     """
     patched_attributes = {}
     for k, v in params_to_be_patched.items():
@@ -65,5 +65,4 @@ def patch_object(a: T, params_to_be_patched: TreeLikeDict) -> T:
         else:
             tp = type(attr_to_patch)
             patched_attributes[k] = tp(v) if tp != bool else v.lower() == 'true'
-    a_type = type(a)
-    return a_type(**patched_attributes)
+    return replace(a, **patched_attributes)

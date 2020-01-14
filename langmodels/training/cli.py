@@ -30,7 +30,7 @@ def is_option_true(args: Dict, option: str) -> bool:
 
 @dsc.command()
 def train_handler(args):
-    """usage: {program} train [--config <config> | --patch <patch>] [--fallback-to-cpu] [--tune] [--disable-comet] [--device=<device>]
+    """usage: {program} train [--config <config>] [--patch <patch>] [--fallback-to-cpu] [--tune] [--disable-comet] [--device=<device>]
 
     Trains a language model according to the given config.
 

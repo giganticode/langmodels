@@ -159,6 +159,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     check_run_prerequisites(experiment_run)
 
     prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply(training_config.corpus,
+                                                                              calc_vocab=True,
                                                                               output_path=PATH_TO_PREP_DATASETS)
     vocab = create_vocab_for_lm(prep_corpus)
     print(f"Vocab size: {len(vocab.itos)}")

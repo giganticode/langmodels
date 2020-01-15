@@ -161,6 +161,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     learner = language_model_learner(empty_data_bunch, arch_class,
                                      drop_mult=training_config.arch.drop.multiplier,
                                      config=config, pretrained=not config, metrics=[accuracy, mrr],
+                                     clip=training_config.arch.clip,
                                      callback_fns=[PeakMemMetric] if torch.cuda.is_available() else [],
                                      path=os.path.dirname(experiment_run.path_to_trained_model),
                                      model_dir=os.path.basename(experiment_run.path_to_trained_model))

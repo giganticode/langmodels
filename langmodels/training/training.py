@@ -117,8 +117,8 @@ def save_params_to_comet(experiment: Experiment, lm_training_config: LMTrainingC
     for name, value in flat_config.items():
         experiment.log_parameter(name, value)
     experiment.log_parameter("vocabulary", len(vocab.itos))
-    experiment.log_parameter(MODEL_AVAILABLE_METRIC_NAME, False)
-    experiment.log_parameter(TERMINATED_NORMALLY_METRIC_NAME, False)
+    experiment.log_metric(MODEL_AVAILABLE_METRIC_NAME, False)
+    experiment.log_metric(TERMINATED_NORMALLY_METRIC_NAME, False)
     return experiment
 
 

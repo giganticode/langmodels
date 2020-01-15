@@ -126,7 +126,7 @@ class MetricSavingCallback(TrackerCallback):
         self.start_epoch_time = time.time()
 
     def on_epoch_end(self, epoch: int, **kwargs: Any) -> None:
-        super().on_epoch_end(epoch, **kwargs)
+        super().on_epoch_end(**kwargs)
 
         self.metric_values.n_epochs = epoch
         if self.get_monitor_value() < self.metric_values.bin_entropy:

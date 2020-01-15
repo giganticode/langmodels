@@ -30,7 +30,8 @@ from langmodels.training.data import EmptyDataBunch, create_databunch, binary_cr
 from langmodels.training.schedule import ReduceLRCallback
 from langmodels.training.subepoch_files import EpochFileLoader
 from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, RetryingSaveModelCalback, \
-    MetricSavingCallback
+    MetricSavingCallback, report_experiment_terminated_mormally, TERMINATED_NORMALLY_METRIC_NAME, \
+    MODEL_AVAILABLE_METRIC_NAME
 from langmodels.util import HOME
 from langmodels.model import CONFIG_FILE_NAME, VOCAB_FILE_NAME
 from langmodels.lmconfig.serialization import dump_to_file
@@ -116,7 +117,8 @@ def save_params_to_comet(experiment: Experiment, lm_training_config: LMTrainingC
     for name, value in flat_config.items():
         experiment.log_parameter(name, value)
     experiment.log_parameter("vocabulary", len(vocab.itos))
-    experiment.log_parameter("model_available", False)
+    experiment.log_parameter(MODEL_AVAILABLE_METRIC_NAME, False)
+    experiment.log_parameter(TERMINATED_NORMALLY_METRIC_NAME, False)
     return experiment
 
 
@@ -177,6 +179,8 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     print(f"Starting training... Model will be saved to {experiment_run.perm_path_to_model} "
           f"(Saving config and vocab to {experiment_run.path_to_trained_model} before getting the first trained model)")
     choose_schedule_and_fit(learner, training_config.training_procedure)
+    if experiment_run.comet_experiment:
+        report_experiment_terminated_mormally(experiment_run.comet_experiment)
 
     # TODO export learner?
     return load_from_path(experiment_run.path_to_trained_model, force_use_cpu=True)

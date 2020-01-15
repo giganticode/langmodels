@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 
 BYTES_IN_MB = 1 << 20
 
+MODEL_AVAILABLE_METRIC_NAME = 'model available'
+TERMINATED_NORMALLY_METRIC_NAME = 'terminated normally'
+
 
 def change_path_to_permanent(experiment_run: ExperimentRun, learner: Learner) -> None:
     old_full_path: str = str(learner.path / learner.model_dir)
@@ -30,8 +33,12 @@ def change_path_to_permanent(experiment_run: ExperimentRun, learner: Learner) ->
     os.rename(old_full_path, new_full_path)
 
 
-def report_successful_experiment_to_comet(experiment: Experiment):
-    experiment.log_parameter("model_available", True)
+def report_successful_experiment_to_comet(experiment: Experiment) -> None:
+    experiment.log_metric(MODEL_AVAILABLE_METRIC_NAME, True)
+
+
+def report_experiment_terminated_mormally(experiment: Experiment) -> None:
+    experiment.log_metric(TERMINATED_NORMALLY_METRIC_NAME, True)
 
 
 class ExperimentTrackingCallback(LearnerCallback):

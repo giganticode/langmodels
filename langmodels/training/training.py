@@ -10,12 +10,10 @@ from fastai.basic_train import validate
 from fastai.callback import CallbackHandler, Callback
 from fastai.callbacks.mem import PeakMemMetric
 from fastai.callbacks.misc import StopAfterNBatches
-from fastai.layers import FlattenedLoss
 from fastai.metrics import accuracy
 from fastai.text import Vocab, language_model_learner
 from fastai.train import fit_one_cycle, Learner, EarlyStoppingCallback
 from flatdict import FlatDict
-from torch.nn import CrossEntropyLoss
 from typing import Optional, Tuple
 
 import dataprep.api.corpus as api
@@ -24,23 +22,20 @@ from dataprep.util import to_literal_str
 from langmodels.cuda_util import get_device_id
 from langmodels.file_util import check_path_exists, check_path_writable, get_all_files
 from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, RafaelsTrainingSchedule, TrainingProcedure, \
-    CosineLRSchedule, ExperimentRun, DeviceOptions, LMTrainingMetrics
-from langmodels.model import TrainedModel, create_custom_config, BEST_MODEL_FILE_NAME, METRICS_FILE_NAME
-from langmodels.nn import get_param_number
+    CosineLRSchedule, ExperimentRun, DeviceOptions
+from langmodels.model import TrainedModel, create_custom_config, BEST_MODEL_FILE_NAME
 from langmodels.repository.load import load_from_path
 from langmodels.tensor_ops import mrr
 from langmodels.training.data import EmptyDataBunch, create_databunch, binary_cross_entropy_flat
 from langmodels.training.schedule import ReduceLRCallback
 from langmodels.training.subepoch_files import EpochFileLoader
 from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, RetryingSaveModelCalback, \
-    SaveTimePerEpochCallback
+    MetricSavingCallback
 from langmodels.util import HOME
 from langmodels.model import CONFIG_FILE_NAME, VOCAB_FILE_NAME
 from langmodels.lmconfig.serialization import dump_to_file
 
 logger = logging.getLogger(__name__)
-
-BYTES_IN_MB = 1 << 20
 
 PATH_TO_PREP_DATASETS = os.environ['PATH_TO_PREP_DATASETS'] if 'PATH_TO_PREP_DATASETS' in os.environ \
     else os.path.join(HOME, 'prep-datasets')
@@ -80,10 +75,8 @@ def load_base_model_if_needed(learner: Learner, lm_training_config: LMTrainingCo
 def save_experiment_input(run: ExperimentRun, learner: Learner, vocab: Vocab):
     vocab.save(os.path.join(run.path_to_trained_model, VOCAB_FILE_NAME))
     dump_to_file(run.config, os.path.join(run.path_to_trained_model, CONFIG_FILE_NAME))
-    trainable_param_number = get_param_number(learner.model)
-    run.metric_values.trainable_params = trainable_param_number
     if run.comet_experiment:
-        save_params_to_comet(run.comet_experiment, run.config, vocab, trainable_param_number)
+        save_params_to_comet(run.comet_experiment, run.config, vocab)
 
 
 def check_run_prerequisites(run: ExperimentRun) -> None:
@@ -118,12 +111,11 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
 
 
 def save_params_to_comet(experiment: Experiment, lm_training_config: LMTrainingConfig,
-                         vocab: Vocab, trainable_params: int) -> Experiment:
+                         vocab: Vocab) -> Experiment:
     flat_config = FlatDict(jsons.dump(lm_training_config))
     for name, value in flat_config.items():
         experiment.log_parameter(name, value)
     experiment.log_parameter("vocabulary", len(vocab.itos))
-    experiment.log_parameter("trainable_params", trainable_params)
     experiment.log_parameter("model_available", False)
     return experiment
 
@@ -139,16 +131,12 @@ def add_callbacks(experiment_run: ExperimentRun, learner: Learner, vocab: Vocab,
     save_best_model_callback = RetryingSaveModelCalback(learner, experiment_run, every='improvement', name='best')
     learner.callbacks.append(save_best_model_callback)
 
-    save_time_per_epoch_callback = SaveTimePerEpochCallback(learner, experiment_run)
-    learner.callbacks.append(save_time_per_epoch_callback)
+    metric_saving_callback = MetricSavingCallback(learner, experiment_run)
+    learner.callbacks.append(metric_saving_callback)
 
     if tune:
         logger.warning("Tune mode is ON!")
         learner.callbacks.append(StopAfterNBatches(n_batches=2))
-
-
-def save_metric_results(metrics: LMTrainingMetrics, path_to_model: str):
-    dump_to_file(metrics, os.path.join(path_to_model, METRICS_FILE_NAME))
 
 
 def train(training_config: LMTrainingConfig = LMTrainingConfig(),
@@ -189,11 +177,6 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     print(f"Starting training... Model will be saved to {experiment_run.perm_path_to_model} "
           f"(Saving config and vocab to {experiment_run.path_to_trained_model} before getting the first trained model)")
     choose_schedule_and_fit(learner, training_config.training_procedure)
-
-    model_file = os.path.join(experiment_run.path_to_trained_model, BEST_MODEL_FILE_NAME)
-    size_of_model_file_in_bytes = os.stat(model_file).st_size
-    experiment_run.metric_values.size_on_disk_mb = size_of_model_file_in_bytes // BYTES_IN_MB
-    save_metric_results(experiment_run.metric_values, experiment_run.path_to_trained_model)
 
     # TODO export learner?
     return load_from_path(experiment_run.path_to_trained_model, force_use_cpu=True)

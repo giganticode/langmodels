@@ -248,20 +248,18 @@ class LMTrainingMetrics(object):
 
 class ExperimentRun:
     def __init__(self, run_id: str, config: LMTrainingConfig,
-                 device_options: DeviceOptions, comet_experiment: Optional, metric_values: LMTrainingMetrics):
+                 device_options: DeviceOptions, comet_experiment: Optional):
         self.id = run_id
         self.config = config
         self.gpu = device_options
         self.comet_experiment: Optional[Experiment] = comet_experiment
         self.first_model_trained = False
-        self.metric_values = metric_values
 
     @classmethod
     def with_config(cls, config: LMTrainingConfig, device_options: DeviceOptions = DeviceOptions(), comet: bool = True):
         run_id = ExperimentRun._generate_run_id(config)
         comet_experiment = create_comet_experiment(run_id) if comet else None
-        metric_values = LMTrainingMetrics()
-        return cls(run_id, config, device_options, comet_experiment, metric_values)
+        return cls(run_id, config, device_options, comet_experiment)
 
     def set_first_model_trained(self):
         self.first_model_trained = True

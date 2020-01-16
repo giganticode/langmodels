@@ -286,11 +286,18 @@ class LMTrainingConfig(object):
             jsons.set_deserializer(field_based_deserializer_func, cls=TrainingSchedule, fork_inst=cls._serializer)
             jsons.set_deserializer(PrepFunction.deserializer, cls=PrepFunction, fork_inst=cls._serializer)
 
+            jsons.set_serializer(jsons.default_object_serializer, cls=cls, fork_inst=cls._serializer)
+            jsons.set_serializer(PrepFunction.serializer, cls=PrepFunction, fork_inst=cls._serializer)
+
         return cls._serializer
 
     @staticmethod
     def deserializer(dct: Dict[str, Any], cls: Type['LMTrainingConfig'], **kwargs) -> 'LMTrainingConfig':
         return jsons.load(dct, cls, fork_inst=cls.get_serializer())
+
+    @staticmethod
+    def serializer(config: 'LMTrainingConfig', **kwargs) -> Dict[str, Any]:
+        return jsons.dump(config, fork_inst=LMTrainingConfig.get_serializer(), strip_privates=True)
 
     def __post_init__(self):
         if self.config_version != CONFIG_VERSION:
@@ -369,5 +376,5 @@ class ExperimentRun:
         return os.path.join(MODEL_ZOO_PATH, self.id)
 
 
-jsons.set_serializer(PrepFunction.serializer, cls=PrepFunction)
+jsons.set_serializer(LMTrainingConfig.serializer, cls=LMTrainingConfig)
 jsons.set_deserializer(LMTrainingConfig.deserializer, cls=LMTrainingConfig)

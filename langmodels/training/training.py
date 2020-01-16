@@ -51,7 +51,8 @@ def choose_schedule_and_fit(learner: Learner, training_procedure: TrainingProced
     if isinstance(schedule, RafaelsTrainingSchedule):
         reduce_lr_callback = ReduceLRCallback(learner,
                                               mult_coeff=schedule.mult_coeff,
-                                              max_times_lr_decrease=schedule.max_lr_reduction_times)
+                                              max_times_lr_decrease=schedule.max_lr_reduction_times,
+                                              patience=schedule.patience)
         learner.callbacks.append(reduce_lr_callback)
         learner.fit(epochs=schedule.max_epochs, lr=schedule.init_lr, wd=training_procedure.weight_decay)
     elif isinstance(schedule, CosineLRSchedule):

@@ -61,6 +61,7 @@ class RafaelsTrainingSchedule(TrainingSchedule):
     mult_coeff: float = 0.5
     max_epochs: int = 50
     max_lr_reduction_times: int = 6
+    patience: int = 0
 
 
 @dataclass(frozen=True)

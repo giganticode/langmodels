@@ -62,7 +62,7 @@ def handle_train(args) -> None:
     device = int(device) if device else 0
     path_to_config = get_option(args, '--config')
     try:
-        lm_training_config = load_config_or_metrics_from_file(path_to_config) if path_to_config else LMTrainingConfig()
+        lm_training_config = load_config_or_metrics_from_file(path_to_config, LMTrainingConfig) if path_to_config else LMTrainingConfig()
     except jsons.exceptions.DecodeError:
         raise ValueError(f"Could not deserialize a valid config from {path_to_config}")
 

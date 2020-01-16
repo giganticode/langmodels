@@ -1,15 +1,20 @@
 import os
+import re
+
+import torch
+from functools import partial
 
 import jsons
 import sys
 from dataclasses import dataclass, field, asdict
 
 from comet_ml import Experiment
-from typing import Optional, Callable, Tuple, Union, List, Type, Dict
+from torch import optim
+from typing import Optional, Callable, Tuple, List, Type, Dict, Any
 
 import dataprep.api.corpus as corpus_api
 from dataprep.api.corpus import PreprocessedCorpus
-from fastai.text import AWD_LSTM, Transformer, TransformerXL, Activation
+from fastai.text import AWD_LSTM, Transformer, Activation
 
 from langmodels import MODEL_ZOO_PATH, __version__, __major_version__
 from langmodels.nn import GRU
@@ -38,11 +43,20 @@ class RegFn(object):
 
 @dataclass(frozen=True)
 class TrainingSchedule(object):
-    pass
+    name: str
+    _serializer: Any = None
+
+    @classmethod
+    def get_serializer(cls):
+        if not cls._serializer:
+            cls._serializer = jsons.fork()
+
+        return cls._serializer
 
 
 @dataclass(frozen=True)
 class RafaelsTrainingSchedule(TrainingSchedule):
+    name: str = 'rafael'
     init_lr: float = 1e-4
     mult_coeff: float = 0.5
     max_epochs: int = 50
@@ -56,6 +70,7 @@ class EarlyStop(object):
 
 @dataclass(frozen=True)
 class CosineLRSchedule(TrainingSchedule):
+    name: str = 'cosine'
     max_lr: float = 1e-4
     cyc_len: int = 3
     max_epochs: int = 30
@@ -95,63 +110,114 @@ class PrepFunction(object):
 
         return prep_corpus
 
+    @staticmethod
+    def serializer(prep_function: 'PrepFunction', **kwargs) -> Dict[str, Any]:
+        return {'callable': prep_function.callable.__name__,
+                'params': prep_function.params,
+                'options':  jsons.dump(prep_function.options)}
 
-def prep_function_serializer(prep_function: PrepFunction, **kwargs):
-    return {'callable': prep_function.callable.__name__,
-            'params': prep_function.params,
-            'options':  jsons.dump(prep_function.options)}
-
-
-def prep_function_deserializer(dct: Dict, cls: Type[PrepFunction], **kwargs) -> PrepFunction:
-    import dataprep.api.corpus as api
-    return cls(
-        callable=getattr(api, dct['callable']),
-        params=dct['params'],
-        options=jsons.load(dct['options'], PrepFunctionOptions)
-    )
-
-
-jsons.set_serializer(prep_function_serializer, PrepFunction)
-jsons.set_deserializer(prep_function_deserializer, cls=PrepFunction)
+    @staticmethod
+    def deserializer(dct: Dict[str, Any], cls: Type['PrepFunction'], **kwargs) -> 'PrepFunction':
+        import dataprep.api.corpus as api
+        return cls(
+            callable=getattr(api, dct['callable']),
+            params=dct['params'],
+            options=jsons.load(dct['options'], PrepFunctionOptions)
+        )
 
 
 @dataclass(frozen=True)
-class LstmArch(object):
+class Optimizer(object):
+    name: str
+    _serializer: Any = None
+
+    @classmethod
+    def get_serializer(cls):
+        if not cls._serializer:
+            cls._serializer = jsons.fork()
+
+        return cls._serializer
+
+
+@dataclass(frozen=True)
+class SGD(Optimizer):
+    name: str = 'sgd'
+
+    def get_callable(self):
+        return torch.optim.SGD
+
+
+@dataclass(frozen=True)
+class Adam(Optimizer):
+    name: str = 'Adam'
+    betas: Tuple[float, float] = (0.9, 0.99)
+
+    def get_callable(self):
+        return partial(optim.Adam, betas=self.betas)
+
+
+def camel_case_to_snake_case(name: str) -> str:
+    return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
+
+
+def field_based_deserializer_func(dct: Dict[str, Any], cls: Type, **kwargs) -> Any:
+    all_arch_classes = cls.__subclasses__()
+    field_name = 'name'
+    for arch_class in all_arch_classes:
+        if getattr(arch_class, field_name) == dct[field_name]:
+            return jsons.load(dct, arch_class, fork_inst=arch_class.get_serializer())
+    raise ValueError(f'Unknown {cls.__name__}: {dct[field_name]}')
+
+
+@dataclass(frozen=True)
+class Arch(object):
+    name: str
+    _serializer: Any = None
+
+    @classmethod
+    def get_serializer(cls):
+        if not cls._serializer:
+            cls._serializer = jsons.fork()
+            jsons.set_deserializer(field_based_deserializer_func, cls=Optimizer, fork_inst=cls._serializer)
+
+        return cls._serializer
+
+
+@dataclass(frozen=True)
+class LstmArch(Arch):
+    name: str = 'lstm'
     bidir: bool = False
     qrnn: bool = False
     emb_sz: int = 1024
     n_hid: int = 1024
     n_layers: int = 3
-    adam_betas: Tuple[float, float] = (0.7, 0.99)
+    optimizer: Optimizer = Adam()
     clip: float = 0.3
     reg_fn: RegFn = RegFn()
     drop: Dropouts = Dropouts()
     tie_weights: bool = True
     out_bias: bool = True
-    lstm: bool = True
 
-    def __post_init__(self):
-        if not self.lstm:
-            raise TypeError(f'Value of lstm field in LstmArch must be set to True')
+    def get_module(self):
+        return AWD_LSTM
 
 
 @dataclass(frozen=True)
-class GruArch(object):
+class GruArch(Arch):
+    name: str = 'gru'
     bidir: bool = False
     emb_sz: int = 1024
     n_hid: int = 1024
     n_layers: int = 3
-    adam_betas: Tuple[float, float] = (0.7, 0.99)
+    optimizer: Optimizer = Adam()
     clip: float = 0.3
     reg_fn: RegFn = RegFn()
     drop: Dropouts = Dropouts()
     tie_weights: bool = True
     out_bias: bool = True
-    gru: bool = True
 
-    def __post_init__(self):
-        if not self.gru:
-            raise TypeError(f'Value of gru field in GruArch must be set to True')
+    def get_module(self):
+        return GRU
 
 
 @dataclass(frozen=True)
@@ -165,7 +231,8 @@ class TransformerDropouts(object):
 
 
 @dataclass(frozen=True)
-class TransformerArch(object):
+class TransformerArch(Arch):
+    arch: str = 'transformer'
     ctx_len: int = 256
     n_layers: int = 3
     n_heads: int = 6
@@ -181,10 +248,13 @@ class TransformerArch(object):
     out_bias: bool = False
     mask: bool = True
 
+    def get_module(self):
+        return Transformer
+
 
 @dataclass(frozen=True)
 class TrainingProcedure(object):
-    schedule: Union[CosineLRSchedule, RafaelsTrainingSchedule] = RafaelsTrainingSchedule()
+    schedule: TrainingSchedule = RafaelsTrainingSchedule()
     files_per_epoch: Optional[int] = 50 * 1000
     weight_decay: float = 1e-6
 
@@ -201,26 +271,32 @@ class LMTrainingConfig(object):
     base_model: Optional[str] = None
     bs: int = 32
     prep_function: PrepFunction = PrepFunction()
-    arch: Union[LstmArch, GruArch, TransformerArch] = LstmArch()
+    arch: Arch = LstmArch()
     bptt: int = 200
     training_procedure: TrainingProcedure = TrainingProcedure()
     config_version: str = CONFIG_VERSION
+    _serializer: Any = None
+
+    @classmethod
+    def get_serializer(cls):
+        if not LMTrainingConfig._serializer:
+            cls._serializer = jsons.fork()
+            jsons.set_deserializer(jsons.default_object_deserializer, cls=cls, fork_inst=cls._serializer)
+            jsons.set_deserializer(field_based_deserializer_func, cls=Arch, fork_inst=cls._serializer)
+            jsons.set_deserializer(field_based_deserializer_func, cls=TrainingSchedule, fork_inst=cls._serializer)
+            jsons.set_deserializer(PrepFunction.deserializer, cls=PrepFunction, fork_inst=cls._serializer)
+
+        return cls._serializer
+
+    @staticmethod
+    def deserializer(dct: Dict[str, Any], cls: Type['LMTrainingConfig'], **kwargs) -> 'LMTrainingConfig':
+        return jsons.load(dct, cls, fork_inst=cls.get_serializer())
 
     def __post_init__(self):
         if self.config_version != CONFIG_VERSION:
             raise TypeError(f'Trying to deserealize '
                             f'{self.__name__} {self.config_version} '
                             f'to {self.__name__} {CONFIG_VERSION} object')
-
-    def get_arch_class(self) -> Union[Type[AWD_LSTM], Type[GRU], Type[Transformer]]:
-        if isinstance(self.arch, LstmArch):
-            return AWD_LSTM
-        elif isinstance(self.arch, GruArch):
-            return GRU
-        elif isinstance(self.arch, TransformerArch):
-            return Transformer
-        else:
-            raise ValueError(f"Unknown architecture: {self.arch}")
 
 
 def create_comet_experiment(run_id: str):
@@ -291,3 +367,7 @@ class ExperimentRun:
     @property
     def perm_path_to_model(self) -> str:
         return os.path.join(MODEL_ZOO_PATH, self.id)
+
+
+jsons.set_serializer(PrepFunction.serializer, cls=PrepFunction)
+jsons.set_deserializer(LMTrainingConfig.deserializer, cls=LMTrainingConfig)

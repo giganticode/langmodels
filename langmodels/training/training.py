@@ -157,8 +157,8 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     empty_data_bunch: DataBunch = EmptyDataBunch(vocab=vocab, path=prep_corpus.path_to_prep_dataset, device=device)
 
     config = create_custom_config(training_config)
-    arch_class = training_config.get_arch_class()
-    learner = language_model_learner(empty_data_bunch, arch_class,
+    arch_class = training_config.arch.get_module()
+    learner = language_model_learner(empty_data_bunch, arch_class, opt_func=training_config.arch.optimizer.get_callable(),
                                      drop_mult=training_config.arch.drop.multiplier,
                                      config=config, pretrained=not config, metrics=[accuracy, mrr],
                                      clip=training_config.arch.clip,

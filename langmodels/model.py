@@ -176,11 +176,11 @@ class TrainedModel(object):
         self._tags = []
         self._context: List[str] = []
         try:
-            self._config: LMTrainingConfig = load_config_or_metrics_from_file(path_to_config_file)
+            self._config: LMTrainingConfig = load_config_or_metrics_from_file(path_to_config_file, LMTrainingConfig)
         except FileNotFoundError:
             logger.warning(f'Config file not found: {path_to_config_file}')
         try:
-            self._metrics: LMTrainingMetrics = load_config_or_metrics_from_file(os.path.join(path, METRICS_FILE_NAME))
+            self._metrics: LMTrainingMetrics = load_config_or_metrics_from_file(os.path.join(path, METRICS_FILE_NAME), LMTrainingMetrics)
         except FileNotFoundError:
             logger.warning(f'File with metrics not found: {path_to_metrics_file}')
         if os.path.exists(path_to_tags_file):
@@ -236,7 +236,7 @@ class TrainedModel(object):
         logger.debug(f"Loading model from: {path_to_model} ...")
 
         vocab = custom_vocab if custom_vocab else self._original_vocab
-        model = get_language_model(self._config.get_arch_class(), len(vocab.itos), create_custom_config(self._config))
+        model = get_language_model(self._config.arch.get_module(), len(vocab.itos), create_custom_config(self._config))
         map_location = get_map_location(self._force_use_cpu)
         if cuda.is_available():
             model.cuda()
@@ -402,7 +402,7 @@ class TrainedModel(object):
         return ModelDescription(id=self._id,
                                 bpe_merges=self._config.prep_function.params[0],
                                 layers_config=self._format_layers_config(),
-                                arch=str(self._config.get_arch_class().__name__),
+                                arch=str(self._config.arch.get_module().__name__),
                                 bin_entropy=self._metrics.bin_entropy if self._metrics else 1e+6,
                                 training_time_minutes_per_epoch=self._metrics.training_time_minutes_per_epoch
                                 if self._metrics else 0,

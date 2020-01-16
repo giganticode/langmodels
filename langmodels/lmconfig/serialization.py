@@ -1,4 +1,4 @@
-from typing import Dict, Union
+from typing import Dict, Union, Optional, Type
 
 import jsons
 
@@ -16,14 +16,16 @@ def load_config_or_metrics_form_dict(s: Dict[str, str]) -> Union[LMTrainingConfi
     return jsons.load(s, Union[LMTrainingConfig, LMTrainingMetrics], strict=True)
 
 
-def load_config_from_string(s: str) -> Union[LMTrainingConfig, LMTrainingMetrics]:
-    return jsons.loads(s, Union[LMTrainingConfig, LMTrainingMetrics], strict=True)
+def load_config_from_string(s: str, type_to_load: Optional[Type]=Union[LMTrainingConfig, LMTrainingMetrics]) \
+        -> Union[LMTrainingConfig, LMTrainingMetrics]:
+    return jsons.loads(s, type_to_load, strict=True)
 
 
-def load_config_or_metrics_from_file(file: str) -> Union[LMTrainingConfig, LMTrainingMetrics]:
+def load_config_or_metrics_from_file(file: str, type_to_load: Optional[Type] = Union[LMTrainingConfig, LMTrainingMetrics]) \
+        -> Union[LMTrainingConfig, LMTrainingMetrics]:
     with open(file, 'r') as f:
         s = f.read().replace('\n', '')
-    return load_config_from_string(s)
+    return load_config_from_string(s, type_to_load)
 
 
 def read_value_from_file(file: str, value_type):

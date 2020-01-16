@@ -143,9 +143,10 @@ class Optimizer(object):
 @dataclass(frozen=True)
 class SGD(Optimizer):
     name: str = 'sgd'
+    momentum: float = 0.9
 
     def get_callable(self):
-        return torch.optim.SGD
+        return partial(torch.optim.SGD, momentum=self.momentum)
 
 
 @dataclass(frozen=True)

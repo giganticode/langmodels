@@ -36,7 +36,7 @@ class Dropouts(object):
 
 
 @dataclass(frozen=True)
-class RegFn(object):
+class ActivationRegularization(object):
     alpha: float = 2.
     beta: float = 1.
 
@@ -174,13 +174,20 @@ def field_based_deserializer_func(dct: Dict[str, Any], cls: Type, **kwargs) -> A
 @dataclass(frozen=True)
 class Arch(object):
     name: str
+    bidir: bool = False
+    emb_sz: int = 1024
+    n_hid: int = 1024
+    n_layers: int = 3
+    drop: Dropouts = Dropouts()
+    tie_weights: bool = True
+    out_bias: bool = True
+
     _serializer: Any = None
 
     @classmethod
     def get_serializer(cls):
         if not cls._serializer:
             cls._serializer = jsons.fork()
-            jsons.set_deserializer(field_based_deserializer_func, cls=Optimizer, fork_inst=cls._serializer)
 
         return cls._serializer
 
@@ -188,17 +195,7 @@ class Arch(object):
 @dataclass(frozen=True)
 class LstmArch(Arch):
     name: str = 'lstm'
-    bidir: bool = False
     qrnn: bool = False
-    emb_sz: int = 1024
-    n_hid: int = 1024
-    n_layers: int = 3
-    optimizer: Optimizer = Adam()
-    clip: float = 0.3
-    reg_fn: RegFn = RegFn()
-    drop: Dropouts = Dropouts()
-    tie_weights: bool = True
-    out_bias: bool = True
 
     def get_module(self):
         return AWD_LSTM
@@ -207,16 +204,6 @@ class LstmArch(Arch):
 @dataclass(frozen=True)
 class GruArch(Arch):
     name: str = 'gru'
-    bidir: bool = False
-    emb_sz: int = 1024
-    n_hid: int = 1024
-    n_layers: int = 3
-    optimizer: Optimizer = Adam()
-    clip: float = 0.3
-    reg_fn: RegFn = RegFn()
-    drop: Dropouts = Dropouts()
-    tie_weights: bool = True
-    out_bias: bool = True
 
     def get_module(self):
         return GRU
@@ -255,10 +242,13 @@ class TransformerArch(Arch):
 
 
 @dataclass(frozen=True)
-class TrainingProcedure(object):
+class Training(object):
+    optimizer: Optimizer = Adam()
+    weight_decay: float = 1e-6
+    gradient_clip: float = 0.3
+    activation_regularization: ActivationRegularization = ActivationRegularization()
     schedule: TrainingSchedule = RafaelsTrainingSchedule()
     files_per_epoch: Optional[int] = 50 * 1000
-    weight_decay: float = 1e-6
 
 
 @dataclass(frozen=True)
@@ -275,7 +265,7 @@ class LMTrainingConfig(object):
     prep_function: PrepFunction = PrepFunction()
     arch: Arch = LstmArch()
     bptt: int = 200
-    training_procedure: TrainingProcedure = TrainingProcedure()
+    training: Training = Training()
     config_version: str = CONFIG_VERSION
     _serializer: Any = None
 
@@ -286,6 +276,7 @@ class LMTrainingConfig(object):
             jsons.set_deserializer(jsons.default_object_deserializer, cls=cls, fork_inst=cls._serializer)
             jsons.set_deserializer(field_based_deserializer_func, cls=Arch, fork_inst=cls._serializer)
             jsons.set_deserializer(field_based_deserializer_func, cls=TrainingSchedule, fork_inst=cls._serializer)
+            jsons.set_deserializer(field_based_deserializer_func, cls=Optimizer, fork_inst=cls._serializer)
             jsons.set_deserializer(PrepFunction.deserializer, cls=PrepFunction, fork_inst=cls._serializer)
 
             jsons.set_serializer(jsons.default_object_serializer, cls=cls, fork_inst=cls._serializer)

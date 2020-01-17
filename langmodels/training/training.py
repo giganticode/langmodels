@@ -21,7 +21,7 @@ from dataprep.api.corpus import PreprocessedCorpus
 from dataprep.util import to_literal_str
 from langmodels.cuda_util import get_device_id
 from langmodels.file_util import check_path_exists, check_path_writable, get_all_files
-from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, RafaelsTrainingSchedule, TrainingProcedure, \
+from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, RafaelsTrainingSchedule, Training, \
     CosineLRSchedule, ExperimentRun, DeviceOptions
 from langmodels.model import TrainedModel, create_custom_config, BEST_MODEL_FILE_NAME
 from langmodels.repository.load import load_from_path
@@ -46,21 +46,21 @@ def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
     return Vocab(['`unk', '`pad'] + list(map(lambda x: to_literal_str(x), prep_corpus.load_vocab().keys())))
 
 
-def choose_schedule_and_fit(learner: Learner, training_procedure: TrainingProcedure) -> None:
-    schedule = training_procedure.schedule
+def choose_schedule_and_fit(learner: Learner, training: Training) -> None:
+    schedule = training.schedule
     if isinstance(schedule, RafaelsTrainingSchedule):
         reduce_lr_callback = ReduceLRCallback(learner,
                                               mult_coeff=schedule.mult_coeff,
                                               max_times_lr_decrease=schedule.max_lr_reduction_times,
                                               patience=schedule.patience)
         learner.callbacks.append(reduce_lr_callback)
-        learner.fit(epochs=schedule.max_epochs, lr=schedule.init_lr, wd=training_procedure.weight_decay)
+        learner.fit(epochs=schedule.max_epochs, lr=schedule.init_lr, wd=training.weight_decay)
     elif isinstance(schedule, CosineLRSchedule):
         if schedule.early_stop:
             learner.callbacks.append(EarlyStoppingCallback(learner, patience=schedule.early_stop.patience))
         fit_one_cycle(learner, cyc_len=schedule.cyc_len, tot_epochs=schedule.max_epochs,
                       max_lr=schedule.max_lr,
-                      wd=training_procedure.weight_decay)
+                      wd=training.weight_decay)
     # not saving the model explicitly because it should have been saved by the callbacks
 
 
@@ -159,16 +159,19 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
 
     config = create_custom_config(training_config)
     arch_class = training_config.arch.get_module()
-    learner = language_model_learner(empty_data_bunch, arch_class, opt_func=training_config.arch.optimizer.get_callable(),
-                                     drop_mult=training_config.arch.drop.multiplier,
+    dropout_multiplier = training_config.arch.drop.multiplier
+    training = training_config.training
+    learner = language_model_learner(empty_data_bunch, arch_class, opt_func=training.optimizer.get_callable(),
+                                     drop_mult=dropout_multiplier,
                                      config=config, pretrained=not config, metrics=[accuracy, mrr],
-                                     clip=training_config.arch.clip,
-                                     alpha=training_config.arch.reg_fn.alpha, beta=training_config.arch.reg_fn.beta,
+                                     clip=training.gradient_clip,
+                                     alpha=training.activation_regularization.alpha,
+                                     beta=training.activation_regularization.beta,
                                      callback_fns=[PeakMemMetric] if torch.cuda.is_available() else [],
                                      path=os.path.dirname(experiment_run.path_to_trained_model),
                                      model_dir=os.path.basename(experiment_run.path_to_trained_model))
 
-    files_per_epoch = training_config.training_procedure.files_per_epoch
+    files_per_epoch = training_config.training.files_per_epoch
     learner.callbacks.append(EpochFileLoader(learner, prep_corpus, vocab,
                                              bs=training_config.bs, bptt=training_config.bptt, device=device,
                                              n_files_per_epoch=files_per_epoch))
@@ -181,7 +184,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
 
     print(f"Starting training... Model will be saved to {experiment_run.perm_path_to_model} "
           f"(Saving config and vocab to {experiment_run.path_to_trained_model} before getting the first trained model)")
-    choose_schedule_and_fit(learner, training_config.training_procedure)
+    choose_schedule_and_fit(learner, training_config.training)
     if experiment_run.comet_experiment:
         report_experiment_terminated_mormally(experiment_run.comet_experiment)
 

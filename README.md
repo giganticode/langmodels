@@ -158,7 +158,7 @@ More parameters to customize corpus pre-processing, NN architecture, and the tra
 >>> train(LMTrainingConfig(corpus=Corpus(path='/path/to/the/dataset'), 
                             prep_function=PrepFunction(options=PrepFunctionOptions(no_com=False, no_unicode=True)),
                             arch=GRU(n_layers=2),
-                            training_procedure=TrainingProcedure(weight_decay=5e-6)
+                            training_procedure=Training(weight_decay=5e-6)
 ))
 ```
 
@@ -180,7 +180,7 @@ Below you can see all the default parameters specified explicitly:
                            drop=Dropouts(multiplier=0.5, oute=0.02, outi=0.25, outh=0.15, w=0.2, out=0.1), 
                            tie_weights=True, out_bias=True), 
                        bptt=200, 
-                       training_procedure=TrainingProcedure(
+                       training_procedure=Training(
                            schedule=RafaelsTrainingSchedule(init_lr=1e-4, mult_coeff=0.5, 
                                                             max_epochs=50, max_lr_reduction_times=6), 
                            weight_decay=1e-6)

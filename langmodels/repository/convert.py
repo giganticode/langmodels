@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Union
+from typing import Dict, Union, Any
 
 import jsons
 import requests
@@ -34,14 +34,35 @@ def convert_file_version(path: str, file_name: str, version_to_convert_to: str) 
         with open(path, 'r') as f:
             s = f.read().replace('\n', '')
             loaded_dict = jsons.loads(s)
-        version_in_file = loaded_dict['config_version']
-        if version_in_file == version_to_convert_to:
-            return
     except jsons.exceptions.DecodeError:
         raise ValueError(f'Error when trying to load file: {path}.\n File contents:\n {s}')
+
+    try:
+        converted_dict: Dict[str, Any] = convert_dict(loaded_dict, file_name, version_to_convert_to)
+    except VersionError as ve:
+        raise VersionError(f"The version of the downloaded models "
+                           f"cannot be lower than the version of the library ({version_to_convert_to}). "
+                           f"Please contact the development team if you see this error.") from ve
+    try:
+        tp = LMTrainingMetrics if file_name == 'metrics' else LMTrainingConfig
+        converted_config: Union[LMTrainingMetrics, LMTrainingConfig] = load_config_or_metrics_form_dict(converted_dict, tp)
+    except jsons.exceptions.DeserializationError as ex:
+        raise ValueError(f"Could not deserialize: {converted_dict}\n Path {path}") from ex
+
+    dump_to_file(converted_config, path)
+
+
+class VersionError(Exception):
+    pass
+
+
+def convert_dict(dct: Dict[str, Any], file_name: str, version_to_convert_to: str) -> Dict[str, Any]:
+    try:
+        version_in_file = dct['config_version']
+        if semver.compare(version_in_file, version_to_convert_to) == 0:
+            return dct
     except KeyError:
-        raise ValueError(f'Cannot get config version from json:\n {loaded_dict} \n from file: \n {path}\n'
-                         f'\'config_version\' attribute is not found.')
+        raise ValueError(f"Cannot get config version from json:\n {dct}, 'config_version' attribute is not found.")
 
     try:
         from jq import jq
@@ -50,9 +71,10 @@ def convert_file_version(path: str, file_name: str, version_to_convert_to: str) 
                      f"you are using, jq needs to be installed. Please install jq (https://pypi.org/project/jq/) "
                      f"or use the latest version of {app_name}.")
         exit(47)
-    if semver.compare(version_to_convert_to, version_in_file) > 0:
-        raise ValueError("Something went wrong. "
-                         "The version of the downloaded models cannot be lower than the version of the library.")
+    if semver.compare(version_in_file, version_to_convert_to) < 0:
+        raise VersionError(f"Something went wrong. "
+                         f"The version of the downloaded models ({version_in_file}) "
+                         f"cannot be lower than the version of the library ({version_to_convert_to}).")
 
     while semver.compare(version_in_file, version_to_convert_to) > 0:
         convertion_json = fetch_convertion_json(version_in_file)
@@ -61,8 +83,6 @@ def convert_file_version(path: str, file_name: str, version_to_convert_to: str) 
         except AttributeError:
             raise ValueError(f'Converter from version {version_in_file} doesn\'t know '
                              f'how to convert this file: {file_name}')
-        loaded_dict = jq(jq_transformation_string).transform(loaded_dict)
+        loaded_dict = jq(jq_transformation_string).transform(dct)
         version_in_file = loaded_dict['config_version']
-
-    converted_config: Union[LMTrainingMetrics, LMTrainingConfig] = load_config_or_metrics_form_dict(loaded_dict)
-    dump_to_file(converted_config, path)
+    return loaded_dict

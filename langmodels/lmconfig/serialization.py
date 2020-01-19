@@ -12,8 +12,8 @@ def dump_to_file(config: Union[LMTrainingConfig, LMTrainingMetrics], file: str) 
     return config_str
 
 
-def load_config_or_metrics_form_dict(s: Dict[str, str]) -> Union[LMTrainingConfig, LMTrainingMetrics]:
-    return jsons.load(s, Union[LMTrainingConfig, LMTrainingMetrics], strict=True)
+def load_config_or_metrics_form_dict(s: Dict[str, str], tp:Type=Union[LMTrainingConfig, LMTrainingMetrics]) -> Union[LMTrainingConfig, LMTrainingMetrics]:
+    return jsons.load(s, tp, strict=True)
 
 
 def load_config_from_string(s: str, type_to_load: Optional[Type]=Union[LMTrainingConfig, LMTrainingMetrics]) \

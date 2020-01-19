@@ -295,8 +295,8 @@ class LMTrainingConfig(object):
     def __post_init__(self):
         if self.config_version != CONFIG_VERSION:
             raise TypeError(f'Trying to deserealize '
-                            f'{self.__name__} {self.config_version} '
-                            f'to {self.__name__} {CONFIG_VERSION} object')
+                            f'{type(self).__name__} {self.config_version} '
+                            f'to {type(self).__name__} {CONFIG_VERSION} object')
 
 
 def create_comet_experiment(run_id: str):
@@ -318,8 +318,8 @@ class LMTrainingMetrics(object):
     def __post_init__(self):
         if self.config_version != CONFIG_VERSION:
             raise TypeError(f'Trying to deserealize '
-                            f'{self.__name__} {self.config_version} '
-                            f'to {self.__name__} {CONFIG_VERSION} object')
+                            f'{type(self).__name__} {self.config_version} '
+                            f'to {type(self).__name__} {CONFIG_VERSION} object')
 
 
 class ExperimentRun:

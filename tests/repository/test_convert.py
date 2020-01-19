@@ -5,7 +5,7 @@ import jsons
 from jq import jq
 from langmodels import project_dir
 
-from repository.convert import convert_dict
+from langmodels.repository.convert import convert_dict
 
 config_v002_gru_cosine = {"arch": {
     "bidir": False, "clip": 0.3,

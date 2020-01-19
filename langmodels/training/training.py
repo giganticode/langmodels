@@ -145,7 +145,7 @@ def add_callbacks(experiment_run: ExperimentRun, learner: Learner, vocab: Vocab,
 def train(training_config: LMTrainingConfig = LMTrainingConfig(),
           device_options: DeviceOptions() = DeviceOptions(),
           tune: bool = False, comet: bool = True, save_every_epoch: bool = False) -> TrainedModel:
-    logger.info(f'Using the following config: \n{pformat(jsons.dumps(training_config))}')
+    logger.info(f'Using the following config: \n{pformat(jsons.dump(training_config))}')
     experiment_run = ExperimentRun.with_config(training_config, device_options=device_options, comet=comet)
     check_run_prerequisites(experiment_run)
 

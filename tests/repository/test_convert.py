@@ -67,7 +67,7 @@ config_v003_lstm_rafael = {"arch": {
     "training": {
         "gradient_clip": 0.3,
         "activation_regularization": {"alpha": 2.1, "beta": 1.1},
-        "optimizer": {"name": "Adam", "betas": None},
+        "optimizer": {"name": "Adam", "betas": [0.9, 0.99]},
         "schedule": {"name": "rafael", "mult_coeff": 0.5, "max_epochs": 1, "init_lr": 0.0001, "patience": 3, "max_lr_reduction_times": 6},
         "files_per_epoch": 50000,
         "weight_decay": 1e-06}}

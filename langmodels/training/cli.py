@@ -50,7 +50,7 @@ def train_handler(args):
 
 
 def parse_patch(patch_string: str) -> Dict[str, str]:
-    return {l[0]: l[1] for l in [param.split(':') for param in patch_string.split(',')]}
+    return {l[0]: l[1] for l in [param.split('=') for param in patch_string.split(',')]}
 
 
 def handle_train(args) -> None:

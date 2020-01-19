@@ -24,7 +24,7 @@ config_v002_gru_cosine = {"arch": {
 
 config_v002_lstm_rafael = {"arch": {
     "bidir": False, "clip": 0.3,
-    "adam_betas": None,
+    "adam_betas": [0.9, 0.99],
     "reg_fn": {"alpha": 2.1, "beta": 1.1}, "qrnn": False,
     "drop": {"multiplier": 0.5, "out": 0.1, "oute": 0.02, "outh": 0.15, "outi": 0.25, "w": 0.2},
     "emb_sz": 10, "n_hid": 10, "n_layers": 1, "out_bias": True, "tie_weights": True},

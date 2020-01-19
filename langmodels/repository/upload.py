@@ -25,27 +25,26 @@ def upload_model_to_registry(id: str, tags: Optional[List[str]] = None,
         if id in _get_all_model_ids():
             raise ValueError(f'Model with such id already exists in the repository: {id}')
 
-        path_on_server_to_model = f'{PATH_TO_MODELS_ON_SERVER}/{id}'
         tags = tags if tags else []
-        with open(os.path.join(local_path_to_model, TAGS_FILE_NAME)) as f:
+        with open(os.path.join(local_path_to_model, TAGS_FILE_NAME), 'w') as f:
             f.write(','.join(tags))
-        md5_checksums = {}
+        md5_checksums: List[Tuple[str, str]] = []
         for file in MODEL_DATA_FILES:
-            md5 = hashlib.md5(open(os.path.join(local_path_to_model, file)).read()).hexdigest()
+            md5 = hashlib.md5(open(os.path.join(local_path_to_model, file), 'rb').read()).hexdigest()
             with open(os.path.join(local_path_to_model, file) + '.md5', 'w') as f:
                 f.write(md5)
-            md5_checksums[file] = md5
+            md5_checksums.append((file, md5))
 
-        _upload_files(os.path.join(local_path_to_model, MODEL_METADATA_FILES),
-                      path_on_server_to_model, data_filenames_with_checksums=md5_checksums,
+        _upload_files(local_path_to_model, PATH_TO_MODELS_ON_SERVER, model_id=id,
+                      metadata_filenames=MODEL_METADATA_FILES, data_filenames_with_checksums=md5_checksums,
                       username=username, password=password)
 
 
 def _upload_files(local_path: str, path_to_models_on_server: str, model_id: str,
-                  metadata_filenames: List[str], data_filenames_with_checksums: Tuple[str, str],
+                  metadata_filenames: List[str], data_filenames_with_checksums: List[Tuple[str, str]],
                   username: Optional[str] = None, password: Optional[str] = None) -> None:
     username = input('Username:') if not username else username
-    password = getpass('Password:') if not password else password
+    password = getpass(f'Password for user {username}:') if not password else password
 
     cnopts = pysftp.CnOpts()
     cnopts.hostkeys.load(os.path.join(HOME, '.ssh', 'known_hosts'))
@@ -58,16 +57,17 @@ def _upload_files(local_path: str, path_to_models_on_server: str, model_id: str,
             for filename in metadata_filenames:
                 conn.put(os.path.join(local_path, filename))
             for filename, checksum in data_filenames_with_checksums:
-                uploaded_md5 = hashlib.md5(open(os.path.join(local_path, filename)).read()).hexdigest()
+                uploaded_md5 = hashlib.md5(open(os.path.join(local_path, filename), 'rb').read()).hexdigest()
                 if uploaded_md5 == checksum:
                     conn.put(os.path.join(local_path, filename) + '.md5')
+                    conn.put(os.path.join(local_path, filename))
                 else:
                     conn.remove(path_to_model)
                     return
         content = requests.get(MODEL_LIST_URL).content.decode(encoding='utf8')
         model_list = content.rstrip('\n').split('\n')
         model_list.append(model_id)
-        path_to_local_list = os.path.join(local_path, 'model_list')
+        path_to_local_list = os.path.join(local_path, os.path.basename(MODEL_LIST_URL))
         with open(path_to_local_list, 'w') as f:
             f.write('\n'.join(model_list))
         with conn.cd(path_to_models_on_server):

@@ -23,6 +23,12 @@ For corpus preprocessing [giganticode-dataprep](https://github.com/giganticode/d
 
 ### Installation
 
+```shell script
+pip install giganticode-langmodels
+```
+
+OR to build from source:
+
 ```
 git clone https://github.com//giganticode/langmodels
 cd langmodels
@@ -37,9 +43,9 @@ pip install -r requirements.txt
 >>> import langmodels.repository as repo
 >>> trained_model = repo.load_default_model()
 
-2019-10-29 12:01:21,699 [langmodels.modelregistry] INFO: Model is not found in cache. Downloading from https://www.inf.unibz.it/~hbabii/pretrained_models/langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344 ...
-2019-10-29 12:01:35,732 [langmodels.model] DEBUG: Loading model from: /home/hlib/.local/share/langmodels/0.0.1/modelzoo/langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344/best.pth ...
-2019-10-29 12:01:36,103 [langmodels.model] DEBUG: Using GPU for inference
+[langmodels.repository] INFO: Model is not found in cache. Downloading from https://www.inf.unibz.it/~hbabii/pretrained_models/langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344 ...
+[langmodels.model] DEBUG: Loading model from: /home/hlib/.local/share/langmodels/0.0.1/modelzoo/langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344/best.pth ...
+[langmodels.model] DEBUG: Using GPU for inference
 ```
 
 ### Other model loading options
@@ -66,7 +72,7 @@ Set `cached` parameter to `True` (default is `False`) to display only cached LMs
 
 Use `query_all_models` method to get a list of `ModelDescription` objects
 ```python
-import langmodels.repository as repo
+>>> import langmodels.repository as repo
 >>> repo.query_all_models()[0]
 ModelDescription(id='langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344', bpe_merges='10k', layers_config='1024/2/1024', arch='AWD_LSTM', bin_entropy=2.1455788479, training_time_minutes_per_epoch=1429, n_epochs=6, best_epoch=5, tags=['BEST', 'DEFAULT'])
 ```
@@ -78,15 +84,7 @@ You can specify if you want to load a model to CPU despite having cuda-supported
 ```python
 >>> trained_model = repo.load_model_with_tag('BEST')
 
-2019-10-29 11:00:04,792 [langmodels.modelregistry] INFO: Model is not found in cache. Downloading from https://www.inf.unibz.it/~hbabii/pretrained_models/langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344 ...
-2019-10-29 11:00:20,136 [langmodels.model] DEBUG: Loading model from: /home/hlib/.local/share/langmodels/0.0.1/modelzoo/langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344/best.pth ...
-2019-10-29 11:00:25,479 [langmodels.model] DEBUG: Using GPU for inference
-
 >>> trained_model = repo.load_model_by_id('dev_10k_1_10_190923.132328_new', force_use_cpu=True)
-
-2019-10-29 11:26:12,070 [langmodels.model] DEBUG: Loading model from: /home/hlib/.local/share/langmodels/0.0.1/modelzoo/dev_10k_1_10_190923.132328/best.pth ...
-2019-10-29 11:26:12,073 [langmodels.model] DEBUG: Using CPU for inference
-
 ```
 
 Also, you can use a lower-level API to load a model by path :
@@ -101,22 +99,20 @@ Example
 
 ```python
 >>> import langmodels.repository as repo
-
 >>> trained_model = repo.load_default_model()
 >>> trained_model.feed_text('public static main() { if', extension='java')
 
 # this does not change the state of the model:
 >>> predictions = trained_model.predict_next_full_token(n_suggestions=5)
->>> print(predictions)
 [('(', 0.9334765834402862), ('.', 0.01540983953864937), ('=', 0.008939018331858162), (',', 0.005372771784601065), ('the', 0.00309070517292041)]
 
-# adding more context, if the user types '(':
+# adding more context:
 >>> trained_model.feed_text('(', extension='java')
+>>> trained_model.predict_next_full_token(n_suggestions=3)
 [('(', 0.14554535082422237), ('c', 0.018005003646104294), ('!', 0.01614662429123089)]
 
 
-# if the cursor has been moved to the beginning of the file, 
-# we need to reset the state of the model (make it forget the context)
+# resetting the state of the model (make it forget the context)
 >>> trained_model.reset()
 >>> trained_model.predict_next_full_token(n_suggestions=5)
 [('/', 0.7209196484717589), ('package', 0.27093282656897594), ('import', 0.0007366385365522241), ('.', 0.0005714365190590807), ('public', 0.0003926736567296)]
@@ -143,7 +139,7 @@ Check our [vsc plugin](https://github.com/giganticode/vsc-extension) for highlig
 ### Python API
 
 ```python
->>> from langmodels.training import train
+>>> from langmodels.training.training import train
 >>> from langmodels.lmconfig.datamodel import *
 
 >>> train(LMTrainingConfig(corpus=Corpus(path='/path/to/the/dataset')))
@@ -152,13 +148,13 @@ Check our [vsc plugin](https://github.com/giganticode/vsc-extension) for highlig
 More parameters to customize corpus pre-processing, NN architecture, and the training process can be specified:
 
 ```python
->>> from langmodels.training import train
+>>> from langmodels.training.training import train
 >>> from langmodels.lmconfig.datamodel import *
 
 >>> train(LMTrainingConfig(corpus=Corpus(path='/path/to/the/dataset'), 
                             prep_function=PrepFunction(options=PrepFunctionOptions(no_com=False, no_unicode=True)),
-                            arch=GRU(n_layers=2),
-                            training_procedure=Training(weight_decay=5e-6)
+                            arch=GRUArchj(n_layers=2),
+                            training=Training(weight_decay=5e-6)
 ))
 ```
 
@@ -166,7 +162,7 @@ Below you can see all the default parameters specified explicitly:
 
 ```python
 >>> from langmodels.lmconfig.datamodel import *
->>> from langmodels.training import train
+>>> from langmodels.training.training import train
 
 >>> train(LMTrainingConfig(base_model=None, 
                        bs=32, 
@@ -176,14 +172,17 @@ Below you can see all the default parameters specified explicitly:
                                                                     no_spaces=True, max_str_length=sys.maxsize)), 
                        arch=LstmArch(
                            bidir=False, qrnn=False, emb_sz=1024, n_hid=1024, n_layers=3, 
-                           adam_betas=(0.7, 0.99), clip=0.3, reg_fn=RegFn(alpha=2, beta=1), 
                            drop=Dropouts(multiplier=0.5, oute=0.02, outi=0.25, outh=0.15, w=0.2, out=0.1), 
                            tie_weights=True, out_bias=True), 
                        bptt=200, 
-                       training_procedure=Training(
-                           schedule=RafaelsTrainingSchedule(init_lr=1e-4, mult_coeff=0.5, 
+                       training=Training(
+                            optimizer=Adam(betas=(0.9, 0.99)),
+                            files_per_epoch=50000,
+                            gradient_clip=0.3,
+                            activation_regularization=ActivationRegularization(alpha=2., beta=1.), 
+                            schedule=RafaelsTrainingSchedule(init_lr=1e-4, mult_coeff=0.5, patience=0,
                                                             max_epochs=50, max_lr_reduction_times=6), 
-                           weight_decay=1e-6)
+                            weight_decay=1e-6)
                        )
       )
 ```
@@ -201,18 +200,43 @@ If neither `--config` nor `--patch` params are specified, the training will be r
 The json with the default parameters would look like follows:
 
 ```json
-{"arch": {"adam_betas": [0.7, 0.99], "bidir": false, "clip": 0.3, "drop":
- {"multiplier": 0.5, "out": 0.1, "oute": 0.02, "outh": 0.15, "outi": 0.25,
- "w": 0.2}, "emb_sz": 1024, "lstm": true, "n_hid": 1024, "n_layers": 3,
- "out_bias": true, "qrnn": false, "reg_fn": {"alpha": 2.0, "beta": 1.0},
- "tie_weights": true}, "base_model": null, "bptt": 200, "bs": 32,
- "config_version": "1.0.0", "corpus": {"extensions": "java", "path":
- "/home/<my_username>/dataset"},
- "prep_function": {"callable": "bpe", "params": ["10k"], "options":
- {"max_str_length": 9223372036854775807, "no_com": false, "no_spaces": true,
- "no_str": false, "no_unicode": true}}, "training_procedure": {"schedule":
- {"init_lr": 0.0001, "max_epochs": 50, "max_lr_reduction_times": 6,
- "mult_coeff": 0.5}, "weight_decay": 1e-06}}
+{'arch': {'bidir': False,
+          'drop': {'multiplier': 0.5,
+                   'out': 0.1,
+                   'oute': 0.02,
+                   'outh': 0.15,
+                   'outi': 0.25,
+                   'w': 0.2},
+          'emb_sz': 1024,
+          'n_hid': 1024,
+          'n_layers': 3,
+          'name': 'lstm',
+          'out_bias': True,
+          'qrnn': False,
+          'tie_weights': True},
+ 'base_model': None,
+ 'bptt': 200,
+ 'bs': 32,
+ 'config_version': '0.0.3-alpha.0',
+ 'corpus': {'extensions': 'java', 'path': '/Users/hlib/dataset'},
+ 'prep_function': {'callable': 'bpe',
+                   'options': {'max_str_length': 9223372036854775807,
+                               'no_com': False,
+                               'no_spaces': True,
+                               'no_str': False,
+                               'no_unicode': True},
+                   'params': ['10k']},
+ 'training': {'activation_regularization': {'alpha': 2.0, 'beta': 1.0},
+              'files_per_epoch': 50000,
+              'gradient_clip': 0.3,
+              'optimizer': {'betas': [0.9, 0.99], 'name': 'Adam'},
+              'schedule': {'init_lr': 0.0001,
+                           'max_epochs': 50,
+                           'max_lr_reduction_times': 6,
+                           'mult_coeff': 0.5,
+                           'name': 'rafael',
+                           'patience': 0},
+              'weight_decay': 1e-06}}
 ```
 
 Most probably, you would have to override at least the `corpus.path` value.
@@ -226,7 +250,7 @@ For more options, run:
 
 When training a language model, it is important to be able to evaluate LM's performance.
 In this section we describe different ways to do this using `langmodels` library. 
-You can also use our [tool](https://github.com/giganticode/vsc-extension-backend) to visualize the evaluation.
+You can also use our [tool](https://github.com/giganticode/lm-powered) to visualize the evaluation.
 
 ### Evaluation on a string / file
 
@@ -236,22 +260,18 @@ to initial state and change the context of the model respectively.
 
 ```python
 
-
-
-    >>> import langmodels.repository as repo 
+>>> import langmodels.repository as repo 
 >>> from langmodels.evaluation import evaluate_model_on_string    
 
->>> model = repo.load_default_model
+>>> model = repo.load_default_model()
 >>> evaluate_model_on_string(model, 'public class MyClass {')
 
-[Evaluation(
-    text='public class MyClass {', 
-    scenarios={full_token_entropy/ParsedToken/default_weights: EvaluationResult(
-        tokens=['public</t>', 'class</t>', 'MyClass</t>', '{</t>'],
-        values=[9.847663879394531, 4.116138458251953, 0.5376469194889069, 0.20130464434623718],
-        aggregated_value=3.675688475370407)}
-)]
-
+{full_token_entropy/ParsedToken: EvaluationResult(
+    tokens=['public</t>', 'class</t>', 'MyClass</t>', '{</t>'],
+    token_types=['KeyWord', 'KeyWord', 'SplitContainer', 'OpeningCurlyBracket'],
+    values=[1.8144783973693848, 3.668722629547119, 0.5620064437389374, 0.2571456730365753], 
+    aggregated_value=1.5755882859230042
+)}
 
 ```
 
@@ -269,10 +289,10 @@ Evaluation can be run on a set of files with `evaluate_model_on_path` method
 >>> evaluate_model_on_path(model, '/path/to/file')
 
 100%|████████████████████████████████████████████████████████████████████████████| 28/28 [00:11<00:00,  2.35it/s]
-{full_token_entropy/ParsedToken/default_weights: (5.859160765187885, 5745)}
+{full_token_entropy/ParsedToken: (5.859160765187885, 5745)}
 ```
 
-In `full_token_entropy/ParsedToken/default_weights`: `full_token_entropy` is a metric used to evaluate the performance; 
+In `full_token_entropy/ParsedToken`: `full_token_entropy` is a metric used to evaluate the performance; 
 `ParsedToken` means that all the tokens were considered when evaluating (See the next section for more details).
 Thus, the average full-token-entropy is ~ 5.85 evaluated on 5.7k tokens.
 
@@ -289,9 +309,25 @@ You can specify based on which metrics the model is to be evaluated.
 ```
 
 Possible metric values are `full_token_entropy`, `subtoken_entropy`, `mrr`. Default metric set is `{full_token_entropy}`
-```
+
 
 ## Release Notes
+
+### 0.0.3-alpha.0 (NOT backward-compatible with 0.0.1-alpha.2)
+
+- Config datamodel improvements: 
+    - Add possibility to specify SGD optimizer; 
+    - Add patience param to training scedule;
+    - Add converters between versions of configs;
+- Training:
+    - Report binary entropy instead of log-base-e entropy;
+    - Save more model metrics (size on disk, trainable params, training time per epoch);
+    - Do not save model after every epoch by default;
+- Evaluation improvements:
+    - Return token types in `EvaluationResult`;
+    - Add possibility to specify token types to be considered when running evaluation;
+    - Trained_model.predict_next_token(): return 1 suggestion by default;
+- Add script for new models upload.
 
 ### 0.0.1-alpha.2 (NOT backward-compatible with 0.0.1-alpha.1)
 

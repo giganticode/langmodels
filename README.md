@@ -313,7 +313,7 @@ Possible metric values are `full_token_entropy`, `subtoken_entropy`, `mrr`. Defa
 
 ## Release Notes
 
-### 0.0.3-alpha.0 (NOT backward-compatible with 0.0.1-alpha.2)
+### 0.0.4-alpha.0 (NOT backward-compatible with 0.0.1-alpha.2)
 
 - Config datamodel improvements: 
     - Add possibility to specify SGD optimizer; 

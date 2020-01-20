@@ -2,7 +2,7 @@
     "bidir": false,
     "drop": {"multiplier": 0.5, "out": 0.1, "oute": 0.02, "outh": 0.15, "outi": 0.25, "w": 0.2},
     "emb_sz": 10, "n_hid": 10, "n_layers": 1, "out_bias": true, "name": "lstm", "qrnn": false, "tie_weights": true},
-"base_model": null, "bptt": 10, "bs": 5, "config_version": "0.0.3-alpha.0",
+"base_model": null, "bptt": 10, "bs": 5, "config_version": "0.0.4-alpha.0",
 "corpus": {"extensions": "java", "path": "/home/lv71161/hlibbabii/raw_datasets/dev"},
 "prep_function": {"callable": "bpe", "params": ["10k"],
     "options": {"no_str": false, "no_com": false, "no_spaces": true, "no_unicode": true, "max_str_length": 9223372036854775807}},

@@ -303,7 +303,7 @@ class LMTrainingConfig(object):
 
 
 def create_comet_experiment(run_id: str):
-    experiment = Experiment('8KN4SL1OwKieQYocdsDFX5Oi5')
+    experiment = Experiment()
     experiment.set_name(run_id)
     return experiment
 

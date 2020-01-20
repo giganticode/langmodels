@@ -1,8 +1,3 @@
-import importlib
-import importlib.util
-# comet.ml must be imported before everything else
-module = importlib.import_module('comet_ml')
-
 import jsons
 
 from langmodels.lmconfig.patch import patch_config

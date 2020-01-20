@@ -152,39 +152,6 @@ token_iterator_type=SubtokenIterator)
                 return (formatted_value, token_type) if self.return_token_type else formatted_value
 
 
-@dataclass(frozen=True, eq=True)
-class TokenTypeWeights(object):
-    non_default_weights: Optional[Dict[Type, float]] = None
-
-    def __hash__(self):
-        return hash(frozenset(self.non_default_weights.items()) if self.non_default_weights else None)
-
-    def __getitem__(self, item: Type) -> float:
-        return self.non_default_weights[item] if self.non_default_weights is not None else 1.
-
-    def __str__(self):
-        return f'{self.non_default_weights}' if self.non_default_weights is not None else 'default_weights'
-
-    def __repr__(self):
-        return str(self)
-
-
-@dataclass(frozen=True, eq=True)
-class EvaluationCustomization(object):
-    type_subset: TokenTypeSubset = TokenTypeSubset.full_set()
-    weights: TokenTypeWeights = TokenTypeWeights()
-
-    def __str__(self):
-        return f'{self.type_subset}/{self.weights}'
-
-    def __repr__(self):
-        return str(self)
-
-    @classmethod
-    def no_customization(cls):
-        return EvaluationCustomization()
-
-
-def separate_customization_for_each_class() -> Set[EvaluationCustomization]:
+def each_token_type_separately() -> Set[TokenTypeSubset]:
     all_parsed_token_subclasses = all_subclasses([ParsedToken])
-    return {EvaluationCustomization(TokenTypeSubset.Builder().add(clazz).build()) for clazz in all_parsed_token_subclasses}
+    return {TokenTypeSubset.Builder().add(clazz).build() for clazz in all_parsed_token_subclasses}

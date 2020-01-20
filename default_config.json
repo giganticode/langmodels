@@ -1,0 +1,9 @@
+{"arch": {"bidir": false, "clip": 5.0, "drop": {"multiplier": 1.0, "out": 0.5, "oute": 0.5, "outh": 0.5, "outi": 0.5, "w": 0.5}, "emb_sz": 512, "gru": true, "n_hid": 512, "n_layers": 1, "out_bias": true, "reg_fn": {"alpha": 2.0, "beta": 1.0}, "tie_weights": true},
+  "base_model": null,
+  "bptt": 200,
+  "bs": 32,
+  "config_version": "0.0.2-alpha.0",
+  "corpus": {"extensions": "java", "path": "/Users/hlib/dev/langmodels/data/dev"},
+  "prep_function": {"callable": "bpe", "params": ["10k"], "options": {"max_str_length": 14, "no_com": true, "no_spaces": true, "no_str": false, "no_unicode": true}},
+  "training_procedure": {"schedule": {"max_epochs": 50, "max_lr_reduction_times": 6,
+    "init_lr": 0.005, "mult_coeff": 0.5}, "weight_decay": 1e-06, "files_per_epoch": 50000}}

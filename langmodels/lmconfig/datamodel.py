@@ -167,7 +167,10 @@ def field_based_deserializer_func(dct: Dict[str, Any], cls: Type, **kwargs) -> A
     field_name = 'name'
     for arch_class in all_arch_classes:
         if getattr(arch_class, field_name) == dct[field_name]:
-            return jsons.load(dct, arch_class, fork_inst=arch_class.get_serializer())
+            try:
+                return jsons.load(dct, arch_class, fork_inst=arch_class.get_serializer())
+            except jsons.exceptions.DeserializationError as e:
+                raise ValueError(f'Failed to deserialize: {dct}') from e
     raise ValueError(f'Unknown {cls.__name__}: {dct[field_name]}')
 
 

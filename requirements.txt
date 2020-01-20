@@ -11,6 +11,6 @@ numpy==1.17.4
 appdirs==1.4.3
 Columnar==1.3.1
 requests==2.22.0
-pysftp===0.2.9
+pysftp==0.2.9
 semver==2.9.0
 jq==0.1.6

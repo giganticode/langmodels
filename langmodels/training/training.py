@@ -149,9 +149,13 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     experiment_run = ExperimentRun.with_config(training_config, device_options=device_options, comet=comet)
     check_run_prerequisites(experiment_run)
 
-    prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply(training_config.corpus,
+    if isinstance(training_config.corpus, Corpus):
+        prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply(training_config.corpus,
                                                                               calc_vocab=True,
                                                                               output_path=PATH_TO_PREP_DATASETS)
+    else:
+        prep_corpus = training_config.corpus
+
     vocab = create_vocab_for_lm(prep_corpus)
     print(f"Vocab size: {len(vocab.itos)}")
     device = get_device_id(device_options.fallback_to_cpu, device_options.non_default_device_to_use)

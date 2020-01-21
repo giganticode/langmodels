@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class EpochFileLoader(LearnerCallback):
     def __init__(self, learner: Learner, prep_corpus: PreprocessedCorpus,
-                 vocab: Vocab, bs: int, bptt: int, device: str, n_files_per_epoch: Optional[int]):
+                 vocab: Vocab, bs: int, bptt: int, device: str, n_files_per_epoch: Optional[int], allow_unks: bool):
         super().__init__(learner)
 
         if n_files_per_epoch is not None and n_files_per_epoch <= 0:
@@ -35,6 +35,7 @@ class EpochFileLoader(LearnerCallback):
         self.bptt: int = bptt
         self.device: str = device
         self.n_files_per_epoch = n_files_per_epoch
+        self.allow_unks = allow_unks
 
         self.path_to_train_files = os.path.join(self.prep_corpus.path_to_prep_dataset, TRAIN_SUBDIR)
         self.valid_and_test_files = self._load_valid_and_test_files()
@@ -62,8 +63,8 @@ class EpochFileLoader(LearnerCallback):
             logger.info(f"Using projects for training: {','.join(train_subfolders)}")
         databunch = create_databunch(self.prep_corpus.path_to_prep_dataset, self.valid_and_test_files + train_files,
                                      self.vocab, bs=self.bs, bptt=self.bptt,
-                                     device=self.device, verbose=not small_epoch)
-        check_data(databunch, self.vocab, verbose=not small_epoch)
+                                     device=self.device, verbose=not small_epoch, allow_unks=self.allow_unks)
+        check_data(databunch, self.vocab, allow_unks=self.allow_unks, verbose=not small_epoch)
         self.learn.data = databunch
         train_dl = self.learn.data.train_dl
         if isinstance(train_dl, Callback):

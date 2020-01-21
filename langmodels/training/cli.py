@@ -25,7 +25,8 @@ def is_option_true(args: Dict, option: str) -> bool:
 
 @dsc.command()
 def train_handler(args):
-    """usage: {program} train [--config <config>] [--patch <patch>] [--fallback-to-cpu] [--tune] [--disable-comet] [--save-every-epoch] [--device=<device>]
+    """usage: {program} train [--config <config>] [--patch <patch>] [--fallback-to-cpu] [--tune] [--disable-comet]
+    [--save-every-epoch] [--allow-unks] [--device=<device>]
 
     Trains a language model according to the given config.
 
@@ -33,6 +34,7 @@ def train_handler(args):
       -C, --fallback-to-cpu                        Fallback to cpu if gpu with CUDA-support is not available
       -x, --disable-comet                          Do not log experiment to comet.ml
       -e, --save-every-epoch                       Save the model to the disk after every epoch
+      -u, --allow_unks                             Allow unknown tokens
       -t, --tune                                   Training will be done only on a few batches
                                                     (can be used for model params such as batch size to make sure
                                                     the model fits into memory)
@@ -53,6 +55,7 @@ def handle_train(args) -> None:
     tune = is_option_true(args, '--tune')
     comet = not is_option_true(args, '--disable-comet')
     save_every_epoch = is_option_true(args, '--save-every-epoch')
+    allow_unks = is_option_true(args, '--allow-unks')
     device = get_option(args, '--device')
     device = int(device) if device else 0
     path_to_config = get_option(args, '--config')
@@ -68,7 +71,7 @@ def handle_train(args) -> None:
 
     try:
         train(training_config=lm_training_config, device_options=device_options,
-              tune=tune, comet=comet, save_every_epoch=save_every_epoch)
+              tune=tune, comet=comet, save_every_epoch=save_every_epoch, allow_unks=allow_unks)
     except CudaNotAvailable:
         print('Gpu with CUDA-support is not available on this machine. '
               'Use --fallback-to-cpu  switch if you want to train on gpu')

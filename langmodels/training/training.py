@@ -144,7 +144,7 @@ def add_callbacks(experiment_run: ExperimentRun, learner: Learner, vocab: Vocab,
 
 def train(training_config: LMTrainingConfig = LMTrainingConfig(),
           device_options: DeviceOptions() = DeviceOptions(),
-          tune: bool = False, comet: bool = True, save_every_epoch: bool = False) -> TrainedModel:
+          tune: bool = False, comet: bool = True, save_every_epoch: bool = False, allow_unks: bool = False) -> TrainedModel:
     logger.info(f'Using the following config: \n{pformat(jsons.dump(training_config))}')
     experiment_run = ExperimentRun.with_config(training_config, device_options=device_options, comet=comet)
     check_run_prerequisites(experiment_run)
@@ -174,7 +174,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     files_per_epoch = training_config.training.files_per_epoch
     learner.callbacks.append(EpochFileLoader(learner, prep_corpus, vocab,
                                              bs=training_config.bs, bptt=training_config.bptt, device=device,
-                                             n_files_per_epoch=files_per_epoch))
+                                             n_files_per_epoch=files_per_epoch, allow_unks=allow_unks))
 
     save_experiment_input(experiment_run, learner, vocab)
 

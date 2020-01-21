@@ -80,10 +80,10 @@ def create_databunch(path_to_prep_dataset: str, file_paths: Sequence[Path], voca
     return data_bunched
 
 
-def check_data(data_bunch: DataBunch, vocab: Vocab, verbose: bool) -> None:
+def check_data(data_bunch: DataBunch, vocab: Vocab, verbose: bool, allow_unks: bool) -> None:
     first_batch = data_bunch.one_batch()[0]
 
-    if not contains_no_value(first_batch, UNKNOWN_TOKEN_INDEX):
+    if not allow_unks and not contains_no_value(first_batch, UNKNOWN_TOKEN_INDEX):
         raise ValueError(f"Unknown is found : {[vocab.textify(seq) for seq in first_batch]}")
     if verbose:
         logger.info(f'Displaying the first batch:\n{first_batch}')

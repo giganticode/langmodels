@@ -377,7 +377,13 @@ class TrainedModel(object):
         with lock:
             self._check_model_loaded()
 
-            numericalized_subtokens_list, scores = beam_search(self._model, self._last_predicted_token_tensor[0], self._first_nonterm_token, n_suggestions, self.BEAM_SIZE)
+            def complete_token_predicate(last_predictions: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+                full_token_flags_sorted = last_predictions[:, -1] < self._first_nonterm_token
+                ready_candidate_idxs = full_token_flags_sorted.nonzero().squeeze(dim=1)
+                pending_candidate_idxs = (full_token_flags_sorted == 0).nonzero().squeeze(dim=1)
+                return ready_candidate_idxs, pending_candidate_idxs
+
+            numericalized_subtokens_list, scores = beam_search(self._model, self._last_predicted_token_tensor[0], complete_token_predicate, n_suggestions, self.BEAM_SIZE)
             suggestions: PredictionList = []
             for numericalized_subtokens, score in zip(numericalized_subtokens_list, scores):
                 try:

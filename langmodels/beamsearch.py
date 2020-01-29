@@ -1,6 +1,8 @@
-from typing import Tuple, List, Dict
+from typing import Tuple, Callable
 
 import torch
+from torch import FloatTensor, LongTensor, Tensor
+from dataclasses import dataclass
 from fastai.text import SequentialRNN
 from torch.nn.functional import log_softmax
 
@@ -10,88 +12,153 @@ from langmodels.cuda_util import get_device
 DEVICE = get_device()
 
 
-def get_topk_predictions(model: SequentialRNN, context: torch.FloatTensor, top_k: int) -> Tuple[
-    torch.FloatTensor, torch.LongTensor]:
+def _get_topk_predictions(model: SequentialRNN, context: FloatTensor, top_k: int) -> Tuple[FloatTensor, LongTensor]:
     last_token_activations = get_last_layer_activations(model, context)
     predictions = log_softmax(last_token_activations[:, -1], dim=-1)  # TODO log_softmax not really needed
     return predictions.topk(top_k, dim=-1)
 
 
-def topk_are_full_tokens(full_tokens_bitmap: torch.Tensor, top_k: int) -> bool:
-    return full_tokens_bitmap[:top_k].sum() == top_k
+def _topk_are_full_tokens(full_token_flags_sorted: torch.Tensor, top_k: int) -> bool:
+    return full_token_flags_sorted.size(0) >= top_k and full_token_flags_sorted[top_k-1].item() == (top_k - 1)
 
 
-Tensors = Dict[str, torch.Tensor]
+@dataclass
+class FlattenedCandidateList(object):
+    """
+    >>> candidate_list = FlattenedCandidateList.of(LongTensor([[1, 2, 3], [4, 5, 6]]), FloatTensor([0.3, 0.1]))
+    >>> candidate_list
+    FlattenedCandidateList(subtokens=tensor([[1, 2, 3],
+            [4, 5, 6]]), scores=tensor([0.3000, 0.1000]), hidden_indices=tensor([-9223372036854775808, -9223372036854775808]))
+    >>> candidate_list = candidate_list.add(candidate_list)
+    >>> candidate_list
+    FlattenedCandidateList(subtokens=tensor([[1, 2, 3],
+            [4, 5, 6],
+            [1, 2, 3],
+            [4, 5, 6]]), scores=tensor([0.3000, 0.1000, 0.3000, 0.1000]), hidden_indices=tensor([-9223372036854775808, -9223372036854775808, -9223372036854775808,
+            -9223372036854775808]))
+    >>> candidate_list.sort()
+    FlattenedCandidateList(subtokens=tensor([[4, 5, 6],
+            [4, 5, 6],
+            [1, 2, 3],
+            [1, 2, 3]]), scores=tensor([0.1000, 0.1000, 0.3000, 0.3000]), hidden_indices=tensor([-9223372036854775808, -9223372036854775808, -9223372036854775808,
+            -9223372036854775808]))
+    >>> candidate_list.size()
+    4
+    >>> candidate_list.sub_list(torch.LongTensor([3, 2, 1]))
+    FlattenedCandidateList(subtokens=tensor([[4, 5, 6],
+            [1, 2, 3],
+            [4, 5, 6]]), scores=tensor([0.1000, 0.3000, 0.1000]), hidden_indices=tensor([-9223372036854775808, -9223372036854775808, -9223372036854775808]))
+    >>> candidate_list.add_empty_subword_to_all()
+    >>> candidate_list
+    FlattenedCandidateList(subtokens=tensor([[                   1,                    2,                    3,
+             -9223372036854775808],
+            [                   4,                    5,                    6,
+             -9223372036854775808],
+            [                   1,                    2,                    3,
+             -9223372036854775808],
+            [                   4,                    5,                    6,
+             -9223372036854775808]]), scores=tensor([0.3000, 0.1000, 0.3000, 0.1000]), hidden_indices=tensor([-9223372036854775808, -9223372036854775808, -9223372036854775808,
+            -9223372036854775808]))
+    """
+    subtokens: Tensor
+    scores: Tensor
+    hidden_indices: Tensor
+
+    def __post_init__(self):
+        assert len(self.subtokens.size()) == 2 and isinstance(self.subtokens, LongTensor)
+        assert len(self.scores.size()) == 1 and isinstance(self.scores, FloatTensor)
+        assert len(self.hidden_indices.size()) == 1 and isinstance(self.hidden_indices, LongTensor)
+
+        assert self.subtokens.size(0) == self.scores.size(0) == self.hidden_indices.size(0)
+
+    def size(self):
+        return self.subtokens.size(0)
+
+    @staticmethod
+    def of(subtokens: Tensor, scores: Tensor) -> 'FlattenedCandidateList':
+        n_full_tokens = scores.size(0)
+        assert n_full_tokens == subtokens.size(0)
+
+        best_tokens = FlattenedCandidateList(subtokens=subtokens, scores=scores,
+                                             hidden_indices=torch.full((n_full_tokens,), fill_value=TORCH_LONG_MIN_VAL, dtype=torch.long, device=DEVICE))
+        return best_tokens
+
+    @staticmethod
+    def empty():
+        return FlattenedCandidateList.of(
+            subtokens=torch.empty((0, 0), dtype=torch.long, device=DEVICE),
+            scores=torch.empty(0, dtype=torch.float, device=DEVICE)
+        )
+
+    def add(self, candidates: 'FlattenedCandidateList') -> 'FlattenedCandidateList':
+        return FlattenedCandidateList(subtokens=torch.cat([self.subtokens, candidates.subtokens], dim=0),
+                                      scores=torch.cat([self.scores, candidates.scores], dim=0),
+                                      hidden_indices=torch.cat([self.hidden_indices, candidates.hidden_indices], dim=0))
+
+    def sort(self) -> 'FlattenedCandidateList':
+        idx_in_score_asc_order = self.scores.argsort()
+        return FlattenedCandidateList(
+            subtokens= self.subtokens[idx_in_score_asc_order],
+            scores= self.scores[idx_in_score_asc_order],
+            hidden_indices=self.hidden_indices[idx_in_score_asc_order]
+        )
+
+    def sub_list(self, indices: Tensor) -> 'FlattenedCandidateList':
+        return FlattenedCandidateList(
+            subtokens=self.subtokens[indices],
+            scores=self.scores[indices],
+            hidden_indices=self.hidden_indices[indices],
+        )
+
+    @staticmethod
+    def single_empty():
+        return FlattenedCandidateList.of(subtokens=torch.empty(1, 0, device=DEVICE).long(), scores=torch.zeros(1, device=DEVICE).float())
+
+    def add_empty_subword_to_all(self) -> None:
+        self.subtokens = torch.cat([self.subtokens,
+                   torch.full((self.size(), 1), fill_value=TORCH_LONG_MIN_VAL, dtype=torch.long, device=DEVICE)], dim=-1)
 
 
-def get_new_candidates(model: SequentialRNN, context: torch.LongTensor, n_predictions: int,
-                       pending_candidates: Tensors) -> Tensors:
+def _expand_with_new_candidates(model: SequentialRNN, context: LongTensor, n_predictions: int,
+                                current_candidates: FlattenedCandidateList) -> FlattenedCandidateList:
     assert len(context.size()) == 2
 
-    loss, num_tokens = get_topk_predictions(model, context, n_predictions)
+    loss, num_tokens = _get_topk_predictions(model, context, n_predictions)
     batch_size = context.size(0)
 
-    new_candidates = {'scores': (-loss + pending_candidates['scores'][:, None]).view(-1),
-                      'num_tokens': num_tokens.view(-1),
-                      'hidden_indices': torch.arange(0, batch_size, device=DEVICE)[:, None] \
-                          .expand(batch_size, n_predictions).contiguous().view(-1),
-                      'tokens': pending_candidates['tokens'].repeat(n_predictions, 1)}
-    return new_candidates
+    return FlattenedCandidateList(scores= (-loss + current_candidates.scores[:, None]).view(-1),
+                                  hidden_indices= torch.arange(0, batch_size, device=DEVICE)[:, None].expand(batch_size, n_predictions).contiguous().view(-1),
+                                  subtokens= torch.cat([current_candidates.subtokens.repeat(n_predictions, 1), num_tokens.view(-1)[:, None]], dim=-1))
 
 
-def update_ready_candidates(best_subtokens: torch.LongTensor, best_scores: torch.FloatTensor) -> Tensors:
-    ready_candidates = {'tokens': best_subtokens, 'scores': best_scores}
-    n_full_tokens = best_scores.size(0)
-    ready_candidates['num_tokens'] = torch.full((n_full_tokens,), fill_value=TORCH_LONG_MIN_VAL, dtype=torch.long, device=DEVICE)
-    ready_candidates['hidden_indices'] = torch.full((n_full_tokens,), fill_value=TORCH_LONG_MIN_VAL, dtype=torch.long, device=DEVICE)
-    return ready_candidates
+CompleteTokenPredicate = Callable[[Tensor], Tuple[Tensor, Tensor]]
 
 
-def beam_search(model: SequentialRNN, context: torch.LongTensor, first_nonterm_token: int, top_k: int,
-                beam_size: int) -> List[Tuple]:
+def beam_search(model: SequentialRNN, context: torch.LongTensor, complete_token_predicate: CompleteTokenPredicate,
+                top_k: int, beam_size: int) -> Tuple[Tensor, Tensor]:
     if len(context.size()) != 1:
         raise ValueError("The rank of context tensor should be one. Beam search is only possible with batch size = 1.")
+    if top_k > beam_size:
+        raise ValueError(f"N suggestions ({top_k}) cannot be more than the beam size ({beam_size})")
 
     context = context.unsqueeze(dim=0)
-
     checkpoint = save_hidden_states(model)
-
-    full_tokens_bitmap_sorted = torch.zeros(1, device=DEVICE)
-    pending_candidates_sorted = {'tokens': torch.empty(context.size(0), 0, device=DEVICE).long(),
-                                 'scores': torch.zeros(1, device=DEVICE).float()}
-    ready_candidates = update_ready_candidates(
-        best_subtokens=torch.empty((0, 0), dtype=torch.long, device=DEVICE),
-        best_scores=torch.empty((0), dtype=torch.float, device=DEVICE)
-    )
+    pending_candidates_sorted = FlattenedCandidateList.single_empty()
+    best_tokens = FlattenedCandidateList.empty()
+    ready_candidate_indices = torch.empty(0)
     with torch.no_grad():
-        while not topk_are_full_tokens(full_tokens_bitmap_sorted, top_k):
-            new_candidates = get_new_candidates(model, context, beam_size, pending_candidates_sorted)
-
-            all_candidates = {k: torch.cat([ready_candidates[k], new_candidates[k]], dim=0) for k in
-                              ready_candidates.keys()}
-
-            all_candidates['tokens'] = torch.cat([all_candidates['tokens'], all_candidates['num_tokens'][:, None]],
-                                                 dim=-1)
-
-            idx_in_score_asc_order = all_candidates['scores'].argsort()[:beam_size]
-            best_candidates_sorted = {k: all_candidates[k][idx_in_score_asc_order] for k in all_candidates.keys()}
-
-            full_tokens_bitmap_sorted = best_candidates_sorted['num_tokens'] < first_nonterm_token
-            ready_candidate_idxs = full_tokens_bitmap_sorted.nonzero().squeeze(dim=1)
-            pending_candidate_idxs = (full_tokens_bitmap_sorted == 0).nonzero().squeeze(dim=1)
-
-            ready_candidates = update_ready_candidates(
-                best_candidates_sorted['tokens'][ready_candidate_idxs],
-                best_candidates_sorted['scores'][ready_candidate_idxs]
-            )
-
-            pending_candidates_sorted = {k: best_candidates_sorted[k][pending_candidate_idxs] for k in
-                                         best_candidates_sorted.keys()}
-
-            model[0].select_hidden(pending_candidates_sorted['hidden_indices'])
-            context = pending_candidates_sorted['num_tokens'].unsqueeze(dim=1)
+        while not _topk_are_full_tokens(ready_candidate_indices, top_k):
+            new_candidates = _expand_with_new_candidates(model, context, beam_size, pending_candidates_sorted)
+            best_tokens.add_empty_subword_to_all()
+            all_candidates = best_tokens.add(new_candidates)
+            best_candidates_sorted = all_candidates.sort().sub_list(torch.arange(beam_size))
+            ready_candidate_indices, pending_candidate_idxs = complete_token_predicate(best_candidates_sorted.subtokens)
+            best_tokens = best_candidates_sorted.sub_list(ready_candidate_indices)
+            pending_candidates_sorted = best_candidates_sorted.sub_list(pending_candidate_idxs)
+            model[0].select_hidden(pending_candidates_sorted.hidden_indices)
+            context = pending_candidates_sorted.subtokens[:, -1:]
 
     model[0].hidden = checkpoint
     model[0].bs = checkpoint[0][0].size(0)
 
-    return ready_candidates['tokens'][:top_k], ready_candidates['scores'][:top_k]
+    return best_tokens.subtokens[:top_k], best_tokens.scores[:top_k]

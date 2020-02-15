@@ -11,11 +11,11 @@ from fastai.text.models.transformer import init_transformer
 from math import exp
 from torch import cuda
 
-from dataprep.api.corpus import PreprocessedCorpus
-from dataprep.pipeline.dataset import normalize_extension_string
-from dataprep.preprocess.metadata import check_metadata_validity, PreprocessingMetadata
-from dataprep.preprocess.placeholders import placeholders
-from dataprep.subtokens import is_terminal_subtoken, FullTokenIterator, SubtokenIterator
+from codeprep.api.corpus import PreprocessedCorpus
+from codeprep.pipeline.dataset import normalize_extension_string
+from codeprep.preprocess.metadata import check_metadata_validity, PreprocessingMetadata
+from codeprep.preprocess.placeholders import placeholders
+from codeprep.subtokens import is_terminal_subtoken, FullTokenIterator, SubtokenIterator
 from langmodels.beamsearch import beam_search
 from langmodels.cuda_util import get_device, get_map_location
 from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig, GruArch, \
@@ -268,7 +268,7 @@ class TrainedModel(object):
         return self._prep_function.apply(corpus, **kwargs)
 
     def prep_text(self, text: str, extension: str, **kwargs) -> Union[Tuple[List[str], PreprocessingMetadata], List[str]]:
-        import dataprep.api.text as text_api
+        import codeprep.api.text as text_api
         return_metadata: bool = 'return_metadata' in kwargs and kwargs['return_metadata']
         text_callable = getattr(text_api, self._prep_function.callable.__name__)
         preprocessing_result = text_callable(text, extension=extension, force_reinit_bpe_data=False,

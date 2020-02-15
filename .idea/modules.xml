@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/../codeprep/.idea/codeprep.iml" filepath="$PROJECT_DIR$/../codeprep/.idea/codeprep.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/langmodels.iml" filepath="$PROJECT_DIR$/.idea/langmodels.iml" />
     </modules>
   </component>

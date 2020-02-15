@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, Mock
 
 from pytest_mock import MockFixture
 
-from dataprep.tokens.containers import SplitContainer
+from codeprep.tokens.containers import SplitContainer
 from langmodels.evaluation.evaluation import evaluate_model_on_string
 from langmodels.evaluation.customization import TokenTypeSubset
 from langmodels.evaluation.metrics import EvaluationResult, EvaluationScenario, Evaluation

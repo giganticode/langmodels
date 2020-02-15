@@ -1,7 +1,7 @@
 import jsons
 import sys
 
-import dataprep.api.corpus as api
+import codeprep.api.corpus as api
 
 from langmodels.lmconfig.datamodel import LMTrainingConfig, LstmArch, Training, \
     PrepFunction, Corpus, CosineLRSchedule, PrepFunctionOptions

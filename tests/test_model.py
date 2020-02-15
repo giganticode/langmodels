@@ -1,4 +1,4 @@
-from dataprep.preprocess.placeholders import placeholders
+from codeprep.preprocess.placeholders import placeholders
 from fastai.text import Vocab
 
 from langmodels.model import _create_term_vocab

@@ -3,13 +3,13 @@ importlib.import_module('comet_ml')
 
 import os
 
-from dataprep.util import to_literal_str, to_non_literal_str
+from codeprep.util import to_literal_str, to_non_literal_str
 from langmodels import project_dir
 
 from langmodels.lmconfig.datamodel import GruArch
 from dataclasses import dataclass
 
-from dataprep.pipeline.vocab import calc_vocab, VOCAB_DICT_DELIM, VOCAB_FILENAME
+from codeprep.pipeline.vocab import calc_vocab, VOCAB_DICT_DELIM, VOCAB_FILENAME
 from langmodels.lmconfig.datamodel import LMTrainingConfig
 from langmodels.training.training import train
 

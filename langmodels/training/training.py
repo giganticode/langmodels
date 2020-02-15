@@ -16,9 +16,9 @@ from fastai.train import fit_one_cycle, Learner, EarlyStoppingCallback
 from flatdict import FlatDict
 from typing import Optional, Tuple
 
-import dataprep.api.corpus as api
-from dataprep.api.corpus import PreprocessedCorpus
-from dataprep.util import to_literal_str
+import codeprep.api.corpus as api
+from codeprep.api.corpus import PreprocessedCorpus
+from codeprep.util import to_literal_str
 from langmodels.cuda_util import get_device_id
 from langmodels.file_util import check_path_exists, check_path_writable, get_all_files
 from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, RafaelsTrainingSchedule, Training, \

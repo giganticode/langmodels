@@ -12,8 +12,8 @@ from comet_ml import Experiment
 from torch import optim
 from typing import Optional, Callable, Tuple, List, Type, Dict, Any
 
-import dataprep.api.corpus as corpus_api
-from dataprep.api.corpus import PreprocessedCorpus
+import codeprep.api.corpus as corpus_api
+from codeprep.api.corpus import PreprocessedCorpus
 from fastai.text import AWD_LSTM, Transformer, Activation
 
 from langmodels import MODEL_ZOO_PATH, __version__, __major_version__
@@ -119,7 +119,7 @@ class PrepFunction(object):
 
     @staticmethod
     def deserializer(dct: Dict[str, Any], cls: Type['PrepFunction'], **kwargs) -> 'PrepFunction':
-        import dataprep.api.corpus as api
+        import codeprep.api.corpus as api
         return cls(
             callable=getattr(api, dct['callable']),
             params=dct['params'],

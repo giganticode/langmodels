@@ -7,7 +7,7 @@ from functools import reduce
 from typing import Collection, List, Tuple
 
 import numpy as np
-from dataprep.util import merge_dicts_
+from codeprep.util import merge_dicts_
 from fastai.core import partition_by_cores
 from fastai.data_block import PreProcessor
 from fastai.text import Vocab

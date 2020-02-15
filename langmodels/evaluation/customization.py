@@ -4,10 +4,10 @@ from typing import List, Callable, Any, Type, Union, Set, Iterable, FrozenSet, T
 
 from dataclasses import dataclass, field
 
-from dataprep.preprocess.metadata import PreprocessingMetadata
-from dataprep.subtokens import FullTokenIterator, SubtokenIterator
-from dataprep.tokens.containers import Comment, SplitContainer, OneLineComment
-from dataprep.tokens.rootclasses import ParsedToken
+from codeprep.preprocess.metadata import PreprocessingMetadata
+from codeprep.subtokens import FullTokenIterator, SubtokenIterator
+from codeprep.tokens.containers import Comment, SplitContainer, OneLineComment
+from codeprep.tokens.rootclasses import ParsedToken
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ class FilteringTokenIterator(object):
     ['hi', '//']
 
     >>> [token for token in FilteringTokenIterator(['hi', '/', '/'], metadata, return_token_type=True)]
-    [('hi', <class 'dataprep.tokens.containers.SplitContainer'>), ('//', <class 'dataprep.tokens.containers.OneLineComment'>)]
+    [('hi', <class 'codeprep.tokens.containers.SplitContainer'>), ('//', <class 'codeprep.tokens.containers.OneLineComment'>)]
 
     >>> it = FilteringTokenIterator(['hi', '/', '/'], metadata, token_iterator_type=SubtokenIterator)
     >>> [token for token in it]

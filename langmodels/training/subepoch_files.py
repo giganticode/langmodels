@@ -7,7 +7,7 @@ from fastai.text import Vocab
 from pathlib import Path
 from typing import Any, Optional, List, Tuple
 
-from dataprep.api.corpus import PreprocessedCorpus
+from codeprep.api.corpus import PreprocessedCorpus
 from langmodels.file_util import get_all_files
 from langmodels.training.data import create_databunch, check_data
 

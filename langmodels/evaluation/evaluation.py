@@ -6,11 +6,10 @@ from typing import List, Tuple, Optional, Union, Dict, Set
 
 from tqdm import tqdm
 
-from langmodels import repository
 from langmodels.evaluation.customization import TokenTypeSubset
-from langmodels.evaluation.metrics import bin_entropy, EvaluationResultSummary
-from langmodels.evaluation.metrics import mrr, Metric, EvaluationScenario, Evaluation, EvaluationResult, \
-    MetricName
+from langmodels.evaluation.metrics import bin_entropy
+from langmodels.evaluation.metrics import mrr, Metric, MetricName
+from langmodels.evaluation.definitions import EvaluationResult, EvaluationResultSummary, EvaluationScenario, Evaluation
 from langmodels.file_util import get_all_files, read_file_contents
 from langmodels.model import TrainedModel
 

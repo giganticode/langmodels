@@ -2,7 +2,8 @@ from unittest.mock import Mock
 
 from codeprep.tokens.containers import SplitContainer, OneLineComment
 from langmodels.evaluation.customization import TokenTypeSubset
-from langmodels.evaluation.metrics import bin_entropy, mrr, EvaluationResult
+from langmodels.evaluation.metrics import bin_entropy, mrr
+from langmodels.evaluation.definitions import EvaluationResult
 from langmodels.model import TrainedModel
 
 any_1 = 'java'

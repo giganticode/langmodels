@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from fastai.text import SequentialRNN
 from torch.nn.functional import log_softmax
 
-from langmodels.nn import get_last_layer_activations, save_hidden_states, TORCH_LONG_MIN_VAL
+from langmodels.nn import get_last_layer_activations, take_hidden_state_snapshot, TORCH_LONG_MIN_VAL
 from langmodels.cuda_util import get_device
+from langmodels.nn import restore_snapshot
 
 DEVICE = get_device()
 
@@ -142,7 +143,7 @@ def beam_search(model: SequentialRNN, context: torch.LongTensor, complete_token_
         raise ValueError(f"N suggestions ({top_k}) cannot be more than the beam size ({beam_size})")
 
     context = context.unsqueeze(dim=0)
-    checkpoint = save_hidden_states(model)
+    hidden_state_snapshot = take_hidden_state_snapshot(model)
     pending_candidates_sorted = FlattenedCandidateList.single_empty()
     best_tokens = FlattenedCandidateList.empty()
     ready_candidate_indices = torch.empty(0)
@@ -158,7 +159,6 @@ def beam_search(model: SequentialRNN, context: torch.LongTensor, complete_token_
             model[0].select_hidden(pending_candidates_sorted.hidden_indices)
             context = pending_candidates_sorted.subtokens[:, -1:]
 
-    model[0].hidden = checkpoint
-    model[0].bs = checkpoint[0][0].size(0)
+    restore_snapshot(model, hidden_state_snapshot)
 
     return best_tokens.subtokens[:top_k], best_tokens.scores[:top_k]

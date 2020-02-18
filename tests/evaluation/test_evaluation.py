@@ -1,3 +1,4 @@
+import sys
 from unittest import mock
 from unittest.mock import MagicMock, Mock
 
@@ -12,7 +13,7 @@ from langmodels.model import TrainedModel
 
 def test_evaluate_model_on_string_empty():
     trained_model_mock = MagicMock(spec=TrainedModel)
-    trained_model_mock.get_entropies_for_text.return_value = ([], [], [])
+    trained_model_mock.get_entropies_for_text.return_value = ([], [], [], [])
 
     expected = [Evaluation(
         '',
@@ -39,7 +40,7 @@ def test_evaluate_on_string_default_args(mocker: MockFixture):
 
     actual = evaluate_model_on_string(trained_model_mock, text)
 
-    mocked_metric.assert_called_with(trained_model_mock, text, 'java', False, None)
+    mocked_metric.assert_called_with(trained_model_mock, text, 'java', False, None, sys.maxsize)
     assert actual == [Evaluation(text, scenarios)]
 
 
@@ -59,7 +60,7 @@ def test_evaluate_on_string_default_args_not_result_per_line(mocker: MockFixture
     actual = evaluate_model_on_string(trained_model_mock, text, result_per_line=False)
 
     # then
-    mocked_metric.assert_called_with(trained_model_mock, text, 'java', False, None)
+    mocked_metric.assert_called_with(trained_model_mock, text, 'java', False, None, sys.maxsize)
     assert actual == Evaluation(text, scenarios)
 
 
@@ -82,8 +83,8 @@ def test_evaluate_on_string_non_default_token_types_and_metrics_multiline(mocker
                                       result_per_line=True, append_eof=True)
 
     mocked_evaluate_on_line.assert_has_calls([
-        mock.call(trained_model_mock, 'MyClass', 'java', metrics, token_type_subsets, False),
-        mock.call(trained_model_mock, '{', 'java', metrics, token_type_subsets, True)
+        mock.call(trained_model_mock, 'MyClass', 'java', metrics, token_type_subsets, False, sys.maxsize),
+        mock.call(trained_model_mock, '{', 'java', metrics, token_type_subsets, True, sys.maxsize)
     ])
 
     assert actual == evaluation_mocks

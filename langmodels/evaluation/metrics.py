@@ -1,6 +1,9 @@
 import logging
-from typing import List, Optional, Set, Callable, Dict, Type
+import sys
+from typing import List, Optional, Set, Callable, Dict, Type, Tuple
 from pprint import pformat
+
+import numpy as np
 from dataclasses import dataclass
 
 from langmodels.evaluation.customization import TokenTypeSubset
@@ -21,6 +24,35 @@ class EvaluationResult(object):
     token_types: List[str]
     values: List[float]
     aggregated_value: float
+    of_context_length: Optional[List[Tuple[float, int]]] = None
+
+    def to_summary(self) -> 'EvaluationResultSummary':
+        return EvaluationResultSummary(self.aggregated_value, sum(x is not None for x in self.values), self.of_context_length)
+
+
+@dataclass(frozen=True)
+class EvaluationResultSummary(object):
+    value: float
+    n_samples: int
+    of_context_length: Optional[List[Tuple[float, int]]]
+
+    def _avg(self, values: List[float], n_samples_list: List[int]) -> Tuple[float, int]:
+        total_samples = sum(n_samples_list)
+        if total_samples == 0:
+            return 0.0, 0
+        resulting_value = np.average(values, weights=n_samples_list)
+        return resulting_value, total_samples
+
+    def merge(self, other_summary: 'EvaluationResultSummary'):
+        resulting_value, total_samples = self._avg([self.value, other_summary.value], [self.n_samples, other_summary.n_samples])
+        if self.of_context_length is None:
+            of_context_length_result = other_summary.of_context_length
+        elif other_summary.of_context_length is None:
+            of_context_length_result = self.of_context_length
+        else:
+            of_context_length_result = [self._avg([v1, v2], [n1, n2]) for ((v1, n1), (v2, n2))
+                                        in zip(self.of_context_length, other_summary.of_context_length)]
+        return EvaluationResultSummary(resulting_value, total_samples, of_context_length_result)
 
 
 @dataclass(frozen=True)
@@ -48,7 +80,7 @@ class Evaluation(object):
 
 
 def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool,
-                token_type_subsets: Optional[Set[TokenTypeSubset]] = None,
+                token_type_subsets: Optional[Set[TokenTypeSubset]] = None, max_context_allowed: int = sys.maxsize,
                 full_tokens: bool = True) \
         -> Dict[TokenTypeSubset, EvaluationResult]:
     """
@@ -56,7 +88,7 @@ def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool
     """
     token_type_subsets = token_type_subsets or {TokenTypeSubset.full_set()}
 
-    all_entropies, tokens, all_token_types = model.get_entropies_for_text(line, extension, full_tokens=full_tokens, append_eof=append_eof)
+    all_entropies, tokens, all_token_types, context_lengths = model.get_entropies_for_text(line, extension, full_tokens=full_tokens, append_eof=append_eof, max_context_allowed=max_context_allowed)
     evaluation_results: Dict[TokenTypeSubset, EvaluationResult] = {}
     for token_type_subset in token_type_subsets:
         res = []
@@ -69,8 +101,17 @@ def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool
                 count += 1
             else:
                 res.append(None)
+        if max_context_allowed < 1000:
+            of_context_length_cumul = [(0.0, 0)] * max_context_allowed
+            for entropy, token_type, context_length in zip(all_entropies, all_token_types, context_lengths):
+                if token_type_subset.contains(token_type):
+                    if context_length is not None:
+                        of_context_length_cumul[context_length] = (of_context_length_cumul[context_length][0] + entropy, of_context_length_cumul[context_length][1] + 1)
+            of_context_length = [(val / n if n != 0 else 0.0, n) for (val, n) in of_context_length_cumul]
+        else:
+            of_context_length = None
         evaluation_results[token_type_subset] = EvaluationResult(tokens, list(map(lambda tt: tt.__name__, all_token_types)),
-                                                                 res, sum / count if count else 0.)
+                                                                 res, sum / count if count else 0., of_context_length)
     return evaluation_results
 
 
@@ -113,7 +154,7 @@ def mrr(model: TrainedModel, line: str, extension: str, append_eof: bool,
     return evaluation_results
 
 
-Metric = Callable[[TrainedModel, List[str], str, bool, Optional[Set[TokenTypeSubset]], Dict[Type, float]],
+Metric = Callable[[TrainedModel, List[str], str, bool, Optional[Set[TokenTypeSubset]], Dict[Type, float], int],
                   Dict[TokenTypeSubset, EvaluationResult]]
 
 

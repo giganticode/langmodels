@@ -10,7 +10,7 @@ any_1 = 'java'
 
 def test_bin_entropy_empty():
     trained_model_mock = Mock(spec=TrainedModel)
-    trained_model_mock.get_entropies_for_text.return_value = ([], [], [])
+    trained_model_mock.get_entropies_for_text.return_value = ([], [], [], [])
 
     expected = {TokenTypeSubset.full_set(): EvaluationResult([], [], [], 0.)}
     actual = bin_entropy(trained_model_mock, '', extension=any_1, append_eof=False, )
@@ -23,14 +23,16 @@ def test_bin_entropy_simple_args():
     entropies = [1.0, 2.0]
     prep_text = ['My', 'Class</t>']
     types = [SplitContainer, SplitContainer]
-    trained_model_mock.get_entropies_for_text.return_value = (entropies, prep_text, types)
+    context_lengths = [1, 2]
+    trained_model_mock.get_entropies_for_text.return_value = (entropies, prep_text, types, context_lengths)
     token_set = TokenTypeSubset.Builder().add(SplitContainer).build()
 
-    expected = {token_set: EvaluationResult(prep_text, list(map(lambda tt: tt.__name__, types)), entropies, 1.5)}
+    expected = {token_set: EvaluationResult(prep_text, list(map(lambda tt: tt.__name__, types)), entropies, 1.5,
+                                            [(0.0, 0), (1.0, 1), (2.0, 1), (0.0, 0)])}
     actual = bin_entropy(trained_model_mock, 'MyClass', extension=any_1, append_eof=False,
-                         token_type_subsets={token_set})
+                         token_type_subsets={token_set}, max_context_allowed=4, full_tokens=False)
 
-    assert expected == actual
+    assert actual == expected
 
 
 def test_bin_entropy_with_comment():
@@ -41,13 +43,14 @@ def test_bin_entropy_with_comment():
     trained_model_mock.get_entropies_for_text.return_value = (
         [1.0, 2.0, 3.0, 6.0],
         prep_text,
-        [SplitContainer, SplitContainer, OneLineComment, OneLineComment]
+        [SplitContainer, SplitContainer, OneLineComment, OneLineComment],
+        [None, None, None, None]
     )
 
     expected = {
-        TokenTypeSubset.full_set(): EvaluationResult(prep_text, types_str, [1.0, 2.0, 3.0, 6.0], 3.0),
-        TokenTypeSubset.only_comments(): EvaluationResult(prep_text, types_str, [None, None, 3.0, 6.0], 4.5),
-        TokenTypeSubset.full_set_without_comments(): EvaluationResult(prep_text, types_str, [1.0, 2.0, None, None], 1.5)
+        TokenTypeSubset.full_set(): EvaluationResult(prep_text, types_str, [1.0, 2.0, 3.0, 6.0], 3.0, [(0.0, 0)]),
+        TokenTypeSubset.only_comments(): EvaluationResult(prep_text, types_str, [None, None, 3.0, 6.0], 4.5, [(0.0, 0)]),
+        TokenTypeSubset.full_set_without_comments(): EvaluationResult(prep_text, types_str, [1.0, 2.0, None, None], 1.5, [(0.0, 0)])
     }
 
     actual = bin_entropy(trained_model_mock, 'MyClass //', extension='java', append_eof=False,
@@ -55,9 +58,9 @@ def test_bin_entropy_with_comment():
                              TokenTypeSubset.full_set(),
                              TokenTypeSubset.only_comments(),
                              TokenTypeSubset.full_set_without_comments()
-                         }, full_tokens=False)
+                         }, full_tokens=False, max_context_allowed=1)
 
-    assert expected == actual
+    assert actual == expected
 
 
 def test_mrr_default_args():

@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 from collections import OrderedDict
 from threading import Lock
@@ -16,13 +17,15 @@ from codeprep.pipeline.dataset import normalize_extension_string
 from codeprep.preprocess.metadata import check_metadata_validity, PreprocessingMetadata
 from codeprep.preprocess.placeholders import placeholders
 from codeprep.subtokens import is_terminal_subtoken, FullTokenIterator, SubtokenIterator
-from langmodels.beamsearch import beam_search
+
+from langmodels.beamsearch import beam_search, FlattenedCandidateList
 from langmodels.cuda_util import get_device, get_map_location
 from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig, GruArch, \
     LMTrainingMetrics
 from langmodels.lmconfig.serialization import load_config_or_metrics_from_file, read_value_from_file
 from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
-from langmodels.util import to_binary_entropy
+from langmodels.util import to_binary_entropy, split_list_into_nested_chunks
+from langmodels.nn import take_hidden_state_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +163,112 @@ class ModelDescription(object):
 lock = Lock()
 
 
+@dataclass(frozen=True)
+class ContextUsage(object):
+    """
+    >>> ContextUsage(length_start=10, reset_at=200, reset_times=0, length_end=10).n_predictions()
+    0
+    >>> ContextUsage(length_start=50, reset_at=200, reset_times=1, length_end=50).n_predictions()
+    200
+    >>> ContextUsage(length_start=10, reset_at=200, reset_times=2, length_end=50).n_predictions()
+    440
+    >>> ContextUsage(length_start=20, reset_at=10, reset_times=2, length_end=50).n_predictions()
+    Traceback (most recent call last):
+    ...
+    AssertionError
+
+    >>> context_usage = ContextUsage.from_chunks([[]], 199)
+    >>> context_usage
+    ContextUsage(length_start=0, reset_at=1, reset_times=0, length_end=0)
+    >>> context_usage.n_predictions()
+    0
+
+    >>> context_usage = ContextUsage.from_chunks([[[1]]], 199)
+    >>> context_usage
+    ContextUsage(length_start=199, reset_at=200, reset_times=0, length_end=200)
+    >>> context_usage.n_predictions()
+    1
+
+    >>> context_usage = ContextUsage.from_chunks([[[1]], [[2]]], 199)
+    >>> context_usage
+    ContextUsage(length_start=199, reset_at=200, reset_times=1, length_end=1)
+    >>> context_usage.n_predictions()
+    2
+    >>> [i for i in iter(context_usage)]
+    [199, 0]
+
+    >>> context_usage = ContextUsage.from_chunks([[[1]], [[2]], [[3]]], 0)
+    >>> context_usage
+    ContextUsage(length_start=0, reset_at=1, reset_times=2, length_end=1)
+    >>> context_usage.n_predictions()
+    3
+    >>> [i for i in iter(context_usage)]
+    [0, 0, 0]
+
+    >>> context_usage = ContextUsage.from_chunks([[[1]], [[2, 3, 4]], [[5]]], 2)
+    >>> context_usage
+    ContextUsage(length_start=2, reset_at=3, reset_times=2, length_end=1)
+    >>> context_usage.n_predictions()
+    5
+    >>> [i for i in iter(context_usage)]
+    [2, 0, 1, 2, 0]
+    """
+    length_start: int
+    reset_at: int
+    reset_times: int
+    length_end: int
+
+    class ContextUsageIterator(object):
+        def __init__(self, context_usage: 'ContextUsage'):
+            self.context_usage = context_usage
+            self.current_length = context_usage.length_start
+            self.context_times_reset = 0
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            if (self.context_times_reset == self.context_usage.reset_times \
+                    and self.current_length == self.context_usage.length_end) \
+                    or self.context_times_reset > self.context_usage.reset_times:
+                raise StopIteration
+            to_return = self.current_length
+            self.current_length += 1
+            if self.current_length == self.context_usage.reset_at:
+                self.current_length = 0
+                self.context_times_reset += 1
+            return to_return
+
+    def __post_init__(self):
+        assert self.reset_at > self.length_start and self.reset_at >= self.length_end
+
+    def n_predictions(self) -> int:
+        return (self.reset_at - self.length_start) \
+               + self.reset_at * (self.reset_times - 1) + self.length_end
+
+    def __iter__(self):
+        return ContextUsage.ContextUsageIterator(self)
+
+    @staticmethod
+    def from_chunks(prep_text_chunks: List[List[List[any]]], context_length_for_next_prediction: int) -> 'ContextUsage':
+
+        if prep_text_chunks == [[]]:
+            return ContextUsage(length_start=0, reset_at=1, reset_times=0, length_end=0)
+
+        context_reset_times = len(prep_text_chunks) - 1
+
+        def n_tokens_in_chunk(chunk: List[List[any]]) -> int:
+            return sum(map(lambda sub_chunk: len(sub_chunk), chunk))
+
+        tokens_in_first_chunk = n_tokens_in_chunk(prep_text_chunks[0])
+        tokens_in_last_chunk = n_tokens_in_chunk(prep_text_chunks[-1])
+
+        return ContextUsage(length_start=context_length_for_next_prediction,
+                            reset_at=tokens_in_first_chunk + context_length_for_next_prediction,
+                            reset_times=context_reset_times,
+                            length_end=tokens_in_last_chunk if context_reset_times != 0 else tokens_in_first_chunk + context_length_for_next_prediction)
+
+
 class TrainedModel(object):
     STARTING_TOKEN = placeholders['ect']
 
@@ -198,6 +307,7 @@ class TrainedModel(object):
             term_vocab, self._first_nonterm_token = _create_term_vocab(self._original_vocab)
             self._model, self._vocab = self._load_model(path, term_vocab)
             to_test_mode(self._model)
+            self._initial_snapshot = take_hidden_state_snapshot(self._model)
 
             # last_predicted_token_tensor is a rank-2 tensor!
             self._last_predicted_token_tensor = torch.tensor([self._vocab.numericalize([self.STARTING_TOKEN])],
@@ -313,48 +423,53 @@ class TrainedModel(object):
         prep_text, metadata = self.prep_text(text, extension=extension, return_metadata=True)
         self._feed_prep_tokens(prep_text)
 
-    def get_entropies_for_text(self, text: str, extension: str, full_tokens: bool, append_eof: bool) \
-            -> Tuple[List[float], List[str], List[Type]]:
+    def get_entropies_for_text(self, text: str, extension: str, full_tokens: bool,
+                               append_eof: bool, max_context_allowed: int) \
+            -> Tuple[List[float], List[str], List[Type], List[int]]:
         tokens, metadata = self.prep_text(text, extension, return_metadata=True, append_eof=append_eof)
-        subtoken_entropies = self._get_entropies_for_prep_text(tokens)
+        max_subtokens_per_chunk = 200
+        context_length_for_next_prediction = len(self.context)
+        prep_text_chunks = split_list_into_nested_chunks(tokens, max_context_allowed - len(self.context), max_context_allowed, max_subtokens_per_chunk)
+        context_usage = ContextUsage.from_chunks(prep_text_chunks, context_length_for_next_prediction)
+        # if the line is too big, we break it down to chunks to fit it into gpu memory
+        # big chunks require more memory, small chunks require more time
+        subtoken_entropies = self._get_entropies_for_prep_text(prep_text_chunks, max_context_allowed)
 
         iterator_type = FullTokenIterator if full_tokens else SubtokenIterator
 
-        def formatter(lst: List[Tuple[float, str]]) -> Tuple[float, str]:
-            entropies, tokens = tuple(zip(*lst))
-            return sum(entropies), "".join(tokens)
+        def formatter(lst: List[Tuple[float, str, int]]) -> Tuple[float, str, int]:
+            entropies, tokens, context_lengths = tuple(zip(*lst))
+            return sum(entropies), "".join(tokens), context_lengths[0] if len(context_lengths) == 1 else None
 
-        iterator = iterator_type(list(zip(subtoken_entropies, tokens)), metadata.word_boundaries,
+        iterator = iterator_type(list(zip(subtoken_entropies, tokens, context_usage)), metadata.word_boundaries,
                                  format=formatter, return_full_token_index=True)
-        e, t, tt = [], [], []
-        for ind, (entropy, token) in iterator:
+        e, t, tt, ct = [], [], [], []
+        for ind, (entropy, token, context_length) in iterator:
             e.append(entropy)
             t.append(token)
             tt.append(metadata.token_types[ind])
-        return e, t, tt
+            ct.append(context_length)
+        return e, t, tt, ct
 
-
-    def _get_entropies_for_prep_text(self, prep_text: List[str]) -> List[float]:
+    def _get_entropies_for_prep_text(self, prep_text_chunks: List[List[List[str]]],
+                                     max_context_allowed: int) -> List[float]:
         """
         changes hidden states of the model!!
         """
         with lock:
             self._check_model_loaded()
 
-            if not prep_text:
-                return []
+        if prep_text_chunks == [[]]:
+            return []
 
-            loss_list = []
-            max_subtokens_per_chunk = 200
-            # if the line is too big, we break it down to chunks to fit it into gpu memory
-            # big chunks require more memory, small chunks require more time
-            n_chunks = (len(prep_text)-1) // max_subtokens_per_chunk + 1
-            for i in range(n_chunks):
-                pt = prep_text[i*max_subtokens_per_chunk:(i+1)*max_subtokens_per_chunk]
-                numericalized_prep_text = torch.tensor([self._vocab.numericalize(pt)],
+        loss_list = []
+
+        for chunk in prep_text_chunks:
+            for sub_chunk in chunk:
+                numericalized_prep_text = torch.tensor([self._vocab.numericalize(sub_chunk)],
                                                        device=get_device(self._force_use_cpu))
 
-                self._save_context(pt)
+                self._save_context(sub_chunk)
                 last_layer = get_last_layer_activations(self._model, torch.cat([self._last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))
                 loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
                                        numericalized_prep_text.view(-1),
@@ -362,18 +477,22 @@ class TrainedModel(object):
                 binary_loss = to_binary_entropy(loss)
                 loss_list.extend(binary_loss.tolist())
                 self._last_predicted_token_tensor = numericalized_prep_text[:, -1:]
-            return loss_list
+            if len(self.context) == max_context_allowed:
+                self._reset()
+        return loss_list
+
+    def _reset(self) -> None:
+        self._model.reset()
+        self.reset_context()
 
     def reset(self) -> None:
         with lock:
             self._check_model_loaded()
-
-            self._model.reset()
-            self.reset_context()
+            self._reset()
             self._last_predicted_token_tensor = torch.tensor([self._vocab.numericalize([self.STARTING_TOKEN])],
                                                              device=get_device(self._force_use_cpu))
 
-    def predict_next_full_token(self, n_suggestions: int = 1, include_debug_tokens: bool = False) -> PredictionList:
+    def predict_next_full_token(self, n_suggestions: int = 1, include_debug_tokens: bool = False, max_prob: float = 0.05) -> PredictionList:
         with lock:
             self._check_model_loaded()
 

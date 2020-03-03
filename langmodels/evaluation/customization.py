@@ -103,47 +103,49 @@ class TokenTypeSubset(object):
 
 class FilteringTokenIterator(object):
     """
-    >>> metadata = PreppedTokenMetadata(n_subtokens_per_token=[1, 3], token_types=[SplitContainer, OneLineComment])
+    >>> metadata = PreppedTokenMetadata(n_subtokens_per_token=[1, 2], token_types=[SplitContainer, OneLineComment])
 
     >>> token_type_subset = TokenTypeSubset.full_set_without_comments()
-    >>> [token for token in FilteringTokenIterator(['hi', '/', '/'], metadata, token_type_subset)]
+    >>> [token for token in FilteringTokenIterator(PreppedSubTokenSequence(['hi', '/', '/'], metadata), token_type_subset)]
     ['hi']
 
-    >>> [token for token in FilteringTokenIterator(['hi', '/', '/'], metadata)]
+    >>> [token for token in FilteringTokenIterator(PreppedFullTokenSequence(['hi', '/', '/'], metadata))]
     ['hi', '//']
 
-    >>> [token for token in FilteringTokenIterator(['hi', '/', '/'], metadata, return_token_type=True)]
-    [('hi', <class 'codeprep.tokens.containers.SplitContainer'>), ('//', <class 'codeprep.tokens.containers.OneLineComment'>)]
+    >>> [token for token in FilteringTokenIterator(PreppedSubTokenSequence(['hi', '/', '/'], metadata), return_token_type=True)]
+    [('hi', <class 'codeprep.tokens.containers.SplitContainer'>), ('/', <class 'codeprep.tokens.containers.OneLineComment'>), ('/', <class 'codeprep.tokens.containers.OneLineComment'>)]
 
-    >>> it = FilteringTokenIterator(['hi', '/', '/'], metadata, token_iterator_type=SubtokenIterator)
+    >>> it = FilteringTokenIterator(PreppedSubTokenSequence(['hi', '/', '/'], metadata))
     >>> [token for token in it]
     ['hi', '/', '/']
 
-    >>> it = FilteringTokenIterator(['hi', '/', '/'], metadata, token_type_subset=TokenTypeSubset.only_comments(), \
-token_iterator_type=SubtokenIterator)
+    >>> it = FilteringTokenIterator(PreppedSubTokenSequence(['hi', '/', '/'], metadata), token_type_subset=TokenTypeSubset.only_comments())
     >>> [token for token in it]
     ['/', '/']
+
     """
     def __init__(self, prepped_tokens: Union[PreppedSubTokenSequence, PreppedFullTokenSequence],
                  token_type_subset: TokenTypeSubset = TokenTypeSubset.full_set(),
                  format: Callable[[List[str]], Any] = lambda s: ''.join(s),
                  return_token_type: bool = False):
-        self.prepped_tokens = prepped_tokens
         self.token_type_subset = token_type_subset
         self.format = format
         self.current_full_token = 0
         self.return_token_type = return_token_type
+
+        if isinstance(prepped_tokens, PreppedSubTokenSequence):
+            self.iterator = iter(zip(prepped_tokens.sub_token_view(), prepped_tokens.get_iterator(over=prepped_tokens.metadata.token_types, over_full_tokens=True)))
+        else:
+            self.iterator = iter(prepped_tokens.full_tokens_view(return_token_type=True, formatter=format))
 
     def __iter__(self):
         return self
 
     def __next__(self) -> Union[Any, Tuple[Any, Type]]:
         while True:
-            next_full_token, token_type = next(self.prepped_tokens.full_tokens_view(return_token_type=True))
-
+            token, token_type = next(self.iterator)
             if self.token_type_subset.contains(token_type):
-                formatted_value = self.format(next_full_token)
-                return (formatted_value, token_type) if self.return_token_type else formatted_value
+                return (token, token_type) if self.return_token_type else token
 
 
 def each_token_type_separately() -> Set[TokenTypeSubset]:

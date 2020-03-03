@@ -4,8 +4,10 @@ from typing import List, Optional, Tuple, Dict
 import numpy as np
 from dataclasses import dataclass
 
-from evaluation import TokenTypeSubset
-from evaluation.metrics import MetricName
+from langmodels.evaluation.customization import TokenTypeSubset
+
+
+MetricName = str
 
 
 @dataclass(frozen=True)

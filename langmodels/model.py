@@ -14,9 +14,8 @@ from torch import cuda
 
 from codeprep.api.corpus import PreprocessedCorpus
 from codeprep.pipeline.dataset import normalize_extension_string
-from codeprep.preprocess.metadata import check_metadata_validity, PreprocessingMetadata
 from codeprep.preprocess.placeholders import placeholders
-from codeprep.subtokens import is_terminal_subtoken, FullTokenIterator, SubtokenIterator
+from codeprep.preprocess.result import PreppedSubTokenSequence, is_terminal_subtoken, PreppedFullTokenSequence
 
 from langmodels.beamsearch import beam_search, FlattenedCandidateList
 from langmodels.cuda_util import get_device, get_map_location
@@ -24,8 +23,9 @@ from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMT
     LMTrainingMetrics
 from langmodels.lmconfig.serialization import load_config_or_metrics_from_file, read_value_from_file
 from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
-from langmodels.util import to_binary_entropy, split_list_into_nested_chunks
+from langmodels.util import to_binary_entropy, chunk_prepped_tokens
 from langmodels.nn import take_hidden_state_snapshot
+from langmodels.context import ModelContext
 
 logger = logging.getLogger(__name__)
 
@@ -177,37 +177,26 @@ class ContextUsage(object):
     ...
     AssertionError
 
-    >>> context_usage = ContextUsage.from_chunks([[]], 199)
-    >>> context_usage
-    ContextUsage(length_start=0, reset_at=1, reset_times=0, length_end=0)
-    >>> context_usage.n_predictions()
+    >>> ContextUsage(length_start=0, reset_at=1, reset_times=0, length_end=0).n_predictions()
     0
 
-    >>> context_usage = ContextUsage.from_chunks([[[1]]], 199)
-    >>> context_usage
-    ContextUsage(length_start=199, reset_at=200, reset_times=0, length_end=200)
-    >>> context_usage.n_predictions()
+    >>> ContextUsage(length_start=199, reset_at=200, reset_times=0, length_end=200).n_predictions()
     1
 
-    >>> context_usage = ContextUsage.from_chunks([[[1]], [[2]]], 199)
-    >>> context_usage
-    ContextUsage(length_start=199, reset_at=200, reset_times=1, length_end=1)
+    >>> context_usage = ContextUsage(length_start=199, reset_at=200, reset_times=1, length_end=1)
     >>> context_usage.n_predictions()
     2
+
     >>> [i for i in iter(context_usage)]
     [199, 0]
 
-    >>> context_usage = ContextUsage.from_chunks([[[1]], [[2]], [[3]]], 0)
-    >>> context_usage
-    ContextUsage(length_start=0, reset_at=1, reset_times=2, length_end=1)
+    >>> context_usage = ContextUsage(length_start=0, reset_at=1, reset_times=2, length_end=1)
     >>> context_usage.n_predictions()
     3
     >>> [i for i in iter(context_usage)]
     [0, 0, 0]
 
-    >>> context_usage = ContextUsage.from_chunks([[[1]], [[2, 3, 4]], [[5]]], 2)
-    >>> context_usage
-    ContextUsage(length_start=2, reset_at=3, reset_times=2, length_end=1)
+    >>> context_usage = ContextUsage(length_start=2, reset_at=3, reset_times=2, length_end=1)
     >>> context_usage.n_predictions()
     5
     >>> [i for i in iter(context_usage)]
@@ -217,6 +206,9 @@ class ContextUsage(object):
     reset_at: int
     reset_times: int
     length_end: int
+
+    def is_last_chunk_complete(self):
+        return self.reset_at == self.length_end
 
     class ContextUsageIterator(object):
         def __init__(self, context_usage: 'ContextUsage'):
@@ -240,7 +232,7 @@ class ContextUsage(object):
             return to_return
 
     def __post_init__(self):
-        assert self.reset_at > self.length_start and self.reset_at >= self.length_end
+        assert self.reset_at >= self.length_start and self.reset_at >= self.length_end
 
     def n_predictions(self) -> int:
         return (self.reset_at - self.length_start) \
@@ -248,25 +240,6 @@ class ContextUsage(object):
 
     def __iter__(self):
         return ContextUsage.ContextUsageIterator(self)
-
-    @staticmethod
-    def from_chunks(prep_text_chunks: List[List[List[any]]], context_length_for_next_prediction: int) -> 'ContextUsage':
-
-        if prep_text_chunks == [[]]:
-            return ContextUsage(length_start=0, reset_at=1, reset_times=0, length_end=0)
-
-        context_reset_times = len(prep_text_chunks) - 1
-
-        def n_tokens_in_chunk(chunk: List[List[any]]) -> int:
-            return sum(map(lambda sub_chunk: len(sub_chunk), chunk))
-
-        tokens_in_first_chunk = n_tokens_in_chunk(prep_text_chunks[0])
-        tokens_in_last_chunk = n_tokens_in_chunk(prep_text_chunks[-1])
-
-        return ContextUsage(length_start=context_length_for_next_prediction,
-                            reset_at=tokens_in_first_chunk + context_length_for_next_prediction,
-                            reset_times=context_reset_times,
-                            length_end=tokens_in_last_chunk if context_reset_times != 0 else tokens_in_first_chunk + context_length_for_next_prediction)
 
 
 class TrainedModel(object):
@@ -283,7 +256,7 @@ class TrainedModel(object):
         self._metrics = None
         self._config = None
         self._tags = []
-        self._context: List[str] = []
+        self._context: ModelContext = ModelContext()
         try:
             self._config: LMTrainingConfig = load_config_or_metrics_from_file(path_to_config_file, LMTrainingConfig)
         except FileNotFoundError:
@@ -364,49 +337,37 @@ class TrainedModel(object):
         return model, vocab
 
     BEAM_SIZE = 500
-    SAVE_CONTEXT_LIMIT = 1000
-
-    def _save_context(self, prep_tokens: List[str]) -> None:
-        self._context.extend(prep_tokens)
-        if len(self._context) > TrainedModel.SAVE_CONTEXT_LIMIT:
-            self._context = self._context[-TrainedModel.SAVE_CONTEXT_LIMIT:]
-
-    def reset_context(self) -> None:
-        self._context = []
 
     def prep_corpus(self, corpus: Corpus, **kwargs) -> PreprocessedCorpus:
         return self._prep_function.apply(corpus, **kwargs)
 
-    def prep_text(self, text: str, extension: str, **kwargs) -> Union[Tuple[List[str], PreprocessingMetadata], List[str]]:
+    def prep_text(self, text: str, extension: str, **kwargs) -> PreppedSubTokenSequence:
         import codeprep.api.text as text_api
-        return_metadata: bool = 'return_metadata' in kwargs and kwargs['return_metadata']
         text_callable = getattr(text_api, self._prep_function.callable.__name__)
-        preprocessing_result = text_callable(text, extension=extension, force_reinit_bpe_data=False,
+        prepped_token = text_callable(text, extension=extension, force_reinit_bpe_data=False,
                                             *self._prep_function.params, **asdict(self._prep_function.options), **kwargs)
-        if return_metadata:
-            check_metadata_validity(*preprocessing_result)
-        return preprocessing_result
+        return prepped_token
 
     def get_predictions_and_feed(self, text: str, extension: str, n_suggestions: int, append_eof: bool)\
             -> Generator[Tuple[PredictionList, str, Type], None, None]:
-        prep_text, metadata = self.prep_text(text, extension, return_metadata=True, append_eof=append_eof)
+        prepped_tokens = self.prep_text(text, extension, return_metadata=True, append_eof=append_eof)
 
-        for ind, prep_token in FullTokenIterator(prep_text, metadata.word_boundaries, return_full_token_index=True):
+        for prepped_token, token_type in prepped_tokens.full_tokens_view(return_token_type=True):
             predictions = self.predict_next_full_token(n_suggestions)
-            self._feed_prep_tokens([prep_token])
+            self._feed_prep_tokens(PreppedSubTokenSequence.from_full_token(prepped_token, token_type))
 
-            yield predictions, prep_token, metadata.token_types[ind]
+            yield predictions, "".join(prepped_token), token_type
 
     def _check_model_loaded(self, only_description=False):
         if not only_description and self._load_only_description:
             raise RuntimeError("Operation not supported. Only model's description is loaded. "
                                "Prease reload the model with param load_only_description set to False.")
 
-    def _feed_prep_tokens(self, prep_tokens: List[str]) -> None:
+    def _feed_prep_tokens(self, prepped_tokens: PreppedSubTokenSequence) -> None:
         self._check_model_loaded()
-        context_tensor = torch.tensor([self._vocab.numericalize(prep_tokens)], device=get_device(self._force_use_cpu))
+        context_tensor = torch.tensor([self._vocab.numericalize(prepped_tokens.tokens)], device=get_device(self._force_use_cpu))
         with lock:
-            self._save_context(prep_tokens)
+            self._context.add(prepped_tokens)
             _ = get_last_layer_activations(self._model, context_tensor[:, :-1])
             self._last_predicted_token_tensor = context_tensor[:, -1:]
 
@@ -420,70 +381,79 @@ class TrainedModel(object):
     def feed_text(self, text: str, extension: str) -> None:
         self._assert_inference_possible_for_file_type(extension)
 
-        prep_text, metadata = self.prep_text(text, extension=extension, return_metadata=True)
-        self._feed_prep_tokens(prep_text)
+        prepped_tokens = self.prep_text(text, extension=extension)
+        self._feed_prep_tokens(prepped_tokens)
 
     def get_entropies_for_text(self, text: str, extension: str, full_tokens: bool,
                                append_eof: bool, max_context_allowed: int) \
             -> Tuple[List[float], List[str], List[Type], List[int]]:
-        tokens, metadata = self.prep_text(text, extension, return_metadata=True, append_eof=append_eof)
-        max_subtokens_per_chunk = 200
-        context_length_for_next_prediction = len(self.context)
-        prep_text_chunks = split_list_into_nested_chunks(tokens, max_context_allowed - len(self.context), max_context_allowed, max_subtokens_per_chunk)
-        context_usage = ContextUsage.from_chunks(prep_text_chunks, context_length_for_next_prediction)
-        # if the line is too big, we break it down to chunks to fit it into gpu memory
-        # big chunks require more memory, small chunks require more time
-        subtoken_entropies = self._get_entropies_for_prep_text(prep_text_chunks, max_context_allowed)
+        current_context_size = self.context.size(full_tokens)
+        if current_context_size > max_context_allowed:
+            raise ValueError(f"The length of the current context ({current_context_size}) is larger "
+                             f"than the max allowed that was set ({max_context_allowed}).\n"
+                             f"Please reset the trainedmodel's context")
 
-        iterator_type = FullTokenIterator if full_tokens else SubtokenIterator
+        prepped_tokens = self.prep_text(text, extension, append_eof=append_eof)
 
-        def formatter(lst: List[Tuple[float, str, int]]) -> Tuple[float, str, int]:
-            entropies, tokens, context_lengths = tuple(zip(*lst))
-            return sum(entropies), "".join(tokens), context_lengths[0] if len(context_lengths) == 1 else None
+        prepped_tokens = prepped_tokens.full_tokens_view(formatter=lambda x: "".join(x)) if full_tokens else prepped_tokens
+        chunked_prepped_tokens = chunk_prepped_tokens(prepped_tokens, max_context_allowed - current_context_size, max_context_allowed)
+        context_usage = ContextUsage(length_start=current_context_size,
+                               reset_at=max_context_allowed,
+                               reset_times=len(chunked_prepped_tokens) - 1,
+                               length_end=len(chunked_prepped_tokens[-1]))
 
-        iterator = iterator_type(list(zip(subtoken_entropies, tokens, context_usage)), metadata.word_boundaries,
-                                 format=formatter, return_full_token_index=True)
-        e, t, tt, ct = [], [], [], []
-        for ind, (entropy, token, context_length) in iterator:
-            e.append(entropy)
-            t.append(token)
-            tt.append(metadata.token_types[ind])
-            ct.append(context_length)
-        return e, t, tt, ct
+        subtoken_entropies = self._get_entropies_for_prep_text(
+            chunked_prepped_tokens,
+            reset_after_last_chunk=context_usage.is_last_chunk_complete()
+        )
 
-    def _get_entropies_for_prep_text(self, prep_text_chunks: List[List[List[str]]],
-                                     max_context_allowed: int) -> List[float]:
+        tokens = [i for i in prepped_tokens]
+        all_token_types = [i for i in prepped_tokens.get_iterator(prepped_tokens.metadata.token_types, over_full_tokens=True)]
+        all_entropies = [i for i in prepped_tokens.get_iterator(subtoken_entropies, over_full_tokens=False, formatter=sum)]
+        context_lengths = [i for i in prepped_tokens.get_iterator(context_usage, over_full_tokens=True)]
+
+        return all_entropies, tokens, all_token_types, context_lengths
+
+    def _get_entropies_for_prep_text(self, prepped_token_sequence_chunks: Union[List[PreppedSubTokenSequence], List[PreppedFullTokenSequence]],
+                                     reset_after_last_chunk: bool) -> List[float]:
         """
         changes hidden states of the model!!
         """
+        max_subtokens_per_chunk = 200
+
         with lock:
             self._check_model_loaded()
 
-        if prep_text_chunks == [[]]:
+        if len(prepped_token_sequence_chunks) == 0:
             return []
 
         loss_list = []
 
-        for chunk in prep_text_chunks:
-            for sub_chunk in chunk:
-                numericalized_prep_text = torch.tensor([self._vocab.numericalize(sub_chunk)],
+        # if the line is too big, we break it down to chunks to fit it into gpu memory
+        # big chunks require more memory, small chunks require more time
+        for ind, prepped_token_sequence in enumerate(prepped_token_sequence_chunks):
+            prepped_sub_token_sequence = prepped_token_sequence.sub_token_view()
+            for i in range(0, len(prepped_sub_token_sequence), max_subtokens_per_chunk):
+                sub_chunk = prepped_sub_token_sequence[i:i+max_subtokens_per_chunk]
+                numericalized_prep_text = torch.tensor([self._vocab.numericalize(sub_chunk.tokens)],
                                                        device=get_device(self._force_use_cpu))
 
-                self._save_context(sub_chunk)
-                last_layer = get_last_layer_activations(self._model, torch.cat([self._last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))
+                self._context.add(sub_chunk)
+                inp = torch.cat([self._last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1)
+                last_layer = get_last_layer_activations(self._model, inp)
                 loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
                                        numericalized_prep_text.view(-1),
                                        reduction='none')
                 binary_loss = to_binary_entropy(loss)
                 loss_list.extend(binary_loss.tolist())
                 self._last_predicted_token_tensor = numericalized_prep_text[:, -1:]
-            if len(self.context) == max_context_allowed:
+            if ind < len(prepped_token_sequence_chunks) - 1 or reset_after_last_chunk:
                 self._reset()
         return loss_list
 
     def _reset(self) -> None:
         self._model.reset()
-        self.reset_context()
+        self._context.reset()
 
     def reset(self) -> None:
         with lock:

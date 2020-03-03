@@ -12,9 +12,6 @@ DEFAULT_N_MODEL_SUGGESTIONS = 100
 logger = logging.getLogger(__name__)
 
 
-MetricName = str
-
-
 def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool,
                 token_type_subsets: Optional[Set[TokenTypeSubset]] = None, max_context_allowed: int = sys.maxsize,
                 full_tokens: bool = True) \

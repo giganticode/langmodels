@@ -1,11 +1,11 @@
 import logging
 from functools import reduce
-from typing import List, Callable, Any, Type, Union, Set, Iterable, FrozenSet, Tuple, Optional, Dict
+from typing import List, Callable, Any, Type, Union, Set, Iterable, FrozenSet, Tuple
 
 from dataclasses import dataclass, field
 
-from codeprep.preprocess.metadata import PreprocessingMetadata
-from codeprep.subtokens import FullTokenIterator, SubtokenIterator
+from codeprep.preprocess.metadata import PreppedTokenMetadata
+from codeprep.preprocess.result import PreppedSubTokenSequence, PreppedFullTokenSequence
 from codeprep.tokens.containers import Comment, SplitContainer, OneLineComment
 from codeprep.tokens.rootclasses import ParsedToken
 
@@ -101,12 +101,9 @@ class TokenTypeSubset(object):
         return type in self.all_included_types
 
 
-TokenIterator = Union[SubtokenIterator, FullTokenIterator]
-
-
 class FilteringTokenIterator(object):
     """
-    >>> metadata = PreprocessingMetadata(word_boundaries=[0, 1, 3], token_types=[SplitContainer, OneLineComment])
+    >>> metadata = PreppedTokenMetadata(n_subtokens_per_token=[1, 3], token_types=[SplitContainer, OneLineComment])
 
     >>> token_type_subset = TokenTypeSubset.full_set_without_comments()
     >>> [token for token in FilteringTokenIterator(['hi', '/', '/'], metadata, token_type_subset)]
@@ -127,15 +124,12 @@ token_iterator_type=SubtokenIterator)
     >>> [token for token in it]
     ['/', '/']
     """
-    def __init__(self, subwords: List[Any], metadata: PreprocessingMetadata,
+    def __init__(self, prepped_tokens: Union[PreppedSubTokenSequence, PreppedFullTokenSequence],
                  token_type_subset: TokenTypeSubset = TokenTypeSubset.full_set(),
-                 token_iterator_type: Type[TokenIterator] = FullTokenIterator,
                  format: Callable[[List[str]], Any] = lambda s: ''.join(s),
                  return_token_type: bool = False):
-        self.full_token_iterator = token_iterator_type(subwords, metadata.word_boundaries,
-                                                       format=lambda l:l, return_full_token_index=True)
+        self.prepped_tokens = prepped_tokens
         self.token_type_subset = token_type_subset
-        self.metadata = metadata
         self.format = format
         self.current_full_token = 0
         self.return_token_type = return_token_type
@@ -145,8 +139,8 @@ token_iterator_type=SubtokenIterator)
 
     def __next__(self) -> Union[Any, Tuple[Any, Type]]:
         while True:
-            current_full_token_ind, next_full_token = next(self.full_token_iterator)
-            token_type = self.metadata.token_types[current_full_token_ind]
+            next_full_token, token_type = next(self.prepped_tokens.full_tokens_view(return_token_type=True))
+
             if self.token_type_subset.contains(token_type):
                 formatted_value = self.format(next_full_token)
                 return (formatted_value, token_type) if self.return_token_type else formatted_value

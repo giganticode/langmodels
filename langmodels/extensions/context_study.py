@@ -34,7 +34,7 @@ if __name__ == '__main__':
     path = "/path/to/dataset"
     result = evaluate_model_on_path(m, Path(path), max_context_allowed=200, token_type_subsets=each_token_type_separately())
 
-    matplotlib.use('TkAgg')
+    matplotlib.use('Agg')
 
     run_name = get_run_name(os.path.basename(path))
     dir = os.path.join(project_dir, 'langmodels', 'figures', run_name)

@@ -6,14 +6,13 @@ from typing import List, Tuple, Optional, Union, Dict, Set
 
 from tqdm import tqdm
 
-from langmodels.evaluation.customization import TokenTypeSubset, each_token_type_separately
+from langmodels.evaluation.customization import TokenTypeSubset
 from langmodels.evaluation.metrics import bin_entropy
 from langmodels.evaluation.metrics import mrr, Metric
 from langmodels.evaluation.definitions import MetricName
 from langmodels.evaluation.definitions import EvaluationResult, EvaluationResultSummary, EvaluationScenario, Evaluation
 from langmodels.file_util import get_all_files, read_file_contents
 from langmodels.model import TrainedModel
-from repository import load_default_model
 
 logger = logging.getLogger(__name__)
 

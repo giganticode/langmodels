@@ -232,7 +232,7 @@ class ContextUsage(object):
             return to_return
 
     def __post_init__(self):
-        assert self.reset_at >= self.length_start and self.reset_at >= self.length_end
+        assert self.reset_at > self.length_start and self.reset_at >= self.length_end
 
     def n_predictions(self) -> int:
         return (self.reset_at - self.length_start) \
@@ -400,7 +400,7 @@ class TrainedModel(object):
         context_usage = ContextUsage(length_start=current_context_size,
                                reset_at=max_context_allowed,
                                reset_times=len(chunked_prepped_tokens) - 1,
-                               length_end=len(chunked_prepped_tokens[-1]))
+                               length_end=len(chunked_prepped_tokens[-1]) if len(chunked_prepped_tokens) > 1 else len(chunked_prepped_tokens[-1]) + current_context_size)
 
         subtoken_entropies = self._get_entropies_for_prep_text(
             chunked_prepped_tokens,

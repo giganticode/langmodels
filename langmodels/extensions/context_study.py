@@ -8,9 +8,9 @@ from matplotlib import pyplot as plt
 
 from typing import List
 
-import repository
-from evaluation import evaluate_model_on_path
-from evaluation.customization import each_token_type_separately
+from langmodels import repository
+from langmodels.evaluation import evaluate_model_on_path
+from langmodels.evaluation.customization import each_token_type_separately
 from langmodels import project_dir
 
 

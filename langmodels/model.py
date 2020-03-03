@@ -438,7 +438,6 @@ class TrainedModel(object):
                 numericalized_prep_text = torch.tensor([self._vocab.numericalize(sub_chunk.tokens)],
                                                        device=get_device(self._force_use_cpu))
 
-                self._context.add(sub_chunk)
                 inp = torch.cat([self._last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1)
                 last_layer = get_last_layer_activations(self._model, inp)
                 loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
@@ -447,6 +446,7 @@ class TrainedModel(object):
                 binary_loss = to_binary_entropy(loss)
                 loss_list.extend(binary_loss.tolist())
                 self._last_predicted_token_tensor = numericalized_prep_text[:, -1:]
+            self._context.add(prepped_sub_token_sequence)
             if ind < len(prepped_token_sequence_chunks) - 1 or reset_after_last_chunk:
                 self._reset()
         return loss_list

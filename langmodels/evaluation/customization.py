@@ -113,7 +113,7 @@ class FilteringTokenIterator(object):
     ['hi', '//']
 
     >>> [token for token in FilteringTokenIterator(PreppedSubTokenSequence(['hi', '/', '/'], metadata), return_token_type=True)]
-    [('hi', <class 'codeprep.tokentypes.containers.SplitContainer'>), ('/', <class 'codeprep.tokentypes.containers.OneLineComment'>), ('/', <class 'codeprep.tokens.containers.OneLineComment'>)]
+    [('hi', <class 'codeprep.tokentypes.containers.SplitContainer'>), ('/', <class 'codeprep.tokentypes.containers.OneLineComment'>), ('/', <class 'codeprep.tokentypes.containers.OneLineComment'>)]
 
     >>> it = FilteringTokenIterator(PreppedSubTokenSequence(['hi', '/', '/'], metadata))
     >>> [token for token in it]

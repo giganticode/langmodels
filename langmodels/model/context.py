@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 
+from codeprep.preprocess.metadata import PreppedTokenMetadata
 from codeprep.preprocess.result import PreppedSubTokenSequence
+from codeprep.tokentypes.containers import SplitContainer
 
 
 @dataclass(frozen=True)

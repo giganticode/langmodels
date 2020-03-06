@@ -9,10 +9,10 @@ from pathlib import Path
 from torch.nn import CrossEntropyLoss
 from typing import Sequence
 
-from langmodels.profiling import get_cpu_memory_used_mb
-from langmodels.tensor_ops import contains_no_value
+from langmodels.util.profiling import get_cpu_memory_used_mb
+from langmodels.tensor import contains_no_value
 from langmodels.training.numericalize import Numericalizer
-from langmodels.util import to_binary_entropy
+from langmodels.util.misc import to_binary_entropy
 
 logger = logging.getLogger(__name__)
 

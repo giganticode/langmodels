@@ -11,8 +11,8 @@ from langmodels.evaluation.metrics import bin_entropy
 from langmodels.evaluation.metrics import mrr, Metric
 from langmodels.evaluation.definitions import MetricName
 from langmodels.evaluation.definitions import EvaluationResult, EvaluationResultSummary, EvaluationScenario, Evaluation
-from langmodels.file_util import get_all_files, read_file_contents
-from langmodels.model import TrainedModel
+from langmodels.util.file import get_all_files, read_file_contents
+from langmodels.model.model import TrainedModel
 
 logger = logging.getLogger(__name__)
 

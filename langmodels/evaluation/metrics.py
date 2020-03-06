@@ -4,7 +4,7 @@ from typing import List, Optional, Set, Callable, Dict, Type
 
 from langmodels.evaluation.definitions import EvaluationResult
 from langmodels.evaluation.customization import TokenTypeSubset
-from langmodels.model import TrainedModel
+from langmodels.model.model import TrainedModel
 
 DEFAULT_N_MODEL_SUGGESTIONS = 100
 

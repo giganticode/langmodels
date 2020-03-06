@@ -11,7 +11,7 @@ import matplotlib
 
 matplotlib.use('PS')  # to avoid error on OSX - this should go here, before other imports
 
-from langmodels.nn import add_gru_to_model_data
+from langmodels.model.nn import add_gru_to_model_data
 
 app_name = 'langmodels'
 

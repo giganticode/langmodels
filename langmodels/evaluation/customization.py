@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 
 from codeprep.preprocess.metadata import PreppedTokenMetadata
 from codeprep.preprocess.result import PreppedSubTokenSequence, PreppedFullTokenSequence
-from codeprep.tokens.containers import Comment, SplitContainer, OneLineComment
-from codeprep.tokens.rootclasses import ParsedToken
+from codeprep.tokentypes.containers import Comment, SplitContainer, OneLineComment
+from codeprep.tokentypes.rootclasses import ParsedToken
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ class FilteringTokenIterator(object):
     ['hi', '//']
 
     >>> [token for token in FilteringTokenIterator(PreppedSubTokenSequence(['hi', '/', '/'], metadata), return_token_type=True)]
-    [('hi', <class 'codeprep.tokens.containers.SplitContainer'>), ('/', <class 'codeprep.tokens.containers.OneLineComment'>), ('/', <class 'codeprep.tokens.containers.OneLineComment'>)]
+    [('hi', <class 'codeprep.tokentypes.containers.SplitContainer'>), ('/', <class 'codeprep.tokentypes.containers.OneLineComment'>), ('/', <class 'codeprep.tokens.containers.OneLineComment'>)]
 
     >>> it = FilteringTokenIterator(PreppedSubTokenSequence(['hi', '/', '/'], metadata))
     >>> [token for token in it]

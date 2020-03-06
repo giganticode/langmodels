@@ -19,21 +19,21 @@ from typing import Optional, Tuple
 import codeprep.api.corpus as api
 from codeprep.api.corpus import PreprocessedCorpus
 from codeprep.util import to_literal_str
-from langmodels.cuda_util import get_device_id
-from langmodels.file_util import check_path_exists, check_path_writable, get_all_files
+from langmodels.util.cuda import get_device_id
+from langmodels.util.file import check_path_exists, check_path_writable, get_all_files
 from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, RafaelsTrainingSchedule, Training, \
     CosineLRSchedule, ExperimentRun, DeviceOptions
-from langmodels.model import TrainedModel, create_custom_config, BEST_MODEL_FILE_NAME
+from langmodels.model.model import TrainedModel, create_custom_config, BEST_MODEL_FILE_NAME
 from langmodels.repository.load import load_from_path
-from langmodels.tensor_ops import mrr
+from langmodels.tensor import mrr
 from langmodels.training.data import EmptyDataBunch, create_databunch, binary_cross_entropy_flat
 from langmodels.training.schedule import ReduceLRCallback
 from langmodels.training.subepoch_files import EpochFileLoader
 from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, RetryingSaveModelCalback, \
     MetricSavingCallback, report_experiment_terminated_mormally, TERMINATED_NORMALLY_METRIC_NAME, \
     MODEL_AVAILABLE_METRIC_NAME
-from langmodels.util import HOME
-from langmodels.model import CONFIG_FILE_NAME, VOCAB_FILE_NAME
+from langmodels.util.misc import HOME
+from langmodels.model.model import CONFIG_FILE_NAME, VOCAB_FILE_NAME
 from langmodels.lmconfig.serialization import dump_to_file
 
 logger = logging.getLogger(__name__)

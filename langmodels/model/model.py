@@ -1,14 +1,12 @@
 import logging
-import math
 import os
 from collections import OrderedDict
 from threading import Lock
-from typing import List, Dict, Any, Tuple, Optional, Union, Type, Generator
+from typing import List, Tuple, Optional, Union, Type, Generator
 
 import torch
-from dataclasses import dataclass, asdict
-from fastai.text import SequentialRNN, get_language_model, F, Vocab, awd_lstm_lm_config, convert_weights
-from fastai.text.models.transformer import init_transformer
+from dataclasses import asdict
+from fastai.text import SequentialRNN, get_language_model, F, Vocab, convert_weights
 from math import exp
 from torch import cuda
 
@@ -17,79 +15,25 @@ from codeprep.pipeline.dataset import normalize_extension_string
 from codeprep.preprocess.placeholders import placeholders
 from codeprep.preprocess.result import PreppedSubTokenSequence, is_terminal_subtoken, PreppedFullTokenSequence
 
-from langmodels.beamsearch import beam_search, FlattenedCandidateList
-from langmodels.cuda_util import get_device, get_map_location
-from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig, GruArch, \
-    LMTrainingMetrics
+from langmodels.model.beamsearch import beam_search
+from langmodels.lmconfig.datamodel import Corpus, TransformerArch, LMTrainingConfig, LMTrainingMetrics
 from langmodels.lmconfig.serialization import load_config_or_metrics_from_file, read_value_from_file
-from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
-from langmodels.util import to_binary_entropy, chunk_prepped_tokens
-from langmodels.nn import take_hidden_state_snapshot
-from langmodels.context import ModelContext
+from langmodels.model.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
+from langmodels.util.misc import to_binary_entropy, chunk_prepped_tokens
+from langmodels.model.nn import take_hidden_state_snapshot
+from langmodels.model.context import ModelContext
+from langmodels.model.config import create_custom_config
+from langmodels.model.context import ContextUsage
+from langmodels.model.summary import ModelSummary
+from langmodels.util.cuda import get_map_location, get_device
 
 logger = logging.getLogger(__name__)
-
-
-PAD_TOKEN_INDEX = 1
 
 BEST_MODEL_FILE_NAME = 'best.pth'
 METRICS_FILE_NAME = 'metrics'
 CONFIG_FILE_NAME = 'config'
 VOCAB_FILE_NAME = 'vocab'
 TAGS_FILE_NAME = 'tags'
-
-
-def create_custom_lstm_or_gru_config(arch: Union[GruArch, LstmArch]):
-    config = awd_lstm_lm_config
-    config['emb_sz'] = arch.emb_sz
-    config['n_hid'] = arch.n_hid
-    config['n_layers'] = arch.n_layers
-    config['pad_token'] = PAD_TOKEN_INDEX
-    if isinstance(arch, LstmArch):
-        config['qrnn'] = arch.qrnn
-    config['bidir'] = arch.bidir
-    config['output_p'] = arch.drop.out
-    config['hidden_p'] = arch.drop.outh
-    config['input_p'] = arch.drop.outi
-    config['embed_p'] = arch.drop.oute
-    config['weight_p'] = arch.drop.w
-    config['tie_weights'] = arch.tie_weights
-    config['out_bias'] = arch.out_bias
-    return config
-
-
-def create_custom_transformer_config(arch: TransformerArch) -> Dict[str, Any]:
-    d = {'init': init_transformer,
-         'ctx_len': arch.ctx_len,
-         'n_layers': arch.n_layers,
-         'n_heads': arch.n_heads,
-         'd_model': arch.d_model,
-         'd_head': arch.d_head,
-         'd_inner': arch.d_inner,
-         'resid_p': arch.drop.resid,
-         'attn_p': arch.drop.attn,
-         'ff_p': arch.drop.ff,
-         'embed_p': arch.drop.embed,
-         'output_p': arch.drop.output,
-         'bias': arch.bias,
-         'scale': arch.scale,
-         'act': arch.act,
-         'double_drop': arch.double_drop,
-         'tie_weights': arch.tie_weights,
-         'out_bias': arch.out_bias,
-         'mask': arch.mask,
-    }
-    return d
-
-
-def create_custom_config(lm_training_config: LMTrainingConfig):
-    arch = lm_training_config.arch
-    if isinstance(arch, LstmArch) or isinstance(arch, GruArch):
-        return create_custom_lstm_or_gru_config(arch)
-    elif isinstance(arch, TransformerArch):
-        return create_custom_transformer_config(arch)
-    else:
-        raise ValueError(f"Unknown architecture: {arch}")
 
 
 def _create_term_vocab(vocab: Vocab) -> Tuple[Vocab, int]:
@@ -136,110 +80,7 @@ def to_full_token_string(subtokens: List[str], include_debug_tokens=False) -> st
 
 PredictionList = List[Tuple[str, float]]
 
-@dataclass
-class ModelDescription(object):
-    id: str
-    bpe_merges: str
-    layers_config: str
-    arch: str
-    bin_entropy: float
-    training_time_minutes_per_epoch: int
-    n_epochs: int
-    best_epoch: int
-    size_on_disk_mb: int
-    tags: List[str]
-
-    def is_tagged_by(self, tag: str) -> bool:
-        return tag in self.tags
-
-    @staticmethod
-    def get_attribute_list() -> List[str]:
-        return [k for k in ModelDescription.__annotations__.keys()]
-
-    def get_value_list(self) -> List[str]:
-        return list(map(lambda a: self.__getattribute__(a), ModelDescription.get_attribute_list()))
-
-
 lock = Lock()
-
-
-@dataclass(frozen=True)
-class ContextUsage(object):
-    """
-    >>> ContextUsage(length_start=10, reset_at=200, reset_times=0, length_end=10).n_predictions()
-    0
-    >>> ContextUsage(length_start=50, reset_at=200, reset_times=1, length_end=50).n_predictions()
-    200
-    >>> ContextUsage(length_start=10, reset_at=200, reset_times=2, length_end=50).n_predictions()
-    440
-    >>> ContextUsage(length_start=20, reset_at=10, reset_times=2, length_end=50).n_predictions()
-    Traceback (most recent call last):
-    ...
-    AssertionError
-
-    >>> ContextUsage(length_start=0, reset_at=1, reset_times=0, length_end=0).n_predictions()
-    0
-
-    >>> ContextUsage(length_start=199, reset_at=200, reset_times=0, length_end=200).n_predictions()
-    1
-
-    >>> context_usage = ContextUsage(length_start=199, reset_at=200, reset_times=1, length_end=1)
-    >>> context_usage.n_predictions()
-    2
-
-    >>> [i for i in iter(context_usage)]
-    [199, 0]
-
-    >>> context_usage = ContextUsage(length_start=0, reset_at=1, reset_times=2, length_end=1)
-    >>> context_usage.n_predictions()
-    3
-    >>> [i for i in iter(context_usage)]
-    [0, 0, 0]
-
-    >>> context_usage = ContextUsage(length_start=2, reset_at=3, reset_times=2, length_end=1)
-    >>> context_usage.n_predictions()
-    5
-    >>> [i for i in iter(context_usage)]
-    [2, 0, 1, 2, 0]
-    """
-    length_start: int
-    reset_at: int
-    reset_times: int
-    length_end: int
-
-    def is_last_chunk_complete(self):
-        return self.reset_at == self.length_end
-
-    class ContextUsageIterator(object):
-        def __init__(self, context_usage: 'ContextUsage'):
-            self.context_usage = context_usage
-            self.current_length = context_usage.length_start
-            self.context_times_reset = 0
-
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            if (self.context_times_reset == self.context_usage.reset_times \
-                    and self.current_length == self.context_usage.length_end) \
-                    or self.context_times_reset > self.context_usage.reset_times:
-                raise StopIteration
-            to_return = self.current_length
-            self.current_length += 1
-            if self.current_length == self.context_usage.reset_at:
-                self.current_length = 0
-                self.context_times_reset += 1
-            return to_return
-
-    def __post_init__(self):
-        assert self.reset_at > self.length_start and self.reset_at >= self.length_end
-
-    def n_predictions(self) -> int:
-        return (self.reset_at - self.length_start) \
-               + self.reset_at * (self.reset_times - 1) + self.length_end
-
-    def __iter__(self):
-        return ContextUsage.ContextUsageIterator(self)
 
 
 class TrainedModel(object):
@@ -398,9 +239,9 @@ class TrainedModel(object):
         prepped_tokens = prepped_tokens.full_tokens_view(formatter=lambda x: "".join(x)) if full_tokens else prepped_tokens
         chunked_prepped_tokens = chunk_prepped_tokens(prepped_tokens, max_context_allowed - current_context_size, max_context_allowed)
         context_usage = ContextUsage(length_start=current_context_size,
-                               reset_at=max_context_allowed,
-                               reset_times=len(chunked_prepped_tokens) - 1,
-                               length_end=len(chunked_prepped_tokens[-1]) if len(chunked_prepped_tokens) > 1 else len(chunked_prepped_tokens[-1]) + current_context_size)
+                                     reset_at=max_context_allowed,
+                                     reset_times=len(chunked_prepped_tokens) - 1,
+                                     length_end=len(chunked_prepped_tokens[-1]) if len(chunked_prepped_tokens) > 1 else len(chunked_prepped_tokens[-1]) + current_context_size)
 
         subtoken_entropies = self._get_entropies_for_prep_text(
             chunked_prepped_tokens,
@@ -493,22 +334,22 @@ class TrainedModel(object):
         n_hid = self._config.arch.n_hid
         return f'{emb_size}/{n_layers}/{n_hid}={self._metrics.trainable_params}'
 
-    def get_model_description(self) -> ModelDescription:
-        return ModelDescription(id=self._id,
-                                bpe_merges=self._config.prep_function.params[0],
-                                layers_config=self._format_layers_config(),
-                                arch=str(self._config.arch.get_module().__name__),
-                                bin_entropy=self._metrics.bin_entropy if self._metrics else 1e+6,
-                                training_time_minutes_per_epoch=self._metrics.training_time_minutes_per_epoch
+    def get_model_summary(self) -> ModelSummary:
+        return ModelSummary(id=self._id,
+                            bpe_merges=self._config.prep_function.params[0],
+                            layers_config=self._format_layers_config(),
+                            arch=str(self._config.arch.get_module().__name__),
+                            bin_entropy=self._metrics.bin_entropy if self._metrics else 1e+6,
+                            training_time_minutes_per_epoch=self._metrics.training_time_minutes_per_epoch
                                 if self._metrics else 0,
-                                n_epochs=self._metrics.n_epochs if self._metrics else 0,
-                                best_epoch=self._metrics.best_epoch if self._metrics else -1,
-                                size_on_disk_mb=self._metrics.size_on_disk_mb,
-                                tags=self._tags)
+                            n_epochs=self._metrics.n_epochs if self._metrics else 0,
+                            best_epoch=self._metrics.best_epoch if self._metrics else -1,
+                            size_on_disk_mb=self._metrics.size_on_disk_mb,
+                            tags=self._tags)
 
     def _assert_inference_possible_for_file_type(self, extension: str) -> None:
         if extension not in normalize_extension_string(self._config.corpus.extensions):
             raise ValueError(f'The model was not trained on .{extension} files. Cannot do inference.')
 
     def __str__(self) -> str:
-        return str(self.get_model_description())
+        return str(self.get_model_summary())

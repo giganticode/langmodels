@@ -4,11 +4,11 @@ from unittest.mock import MagicMock, Mock
 
 from pytest_mock import MockFixture
 
-from codeprep.tokens.containers import SplitContainer
+from codeprep.tokentypes.containers import SplitContainer
 from langmodels.evaluation.evaluation import evaluate_model_on_string
 from langmodels.evaluation.customization import TokenTypeSubset
 from langmodels.evaluation.definitions import EvaluationResult, EvaluationScenario, Evaluation
-from langmodels.model import TrainedModel
+from langmodels.model.model import TrainedModel
 
 
 def test_evaluate_model_on_string_empty():

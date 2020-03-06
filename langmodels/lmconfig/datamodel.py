@@ -17,8 +17,8 @@ from codeprep.api.corpus import PreprocessedCorpus
 from fastai.text import AWD_LSTM, Transformer, Activation
 
 from langmodels import MODEL_ZOO_PATH, __version__, __major_version__
-from langmodels.nn import GRU
-from langmodels.util import HOME
+from langmodels.model.nn import GRU
+from langmodels.util.misc import HOME
 
 CONFIG_VERSION = __major_version__ if __major_version__ > 0 else __version__
 

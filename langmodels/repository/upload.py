@@ -11,8 +11,8 @@ from langmodels import MODEL_ZOO_PATH
 from langmodels.repository.load import _get_all_model_ids, MODEL_DATA_FILES, MODEL_METADATA_FILES
 from langmodels.repository.settings import MODEL_LIST_URL, PATH_TO_MODELS_ON_SERVER, SERVER_HOST_NAME, \
     PATH_TO_LOGS_ON_SERVER
-from langmodels.util import HOME
-from langmodels.model import TAGS_FILE_NAME
+from langmodels.util.misc import HOME
+from langmodels.model.model import TAGS_FILE_NAME
 
 
 def upload_model_to_registry(id: str, tags: Optional[List[str]] = None,

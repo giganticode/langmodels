@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 from collections import OrderedDict
 from threading import Lock
 from typing import List, Tuple, Optional, Union, Type, Generator
@@ -21,11 +22,12 @@ from langmodels.lmconfig.serialization import load_config_or_metrics_from_file, 
 from langmodels.model.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
 from langmodels.util.misc import to_binary_entropy, chunk_prepped_tokens
 from langmodels.model.nn import take_hidden_state_snapshot
-from langmodels.model.context import ModelContext
+from langmodels.model.context import ModelContext, ContextInformation
 from langmodels.model.config import create_custom_config
 from langmodels.model.context import ContextUsage
 from langmodels.model.summary import ModelSummary
 from langmodels.util.cuda import get_map_location, get_device
+from langmodels.model.context import ContextModification, modify_context
 
 logger = logging.getLogger(__name__)
 
@@ -226,9 +228,10 @@ class TrainedModel(object):
         self._feed_prep_tokens(prepped_tokens)
 
     def get_entropies_for_text(self, text: str, extension: str, full_tokens: bool,
-                               append_eof: bool, max_context_allowed: int) \
-            -> Tuple[List[float], List[str], List[Type], List[int]]:
+                               append_eof: bool, context_modification: Optional[ContextModification]) \
+            -> Tuple[List[float], List[str], List[Type], List[ContextInformation]]:
         current_context_size = self.context.size(full_tokens)
+        max_context_allowed = context_modification.max_context_length if context_modification else sys.maxsize
         if current_context_size > max_context_allowed:
             raise ValueError(f"The length of the current context ({current_context_size}) is larger "
                              f"than the max allowed that was set ({max_context_allowed}).\n"
@@ -241,8 +244,10 @@ class TrainedModel(object):
         context_usage = ContextUsage(length_start=current_context_size,
                                      reset_at=max_context_allowed,
                                      reset_times=len(chunked_prepped_tokens) - 1,
-                                     length_end=len(chunked_prepped_tokens[-1]) if len(chunked_prepped_tokens) > 1 else len(chunked_prepped_tokens[-1]) + current_context_size)
-
+                                     length_end=len(chunked_prepped_tokens[-1]) if len(chunked_prepped_tokens) > 1 else len(chunked_prepped_tokens[-1]) + current_context_size,
+                                     shuffle_interval=context_modification.get_absolute_shuffle_interval() if context_modification else None)
+        if context_modification:
+            chunked_prepped_tokens = list(map(lambda x: modify_context(x, context_modification), chunked_prepped_tokens))
         subtoken_entropies = self._get_entropies_for_prep_text(
             chunked_prepped_tokens,
             reset_after_last_chunk=context_usage.is_last_chunk_complete()
@@ -251,9 +256,9 @@ class TrainedModel(object):
         tokens = [i for i in prepped_tokens]
         all_token_types = [i for i in prepped_tokens.get_iterator(prepped_tokens.metadata.token_types, over_full_tokens=True)]
         all_entropies = [i for i in prepped_tokens.get_iterator(subtoken_entropies, over_full_tokens=False, formatter=sum)]
-        context_lengths = [i for i in prepped_tokens.get_iterator(context_usage, over_full_tokens=True)]
+        context_information = [i for i in prepped_tokens.get_iterator(context_usage, over_full_tokens=True)]
 
-        return all_entropies, tokens, all_token_types, context_lengths
+        return all_entropies, tokens, all_token_types, context_information
 
     def _get_entropies_for_prep_text(self, prepped_token_sequence_chunks: Union[List[PreppedSubTokenSequence], List[PreppedFullTokenSequence]],
                                      reset_after_last_chunk: bool) -> List[float]:

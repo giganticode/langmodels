@@ -13,6 +13,7 @@ from langmodels.evaluation.definitions import MetricName
 from langmodels.evaluation.definitions import EvaluationResult, EvaluationResultSummary, EvaluationScenario, Evaluation
 from langmodels.util.file import get_all_files, read_file_contents
 from langmodels.model.model import TrainedModel
+from langmodels.model.context import ContextModification
 
 logger = logging.getLogger(__name__)
 
@@ -41,11 +42,11 @@ DEFAULT_METRIC_NAME = 'full_token_entropy'
 def _evaluate_model_on_line(model: TrainedModel, line: str, extension: str,
                             metrics: Optional[Set[MetricName]],
                             token_type_subsets: Optional[Set[TokenTypeSubset]],
-                            append_eof: bool, max_context_allowed: int) -> Evaluation:
+                            append_eof: bool, context_modification: Optional[ContextModification] = None) -> Evaluation:
     results: Dict[EvaluationScenario, EvaluationResult] = {}
     for metric_name in metrics:
         metric = _get_metric_by_name(metric_name)
-        for evaluation_customization, evaluation_result in metric(model, line, extension, append_eof, token_type_subsets, max_context_allowed).items():
+        for evaluation_customization, evaluation_result in metric(model, line, extension, append_eof, token_type_subsets, context_modification).items():
             results[EvaluationScenario(metric_name, evaluation_customization)] = evaluation_result
     return Evaluation(text=line, scenarios=results)
 
@@ -53,7 +54,8 @@ def _evaluate_model_on_line(model: TrainedModel, line: str, extension: str,
 def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
                              metrics: Optional[Set[str]] = None,
                              token_type_subsets: Optional[Set[TokenTypeSubset]] = None,
-                             result_per_line=True, append_eof: bool = False, max_context_allowed: int = sys.maxsize) -> Union[List[Evaluation], Evaluation]:
+                             result_per_line=True, append_eof: bool = False,
+                             context_modification: Optional[ContextModification] = None) -> Union[List[Evaluation], Evaluation]:
 
     metrics = metrics or {DEFAULT_METRIC_NAME}
 
@@ -64,19 +66,19 @@ def evaluate_model_on_string(model: TrainedModel, text: str, extension='java',
     line_iterable = tqdm(text_lines) if show_progress else text_lines
     for i, line in enumerate(line_iterable):
         last_line = i == len(line_iterable) - 1
-        line_evaluation = _evaluate_model_on_line(model, line, extension, metrics, token_type_subsets, append_eof and last_line, max_context_allowed)
+        line_evaluation = _evaluate_model_on_line(model, line, extension, metrics, token_type_subsets, append_eof and last_line, context_modification=context_modification)
         model_evaluation.append(line_evaluation)
     return model_evaluation if result_per_line else model_evaluation[0]
 
 
 def evaluate_model_on_file(model: TrainedModel, file: Path, metrics: Optional[Set[str]] = None,
                            token_type_subsets: Optional[Set[TokenTypeSubset]] = None,
-                           result_per_line: bool = True, max_context_allowed: int = sys.maxsize) -> Union[List[Evaluation], Evaluation]:
+                           result_per_line: bool = True, context_modification: Optional[ContextModification] = None) -> Union[List[Evaluation], Evaluation]:
     suffix: str = file.suffix[1:]
     model._assert_inference_possible_for_file_type(suffix)
     text = read_file_contents(file)
     return evaluate_model_on_string(model, text, suffix, metrics, token_type_subsets,
-                                    result_per_line=result_per_line, append_eof=True, max_context_allowed=max_context_allowed)
+                                    result_per_line=result_per_line, append_eof=True, context_modification=context_modification)
 
 
 def evaluate_model_on_project_set(model: TrainedModel, path: Path, metrics: Optional[Set[str]] = None,
@@ -107,7 +109,7 @@ def _format_postfix(current_metrics: Dict[EvaluationScenario, EvaluationResultSu
 
 
 def evaluate_model_on_path(model: TrainedModel, path: Path, metrics: Optional[Set[str]] = None,
-                           token_type_subsets: Optional[Set[TokenTypeSubset]] = None, max_context_allowed: int = sys.maxsize) \
+                           token_type_subsets: Optional[Set[TokenTypeSubset]] = None, context_modification: Optional[ContextModification] = None) \
         -> Dict[EvaluationScenario, EvaluationResultSummary]:
 
     logger.info("Counting total file number ...")
@@ -119,7 +121,7 @@ def evaluate_model_on_path(model: TrainedModel, path: Path, metrics: Optional[Se
         postfix = _format_postfix(cumulative_metrics)
         t.set_postfix(postfix)
         evaluation: Evaluation = evaluate_model_on_file(model, file, metrics,
-                                                        token_type_subsets, result_per_line=False, max_context_allowed=max_context_allowed)
+                                                        token_type_subsets, result_per_line=False, context_modification=context_modification)
 
         current_file_metrics = {scenario: eval_result.to_summary()
                                 for scenario, eval_result in evaluation.scenarios.items()}

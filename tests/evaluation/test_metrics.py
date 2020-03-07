@@ -5,6 +5,7 @@ from langmodels.evaluation.customization import TokenTypeSubset
 from langmodels.evaluation.metrics import bin_entropy, mrr
 from langmodels.evaluation.definitions import EvaluationResult
 from langmodels.model.model import TrainedModel
+from langmodels.model.context import ContextModification
 
 any_1 = 'java'
 
@@ -29,9 +30,11 @@ def test_bin_entropy_simple_args():
     token_set = TokenTypeSubset.Builder().add(SplitContainer).build()
 
     expected = {token_set: EvaluationResult(prep_text, list(map(lambda tt: tt.__name__, types)), entropies, 1.5,
-                                            [(0.0, 0), (1.0, 1), (2.0, 1), (0.0, 0)])}
+                                            {1: (1.0, 1), 2: (2.0, 1)})}
     actual = bin_entropy(trained_model_mock, 'MyClass', extension=any_1, append_eof=False,
-                         token_type_subsets={token_set}, max_context_allowed=4, full_tokens=False)
+                         token_type_subsets={token_set},
+                         context_modification=ContextModification(max_context_length=4),
+                         full_tokens=False)
 
     assert actual == expected
 
@@ -49,9 +52,9 @@ def test_bin_entropy_with_comment():
     )
 
     expected = {
-        TokenTypeSubset.full_set(): EvaluationResult(prep_text, types_str, [1.0, 2.0, 3.0, 6.0], 3.0, [(0.0, 0)]),
-        TokenTypeSubset.only_comments(): EvaluationResult(prep_text, types_str, [None, None, 3.0, 6.0], 4.5, [(0.0, 0)]),
-        TokenTypeSubset.full_set_without_comments(): EvaluationResult(prep_text, types_str, [1.0, 2.0, None, None], 1.5, [(0.0, 0)])
+        TokenTypeSubset.full_set(): EvaluationResult(prep_text, types_str, [1.0, 2.0, 3.0, 6.0], 3.0, {}),
+        TokenTypeSubset.only_comments(): EvaluationResult(prep_text, types_str, [None, None, 3.0, 6.0], 4.5, {}),
+        TokenTypeSubset.full_set_without_comments(): EvaluationResult(prep_text, types_str, [1.0, 2.0, None, None], 1.5, {})
     }
 
     actual = bin_entropy(trained_model_mock, 'MyClass //', extension='java', append_eof=False,
@@ -59,7 +62,7 @@ def test_bin_entropy_with_comment():
                              TokenTypeSubset.full_set(),
                              TokenTypeSubset.only_comments(),
                              TokenTypeSubset.full_set_without_comments()
-                         }, full_tokens=False, max_context_allowed=1)
+                         }, full_tokens=False, context_modification=ContextModification(max_context_length=1))
 
     assert actual == expected
 

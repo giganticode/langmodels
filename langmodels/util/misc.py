@@ -2,7 +2,7 @@ import os
 from math import log
 
 from torch import FloatTensor
-from typing import Union, List, TypeVar, Sequence
+from typing import Union, List, TypeVar, Sequence, Dict, Callable
 
 
 def to_binary_entropy(entropy: Union[float, FloatTensor]) -> Union[float, FloatTensor]:
@@ -31,6 +31,28 @@ def chunk_prepped_tokens(input_sequence: Sequence[T], first_chunk_max_length: in
         packed_elements += elements_to_pack
 
     return chunked_prepped_tokens
+
+
+K = TypeVar('K')
+V = TypeVar('V')
+
+
+def merge_dicts_(dict1: Dict[K, V], dict2: Dict[K, V], value_merger: Callable[[V, V], V]) -> Dict[K, V]:
+    """
+    this method returns modified `dict1`! and new words are added to the dictionary
+
+    >>> dict1 = {"a": 3, "b": 4}
+    >>> dict2 = {"b": 5, "c": 6}
+    >>> merge_dicts_(dict1, dict2, value_merger=lambda x,y: x+y)
+    {'a': 3, 'b': 9, 'c': 6}
+
+    """
+    for k, v in dict2.items():
+        if k not in dict1:
+            dict1[k] = v
+        else:
+            dict1[k] = value_merger(dict1[k], v)
+    return dict1
 
 
 HOME = os.environ['HOME']

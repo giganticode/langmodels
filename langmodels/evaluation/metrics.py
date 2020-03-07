@@ -1,10 +1,12 @@
 import logging
-import sys
+from collections import defaultdict
+
 from typing import List, Optional, Set, Callable, Dict, Type
 
 from langmodels.evaluation.definitions import EvaluationResult
 from langmodels.evaluation.customization import TokenTypeSubset
 from langmodels.model.model import TrainedModel
+from model.context import ContextModification
 
 DEFAULT_N_MODEL_SUGGESTIONS = 100
 
@@ -13,15 +15,18 @@ logger = logging.getLogger(__name__)
 
 
 def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool,
-                token_type_subsets: Optional[Set[TokenTypeSubset]] = None, max_context_allowed: int = sys.maxsize,
-                full_tokens: bool = True) \
-        -> Dict[TokenTypeSubset, EvaluationResult]:
+                token_type_subsets: Optional[Set[TokenTypeSubset]] = None,
+                context_modification: Optional[ContextModification] = None,
+                full_tokens: bool = True) -> Dict[TokenTypeSubset, EvaluationResult]:
     """
     Changes the state of the model!
     """
     token_type_subsets = token_type_subsets or {TokenTypeSubset.full_set()}
 
-    all_entropies, tokens, all_token_types, context_lengths = model.get_entropies_for_text(line, extension, full_tokens=full_tokens, append_eof=append_eof, max_context_allowed=max_context_allowed)
+    all_entropies, tokens, all_token_types, context_information_list = model.get_entropies_for_text(line, extension,
+                                                                                                    full_tokens=full_tokens,
+                                                                                                    append_eof=append_eof,
+                                                                                                    context_modification=context_modification)
     evaluation_results: Dict[TokenTypeSubset, EvaluationResult] = {}
     for token_type_subset in token_type_subsets:
         res = []
@@ -34,13 +39,13 @@ def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool
                 count += 1
             else:
                 res.append(None)
-        if max_context_allowed < 1000:
-            of_context_length_cumul = [(0.0, 0)] * max_context_allowed
-            for entropy, token_type, context_length in zip(all_entropies, all_token_types, context_lengths):
+        if context_modification:
+            of_context_length_cumul = defaultdict(lambda: (0.0, 0))
+            for entropy, token_type, context_information in zip(all_entropies, all_token_types, context_information_list):
                 if token_type_subset.contains(token_type):
-                    if context_length is not None:
-                        of_context_length_cumul[context_length] = (of_context_length_cumul[context_length][0] + entropy, of_context_length_cumul[context_length][1] + 1)
-            of_context_length = [(val / n if n != 0 else 0.0, n) for (val, n) in of_context_length_cumul]
+                    if context_information is not None:
+                        of_context_length_cumul[context_information] = (of_context_length_cumul[context_information][0] + entropy, of_context_length_cumul[context_information][1] + 1)
+            of_context_length = {k: (val / n if n != 0 else 0.0, n) for k, (val, n) in of_context_length_cumul.items()}
         else:
             of_context_length = None
         evaluation_results[token_type_subset] = EvaluationResult(tokens, list(map(lambda tt: tt.__name__, all_token_types)),

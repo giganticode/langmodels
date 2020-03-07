@@ -40,7 +40,7 @@ def test_evaluate_on_string_default_args(mocker: MockFixture):
 
     actual = evaluate_model_on_string(trained_model_mock, text)
 
-    mocked_metric.assert_called_with(trained_model_mock, text, 'java', False, None, sys.maxsize)
+    mocked_metric.assert_called_with(trained_model_mock, text, 'java', False, None, None)
     assert actual == [Evaluation(text, scenarios)]
 
 
@@ -60,7 +60,7 @@ def test_evaluate_on_string_default_args_not_result_per_line(mocker: MockFixture
     actual = evaluate_model_on_string(trained_model_mock, text, result_per_line=False)
 
     # then
-    mocked_metric.assert_called_with(trained_model_mock, text, 'java', False, None, sys.maxsize)
+    mocked_metric.assert_called_with(trained_model_mock, text, 'java', False, None, None)
     assert actual == Evaluation(text, scenarios)
 
 
@@ -69,8 +69,6 @@ def test_evaluate_on_string_non_default_token_types_and_metrics_multiline(mocker
     token_type_subsets = {TokenTypeSubset.full_set(), TokenTypeSubset.full_set_without_comments()}
 
     metrics = {'full_token_entropy', 'mrr'}
-    scenarios = {EvaluationScenario(metric, token_type_subset)
-                   for token_type_subset in token_type_subsets for metric in metrics}
 
     trained_model_mock = Mock(spec=TrainedModel)
 
@@ -83,8 +81,8 @@ def test_evaluate_on_string_non_default_token_types_and_metrics_multiline(mocker
                                       result_per_line=True, append_eof=True)
 
     mocked_evaluate_on_line.assert_has_calls([
-        mock.call(trained_model_mock, 'MyClass', 'java', metrics, token_type_subsets, False, sys.maxsize),
-        mock.call(trained_model_mock, '{', 'java', metrics, token_type_subsets, True, sys.maxsize)
+        mock.call(trained_model_mock, 'MyClass', 'java', metrics, token_type_subsets, False, context_modification=None),
+        mock.call(trained_model_mock, '{', 'java', metrics, token_type_subsets, True, context_modification=None)
     ])
 
     assert actual == evaluation_mocks

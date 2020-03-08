@@ -14,7 +14,7 @@ from torch import cuda
 from codeprep.api.corpus import PreprocessedCorpus
 from codeprep.pipeline.dataset import normalize_extension_string
 from codeprep.preprocess.placeholders import placeholders
-from codeprep.preprocess.result import PreppedSubTokenSequence, is_terminal_subtoken, PreppedFullTokenSequence
+from codeprep.tokens import PreppedSubTokenSequence, PreppedFullTokenSequence, is_terminal_subtoken
 
 from langmodels.model.beamsearch import beam_search
 from langmodels.lmconfig.datamodel import Corpus, TransformerArch, LMTrainingConfig, LMTrainingMetrics

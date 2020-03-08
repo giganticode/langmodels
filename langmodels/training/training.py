@@ -18,7 +18,7 @@ from typing import Optional, Tuple
 
 import codeprep.api.corpus as api
 from codeprep.api.corpus import PreprocessedCorpus
-from codeprep.util import to_literal_str
+from codeprep.util.misc import to_literal_str
 from langmodels.util.cuda import get_device_id
 from langmodels.util.file import check_path_exists, check_path_writable, get_all_files
 from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, RafaelsTrainingSchedule, Training, \

@@ -3,7 +3,7 @@ importlib.import_module('comet_ml')
 
 import os
 
-from codeprep.util import to_literal_str, to_non_literal_str
+from codeprep.util.misc import to_literal_str, to_non_literal_str
 from langmodels import project_dir
 
 from langmodels.lmconfig.datamodel import GruArch

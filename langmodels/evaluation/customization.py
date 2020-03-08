@@ -5,7 +5,7 @@ from typing import List, Callable, Any, Type, Union, Set, Iterable, FrozenSet, T
 from dataclasses import dataclass, field
 
 from codeprep.preprocess.metadata import PreppedTokenMetadata
-from codeprep.preprocess.result import PreppedSubTokenSequence, PreppedFullTokenSequence
+from codeprep.tokens import PreppedSubTokenSequence, PreppedFullTokenSequence
 from codeprep.tokentypes.containers import Comment, SplitContainer, OneLineComment
 from codeprep.tokentypes.rootclasses import ParsedToken
 

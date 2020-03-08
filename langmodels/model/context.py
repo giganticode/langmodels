@@ -6,7 +6,7 @@ import sys
 from dataclasses import dataclass, field
 
 from codeprep.preprocess.metadata import PreppedTokenMetadata
-from codeprep.preprocess.result import PreppedSubTokenSequence, PreppedFullTokenSequence
+from codeprep.tokens import PreppedSubTokenSequence, PreppedFullTokenSequence
 from codeprep.tokentypes.containers import SplitContainer
 
 

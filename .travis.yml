@@ -14,7 +14,6 @@ jobs:
       before_install:
         - brew update
         - brew install autoconf automake libtool # needed to install jq
-        - brew upgrade python3
         - python3 -m pip install virtualenv
         - virtualenv .venv -p python3
         - source .venv/bin/activate

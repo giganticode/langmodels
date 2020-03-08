@@ -268,7 +268,7 @@ to initial state and change the context of the model respectively.
 
 {full_token_entropy/ParsedToken: EvaluationResult(
     tokens=['public</t>', 'class</t>', 'MyClass</t>', '{</t>'],
-    token_types=['KeyWord', 'KeyWord', 'SplitContainer', 'OpeningCurlyBracket'],
+    token_types=['KeyWord', 'KeyWord', 'Identifier', 'OpeningCurlyBracket'],
     values=[1.8144783973693848, 3.668722629547119, 0.5620064437389374, 0.2571456730365753], 
     aggregated_value=1.5755882859230042
 )}

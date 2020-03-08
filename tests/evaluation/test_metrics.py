@@ -1,6 +1,6 @@
 from unittest.mock import Mock
 
-from codeprep.tokentypes.containers import SplitContainer, OneLineComment
+from codeprep.tokentypes.containers import Identifier, OneLineComment
 from langmodels.evaluation.customization import TokenTypeSubset
 from langmodels.evaluation.metrics import bin_entropy, mrr
 from langmodels.evaluation.definitions import EvaluationResult
@@ -24,10 +24,10 @@ def test_bin_entropy_simple_args():
     trained_model_mock = Mock(spec=TrainedModel)
     entropies = [1.0, 2.0]
     prep_text = ['My', 'Class</t>']
-    types = [SplitContainer, SplitContainer]
+    types = [Identifier, Identifier]
     context_lengths = [1, 2]
     trained_model_mock.get_entropies_for_text.return_value = (entropies, prep_text, types, context_lengths)
-    token_set = TokenTypeSubset.Builder().add(SplitContainer).build()
+    token_set = TokenTypeSubset.Builder().add(Identifier).build()
 
     expected = {token_set: EvaluationResult(prep_text, list(map(lambda tt: tt.__name__, types)), entropies, 1.5,
                                             {1: (1.0, 1), 2: (2.0, 1)})}
@@ -42,12 +42,12 @@ def test_bin_entropy_simple_args():
 def test_bin_entropy_with_comment():
     trained_model_mock = Mock(spec=TrainedModel)
     prep_text = ['My', 'Class</t>', '/', '/']
-    types = [SplitContainer, SplitContainer, OneLineComment, OneLineComment]
+    types = [Identifier, Identifier, OneLineComment, OneLineComment]
     types_str = list(map(lambda tt: tt.__name__, types))
     trained_model_mock.get_entropies_for_text.return_value = (
         [1.0, 2.0, 3.0, 6.0],
         prep_text,
-        [SplitContainer, SplitContainer, OneLineComment, OneLineComment],
+        [Identifier, Identifier, OneLineComment, OneLineComment],
         [None, None, None, None]
     )
 
@@ -70,13 +70,13 @@ def test_bin_entropy_with_comment():
 def test_mrr_default_args():
     trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.get_predictions_and_feed.side_effect = [
-        [([('a1</t>', 0.), ('b1</t>', 0.)], 'a1</t>', SplitContainer),
-         ([('a2</t>', 0.), ('b2</t>', 0.)], 'b2</t>', SplitContainer)]
+        [([('a1</t>', 0.), ('b1</t>', 0.)], 'a1</t>', Identifier),
+         ([('a2</t>', 0.), ('b2</t>', 0.)], 'b2</t>', Identifier)]
     ]
 
     expected = {
         TokenTypeSubset.full_set(): EvaluationResult(['a1</t>', 'b2</t>'],
-                                                     ['SplitContainer', 'SplitContainer'], [1.0, 0.5], 0.75)
+                                                     ['Identifier', 'Identifier'], [1.0, 0.5], 0.75)
     }
 
     actual = mrr(trained_model_mock, 'a1 b2', extension='java', append_eof=False,
@@ -88,11 +88,11 @@ def test_mrr_default_args():
 def test_mrr_default_all_token_types():
     trained_model_mock = Mock(spec=TrainedModel)
     prep_tokens = ['a1</t>', 'b2</t>', '/</t>', '/</t>']
-    method_call_result = [([('a1</t>', 0.), ('b1</t>', 0.)], prep_tokens[0], SplitContainer),
-                                ([('a2</t>', 0.), ('b2</t>', 0.)], prep_tokens[1], SplitContainer),
+    method_call_result = [([('a1</t>', 0.), ('b1</t>', 0.)], prep_tokens[0], Identifier),
+                                ([('a2</t>', 0.), ('b2</t>', 0.)], prep_tokens[1], Identifier),
                                 ([('a3</t>', 0.), ('b3</t>', 0.)], prep_tokens[2], OneLineComment),
                                 ([('a4</t>', 0.), ('b4</t>', 0.)], prep_tokens[3], OneLineComment)]
-    str_types = ['SplitContainer', 'SplitContainer', 'OneLineComment', 'OneLineComment']
+    str_types = ['Identifier', 'Identifier', 'OneLineComment', 'OneLineComment']
 
     trained_model_mock.get_predictions_and_feed.side_effect = [method_call_result] * 3
 

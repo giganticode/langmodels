@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from codeprep.preprocess.metadata import PreppedTokenMetadata
 from codeprep.tokens import PreppedSubTokenSequence, PreppedFullTokenSequence
-from codeprep.tokentypes.containers import Comment, SplitContainer, OneLineComment
+from codeprep.tokentypes.containers import Comment, Identifier, OneLineComment
 from codeprep.tokentypes.rootclasses import ParsedToken
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ def all_subclasses(classes: Iterable[Type]) -> Set[Type]:
     ['ClosingBracket', 'ClosingCurlyBracket', 'Comment', 'KeyWord', 'MultilineComment', 'NewLine', 'NonCodeChar', \
 'NonEng', 'NonProcessibleToken', 'Number', 'One', 'OneLineComment', 'OpeningBracket', 'OpeningCurlyBracket', \
 'Operator', 'ParsedToken', 'ProcessableTokenContainer', 'Semicolon', 'SpaceInString', 'SpecialToken', \
-'SplitContainer', 'StringLiteral', 'Tab', 'TextContainer', 'Whitespace', 'Zero']
+'Identifier', 'StringLiteral', 'Tab', 'TextContainer', 'Whitespace', 'Zero']
     """
     return reduce(set.union, [{cls}.union(
         [s for c in cls.__subclasses__() for s in all_subclasses([c])])
@@ -103,7 +103,7 @@ class TokenTypeSubset(object):
 
 class FilteringTokenIterator(object):
     """
-    >>> metadata = PreppedTokenMetadata(n_subtokens_per_token=[1, 2], token_types=[SplitContainer, OneLineComment])
+    >>> metadata = PreppedTokenMetadata(n_subtokens_per_token=[1, 2], token_types=[Identifier, OneLineComment])
 
     >>> token_type_subset = TokenTypeSubset.full_set_without_comments()
     >>> [token for token in FilteringTokenIterator(PreppedSubTokenSequence(['hi', '/', '/'], metadata), token_type_subset)]

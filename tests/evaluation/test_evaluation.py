@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, Mock
 
 from pytest_mock import MockFixture
 
-from codeprep.tokentypes.containers import SplitContainer
+from codeprep.tokentypes.containers import Identifier
 from langmodels.evaluation.evaluation import evaluate_model_on_string
 from langmodels.evaluation.customization import TokenTypeSubset
 from langmodels.evaluation.definitions import EvaluationResult, EvaluationScenario, Evaluation
@@ -27,7 +27,7 @@ def test_evaluate_model_on_string_empty():
 def test_evaluate_on_string_default_args(mocker: MockFixture):
     text = 'MyClass'
     prep_line = ['My', 'Class</t>']
-    types = [SplitContainer, SplitContainer]
+    types = [Identifier, Identifier]
     result = EvaluationResult(prep_line, list(map(lambda t: t.__name__, types)), [1.0, 2.0], 3.0)
     scenarios = {EvaluationScenario('full_token_entropy'): result}
 

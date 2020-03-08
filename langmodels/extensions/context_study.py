@@ -12,6 +12,7 @@ from langmodels import repository
 from langmodels.evaluation import evaluate_model_on_path
 from langmodels.evaluation.customization import each_token_type_separately
 from langmodels import project_dir
+from langmodels.model.context import ContextModification
 
 
 def get_run_name(path_basename: str) -> str:
@@ -32,7 +33,9 @@ if __name__ == '__main__':
     m = repository.load_default_model()
 
     path = "/path/to/dataset"
-    result = evaluate_model_on_path(m, Path(path), max_context_allowed=200, token_type_subsets=each_token_type_separately())
+    result = evaluate_model_on_path(m, Path(path),
+                                    context_modification=ContextModification(max_context_length=200),
+                                    token_type_subsets=each_token_type_separately())
 
     matplotlib.use('Agg')
 
@@ -43,6 +46,6 @@ if __name__ == '__main__':
 
     for scenario, summary in result.items():
         title = scenario.type_subset.short_summary
-        plot(list(map(lambda x: x[0], summary.of_context_length)), dir, title)
+        plot(list(map(lambda x: x[0], summary.values_for_contexts)), dir, title)
         with open(os.path.join(dir, f'{title}.json'), 'w') as f:
             f.write(jsons.dumps(summary))

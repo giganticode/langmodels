@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from codeprep.preprocess.metadata import PreppedTokenMetadata
 from codeprep.tokens import PreppedSubTokenSequence, PreppedFullTokenSequence
-from codeprep.tokentypes.containers import SplitContainer
+from codeprep.tokentypes.containers import Identifier
 
 
 @dataclass(frozen=True)
@@ -132,7 +132,7 @@ class ModelContext(object):
     >>> context = ModelContext()
     >>> context
     ModelContext(prepped_sub_tokens=[])
-    >>> context.add(PreppedSubTokenSequence(['h', 'i</t>', 'th', 'er', 'e</t>'], PreppedTokenMetadata([2, 3], [SplitContainer, SplitContainer])))
+    >>> context.add(PreppedSubTokenSequence(['h', 'i</t>', 'th', 'er', 'e</t>'], PreppedTokenMetadata([2, 3], [Identifier, Identifier])))
     >>> context
     ModelContext(prepped_sub_tokens=['h', 'i</t>', 'th', 'er', 'e</t>'])
     >>> context.size()
@@ -140,7 +140,7 @@ class ModelContext(object):
     >>> context.size(full_token=False)
     5
     >>> ModelContext.SAVE_FULL_TOKENS_CONTEXT_LIMIT = 2
-    >>> context.add(PreppedSubTokenSequence(['b', 'g</t>'], PreppedTokenMetadata([2], [SplitContainer])))
+    >>> context.add(PreppedSubTokenSequence(['b', 'g</t>'], PreppedTokenMetadata([2], [Identifier])))
     >>> context
     ModelContext(prepped_sub_tokens=['th', 'er', 'e</t>', 'b', 'g</t>'])
     >>> context.reset()

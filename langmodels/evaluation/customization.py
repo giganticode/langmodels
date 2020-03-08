@@ -16,10 +16,10 @@ def all_subclasses(classes: Iterable[Type]) -> Set[Type]:
     """
     >>> subclasses = all_subclasses([ParsedToken])
     >>> sorted(map(lambda t: t.__name__, subclasses))
-    ['ClosingBracket', 'ClosingCurlyBracket', 'Comment', 'KeyWord', 'MultilineComment', 'NewLine', 'NonCodeChar', \
+    ['ClosingBracket', 'ClosingCurlyBracket', 'Comment', 'Identifier', 'KeyWord', 'MultilineComment', 'NewLine', 'NonCodeChar', \
 'NonEng', 'NonProcessibleToken', 'Number', 'One', 'OneLineComment', 'OpeningBracket', 'OpeningCurlyBracket', \
 'Operator', 'ParsedToken', 'ProcessableTokenContainer', 'Semicolon', 'SpaceInString', 'SpecialToken', \
-'Identifier', 'StringLiteral', 'Tab', 'TextContainer', 'Whitespace', 'Zero']
+'StringLiteral', 'Tab', 'TextContainer', 'Whitespace', 'Zero']
     """
     return reduce(set.union, [{cls}.union(
         [s for c in cls.__subclasses__() for s in all_subclasses([c])])
@@ -113,7 +113,7 @@ class FilteringTokenIterator(object):
     ['hi', '//']
 
     >>> [token for token in FilteringTokenIterator(PreppedSubTokenSequence(['hi', '/', '/'], metadata), return_token_type=True)]
-    [('hi', <class 'codeprep.tokentypes.containers.SplitContainer'>), ('/', <class 'codeprep.tokentypes.containers.OneLineComment'>), ('/', <class 'codeprep.tokentypes.containers.OneLineComment'>)]
+    [('hi', <class 'codeprep.tokentypes.containers.Identifier'>), ('/', <class 'codeprep.tokentypes.containers.OneLineComment'>), ('/', <class 'codeprep.tokentypes.containers.OneLineComment'>)]
 
     >>> it = FilteringTokenIterator(PreppedSubTokenSequence(['hi', '/', '/'], metadata))
     >>> [token for token in it]

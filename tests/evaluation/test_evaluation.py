@@ -1,9 +1,10 @@
-import sys
 from unittest import mock
 from unittest.mock import MagicMock, Mock
 
 from pytest_mock import MockFixture
 
+from codeprep.preprocess.metadata import PreppedTokenMetadata
+from codeprep.tokens import PreppedFullTokenSequence
 from codeprep.tokentypes.containers import Identifier
 from langmodels.evaluation.evaluation import evaluate_model_on_string
 from langmodels.evaluation.customization import TokenTypeSubset
@@ -13,7 +14,7 @@ from langmodels.model.model import TrainedModel
 
 def test_evaluate_model_on_string_empty():
     trained_model_mock = MagicMock(spec=TrainedModel)
-    trained_model_mock.get_entropies_for_text.return_value = ([], [], [], [])
+    trained_model_mock.get_entropies_for_text.return_value = (PreppedFullTokenSequence([], PreppedTokenMetadata([])), [], [])
 
     expected = [Evaluation(
         '',

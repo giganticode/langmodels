@@ -14,3 +14,4 @@ requests==2.22.0
 pysftp==0.2.9
 semver==2.9.0
 jq==0.1.6
+frozendict==1.2

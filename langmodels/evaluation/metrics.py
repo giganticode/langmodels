@@ -3,15 +3,20 @@ from collections import defaultdict
 
 from typing import List, Optional, Set, Callable, Dict, Type
 
+from codeprep.tokens import PreppedTokenSequence
 from langmodels.evaluation.definitions import EvaluationResult
 from langmodels.evaluation.customization import TokenTypeSubset
-from langmodels.model.model import TrainedModel
+from langmodels.model.model import TrainedModel, TokenCharacteristics
 from langmodels.model.context import ContextModification
 
 DEFAULT_N_MODEL_SUGGESTIONS = 100
 
 
 logger = logging.getLogger(__name__)
+
+
+def get_token_characteristics(prepped_token_sequence: PreppedTokenSequence) -> List[TokenCharacteristics]:
+    return [TokenCharacteristics.from_metadata(t.metadata) for t in prepped_token_sequence.with_metadata()]
 
 
 def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool,
@@ -23,17 +28,21 @@ def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool
     """
     token_type_subsets = token_type_subsets or {TokenTypeSubset.full_set()}
 
-    all_entropies, tokens, all_token_types, context_information_list = model.get_entropies_for_text(line, extension,
+    prepped_token_sequence, all_entropies, context_information_list = model.get_entropies_for_text(line, extension,
                                                                                                     full_tokens=full_tokens,
                                                                                                     append_eof=append_eof,
                                                                                                     context_modification=context_modification)
+
+    tokens = [i for i in prepped_token_sequence.without_metadata()]
+    token_characteristics_list = get_token_characteristics(prepped_token_sequence)
+    all_token_types = [i for i in prepped_token_sequence.get_iterator(prepped_token_sequence.metadata.token_types, over_full_tokens=True)]
     evaluation_results: Dict[TokenTypeSubset, EvaluationResult] = {}
     for token_type_subset in token_type_subsets:
         res = []
         sum = 0.0
         count = 0
-        for entropy, token_type in zip(all_entropies, all_token_types):
-            if token_type_subset.contains(token_type):
+        for entropy, token_characteristics in zip(all_entropies, token_characteristics_list):
+            if token_type_subset.contains(token_characteristics):
                 res.append(entropy)
                 sum += entropy
                 count += 1
@@ -41,8 +50,8 @@ def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool
                 res.append(None)
         if context_modification:
             of_context_length_cumul = defaultdict(lambda: (0.0, 0))
-            for entropy, token_type, context_information in zip(all_entropies, all_token_types, context_information_list):
-                if token_type_subset.contains(token_type):
+            for entropy, token_characteristics, context_information in zip(all_entropies, token_characteristics_list, context_information_list):
+                if token_type_subset.contains(token_characteristics):
                     if context_information is not None:
                         of_context_length_cumul[context_information] = (of_context_length_cumul[context_information][0] + entropy, of_context_length_cumul[context_information][1] + 1)
             of_context_length = {k: (val / n if n != 0 else 0.0, n) for k, (val, n) in of_context_length_cumul.items()}
@@ -69,14 +78,14 @@ def mrr(model: TrainedModel, line: str, extension: str, append_eof: bool,
         all_tokens: List[str] = []
         all_token_types: List[str] = []
 
-        for predictions, prep_token, token_type in \
+        for predictions, prep_token, token_characteristics in \
                 model.get_predictions_and_feed(line, extension,
                                                n_suggestions=DEFAULT_N_MODEL_SUGGESTIONS,
                                                append_eof=append_eof):
             all_tokens.append(prep_token)
-            all_token_types.append(token_type.__name__)
+            all_token_types.append(token_characteristics.token_type.__name__)
             predicted_tokens = list(map(lambda p: p[0], predictions))
-            if token_type_subsets.contains(token_type):
+            if token_type_subsets.contains(token_characteristics):
                 try:
                     rank = predicted_tokens.index(prep_token) + 1
                     inverse_rank = 1. / rank

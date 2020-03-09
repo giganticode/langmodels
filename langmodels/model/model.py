@@ -6,15 +6,17 @@ from threading import Lock
 from typing import List, Tuple, Optional, Union, Type, Generator
 
 import torch
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from fastai.text import SequentialRNN, get_language_model, F, Vocab, convert_weights
 from math import exp
 from torch import cuda
 
 from codeprep.api.corpus import PreprocessedCorpus
 from codeprep.pipeline.dataset import normalize_extension_string
+from codeprep.preprocess.metadata import PreppedTokenMetadata
 from codeprep.preprocess.placeholders import placeholders
-from codeprep.tokens import PreppedSubTokenSequence, PreppedFullTokenSequence, is_terminal_subtoken
+from codeprep.tokens import PreppedSubTokenSequence, PreppedFullTokenSequence, is_terminal_subtoken, \
+    PreppedTokenSequence
 
 from langmodels.model.beamsearch import beam_search
 from langmodels.lmconfig.datamodel import Corpus, TransformerArch, LMTrainingConfig, LMTrainingMetrics
@@ -83,6 +85,16 @@ def to_full_token_string(subtokens: List[str], include_debug_tokens=False) -> st
 PredictionList = List[Tuple[str, float]]
 
 lock = Lock()
+
+
+@dataclass
+class TokenCharacteristics(object):
+    token_type: Type
+    n_subtokens: int
+
+    @classmethod
+    def from_metadata(cls, metadata: PreppedTokenMetadata) -> 'TokenCharacteristics':
+        return cls(metadata.token_type(), metadata.n_subtokens() if metadata.n_subtokens() < 5 else 5)
 
 
 class TrainedModel(object):
@@ -192,14 +204,16 @@ class TrainedModel(object):
         return prepped_token
 
     def get_predictions_and_feed(self, text: str, extension: str, n_suggestions: int, append_eof: bool)\
-            -> Generator[Tuple[PredictionList, str, Type], None, None]:
+            -> Generator[Tuple[PredictionList, str, TokenCharacteristics], None, None]:
         prepped_tokens = self.prep_text(text, extension, return_metadata=True, append_eof=append_eof)
 
-        for prepped_token, token_type in prepped_tokens.full_tokens_view(return_token_type=True):
+        for prepped_token in prepped_tokens.full_tokens_view(return_metadata=True):
             predictions = self.predict_next_full_token(n_suggestions)
-            self._feed_prep_tokens(PreppedSubTokenSequence.from_full_token(prepped_token, token_type))
+            token_characteristics = TokenCharacteristics.from_metadata(prepped_token.metadata)
 
-            yield predictions, "".join(prepped_token), token_type
+            self._feed_prep_tokens(prepped_tokens.sub_token_view())
+
+            yield predictions, "".join(prepped_token.token_str), token_characteristics
 
     def _check_model_loaded(self, only_description=False):
         if not only_description and self._load_only_description:
@@ -229,7 +243,7 @@ class TrainedModel(object):
 
     def get_entropies_for_text(self, text: str, extension: str, full_tokens: bool,
                                append_eof: bool, context_modification: Optional[ContextModification]) \
-            -> Tuple[List[float], List[str], List[Type], List[ContextInformation]]:
+            -> Tuple[PreppedTokenSequence, List[float], List[ContextInformation]]:
         current_context_size = self.context.size(full_tokens)
         max_context_allowed = context_modification.max_context_length if context_modification else sys.maxsize
         if current_context_size > max_context_allowed:
@@ -240,6 +254,7 @@ class TrainedModel(object):
         prepped_tokens = self.prep_text(text, extension, append_eof=append_eof)
 
         prepped_tokens = prepped_tokens.full_tokens_view(formatter=lambda x: "".join(x)) if full_tokens else prepped_tokens
+
         chunked_prepped_tokens = chunk_prepped_tokens(prepped_tokens, max_context_allowed - current_context_size, max_context_allowed)
         context_usage = ContextUsage(length_start=current_context_size,
                                      reset_at=max_context_allowed,
@@ -253,12 +268,10 @@ class TrainedModel(object):
             reset_after_last_chunk=context_usage.is_last_chunk_complete()
         )
 
-        tokens = [i for i in prepped_tokens]
-        all_token_types = [i for i in prepped_tokens.get_iterator(prepped_tokens.metadata.token_types, over_full_tokens=True)]
         all_entropies = [i for i in prepped_tokens.get_iterator(subtoken_entropies, over_full_tokens=False, formatter=sum)]
         context_information = [i for i in prepped_tokens.get_iterator(context_usage, over_full_tokens=True)]
 
-        return all_entropies, tokens, all_token_types, context_information
+        return prepped_tokens, all_entropies, context_information
 
     def _get_entropies_for_prep_text(self, prepped_token_sequence_chunks: Union[List[PreppedSubTokenSequence], List[PreppedFullTokenSequence]],
                                      reset_after_last_chunk: bool) -> List[float]:

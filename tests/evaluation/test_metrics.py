@@ -1,10 +1,12 @@
 from unittest.mock import Mock
 
+from codeprep.preprocess.metadata import PreppedTokenMetadata
+from codeprep.tokens import PreppedFullTokenSequence, PreppedSubTokenSequence
 from codeprep.tokentypes.containers import Identifier, OneLineComment
 from langmodels.evaluation.customization import TokenTypeSubset
 from langmodels.evaluation.metrics import bin_entropy, mrr
 from langmodels.evaluation.definitions import EvaluationResult
-from langmodels.model.model import TrainedModel
+from langmodels.model.model import TrainedModel, TokenCharacteristics
 from langmodels.model.context import ContextModification
 
 any_1 = 'java'
@@ -12,7 +14,7 @@ any_1 = 'java'
 
 def test_bin_entropy_empty():
     trained_model_mock = Mock(spec=TrainedModel)
-    trained_model_mock.get_entropies_for_text.return_value = ([], [], [], [])
+    trained_model_mock.get_entropies_for_text.return_value = (PreppedFullTokenSequence([], PreppedTokenMetadata([], [])), [], [])
 
     expected = {TokenTypeSubset.full_set(): EvaluationResult([], [], [], 0.)}
     actual = bin_entropy(trained_model_mock, '', extension=any_1, append_eof=False, )
@@ -26,7 +28,8 @@ def test_bin_entropy_simple_args():
     prep_text = ['My', 'Class</t>']
     types = [Identifier, Identifier]
     context_lengths = [1, 2]
-    trained_model_mock.get_entropies_for_text.return_value = (entropies, prep_text, types, context_lengths)
+    trained_model_mock.get_entropies_for_text.return_value = (
+        PreppedSubTokenSequence(prep_text, PreppedTokenMetadata([2], [Identifier]), return_metadata=True), entropies, context_lengths)
     token_set = TokenTypeSubset.Builder().add(Identifier).build()
 
     expected = {token_set: EvaluationResult(prep_text, list(map(lambda tt: tt.__name__, types)), entropies, 1.5,
@@ -44,10 +47,12 @@ def test_bin_entropy_with_comment():
     prep_text = ['My', 'Class</t>', '/', '/']
     types = [Identifier, Identifier, OneLineComment, OneLineComment]
     types_str = list(map(lambda tt: tt.__name__, types))
-    trained_model_mock.get_entropies_for_text.return_value = (
+    trained_model_mock.get_entropies_for_text.return_value = (PreppedSubTokenSequence(prep_text,
+        PreppedTokenMetadata(
+            [2, 1, 1],
+            [Identifier, OneLineComment, OneLineComment]
+        )),
         [1.0, 2.0, 3.0, 6.0],
-        prep_text,
-        [Identifier, Identifier, OneLineComment, OneLineComment],
         [None, None, None, None]
     )
 
@@ -70,8 +75,8 @@ def test_bin_entropy_with_comment():
 def test_mrr_default_args():
     trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.get_predictions_and_feed.side_effect = [
-        [([('a1</t>', 0.), ('b1</t>', 0.)], 'a1</t>', Identifier),
-         ([('a2</t>', 0.), ('b2</t>', 0.)], 'b2</t>', Identifier)]
+        [([('a1</t>', 0.), ('b1</t>', 0.)], 'a1</t>', TokenCharacteristics(Identifier, 1)),
+         ([('a2</t>', 0.), ('b2</t>', 0.)], 'b2</t>', TokenCharacteristics(Identifier, 1))]
     ]
 
     expected = {
@@ -88,10 +93,10 @@ def test_mrr_default_args():
 def test_mrr_default_all_token_types():
     trained_model_mock = Mock(spec=TrainedModel)
     prep_tokens = ['a1</t>', 'b2</t>', '/</t>', '/</t>']
-    method_call_result = [([('a1</t>', 0.), ('b1</t>', 0.)], prep_tokens[0], Identifier),
-                                ([('a2</t>', 0.), ('b2</t>', 0.)], prep_tokens[1], Identifier),
-                                ([('a3</t>', 0.), ('b3</t>', 0.)], prep_tokens[2], OneLineComment),
-                                ([('a4</t>', 0.), ('b4</t>', 0.)], prep_tokens[3], OneLineComment)]
+    method_call_result = [([('a1</t>', 0.), ('b1</t>', 0.)], prep_tokens[0], TokenCharacteristics(Identifier, 2)),
+                                ([('a2</t>', 0.), ('b2</t>', 0.)], prep_tokens[1], TokenCharacteristics(Identifier, 2)),
+                                ([('a3</t>', 0.), ('b3</t>', 0.)], prep_tokens[2], TokenCharacteristics(OneLineComment, 1)),
+                                ([('a4</t>', 0.), ('b4</t>', 0.)], prep_tokens[3], TokenCharacteristics(OneLineComment, 1))]
     str_types = ['Identifier', 'Identifier', 'OneLineComment', 'OneLineComment']
 
     trained_model_mock.get_predictions_and_feed.side_effect = [method_call_result] * 3

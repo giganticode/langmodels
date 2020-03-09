@@ -29,17 +29,17 @@ def all_subclasses(classes: Iterable[Type]) -> Set[Type]:
 
 
 @dataclass(eq=True, frozen=True)
-class TokenTypeSubset(object):
+class TokenCategory(object):
     """
     >>> class A(object): pass
     >>> class B(A): pass
     >>> class C(A): pass
     >>> class D(object): pass
 
-    >>> token_types1 = TokenTypeSubset.Builder().add({A, D}).remove({B, D}).build()
+    >>> token_types1 = TokenCategory.Builder().add({A, D}).remove({B, D}).build()
     >>> token_types1.summary()
     "A,D[except:B,D] -> ['A', 'C']"
-    >>> token_types = TokenTypeSubset.Builder().add({A, D}).remove({B, D}).add_with_n_sub_tokens(C, 1).build()
+    >>> token_types = TokenCategory.Builder().add({A, D}).remove({B, D}).add_with_n_sub_tokens(C, 1).build()
     >>> token_types.summary()
     "A,D[except:B,C,D]+C{1} -> ['A']+C{1}"
     >>> token_types.contains(TokenCharacteristics.from_metadata(PreppedTokenMetadata([1], [A])))
@@ -84,27 +84,27 @@ class TokenTypeSubset(object):
                     del self.types_of_specific_length[t]
             return to_return
 
-        def add(self, types: Union[Type, Iterable[Type]]) -> 'TokenTypeSubset.Builder':
+        def add(self, types: Union[Type, Iterable[Type]]) -> 'TokenCategory.Builder':
             self.included = self._change_types(self.included, types)
             return self
 
-        def add_with_n_sub_tokens(self, t: Type, n_sub_tokens: int) -> 'TokenTypeSubset.Builder':
+        def add_with_n_sub_tokens(self, t: Type, n_sub_tokens: int) -> 'TokenCategory.Builder':
             self.excluded.add(t)
             self.types_of_specific_length[t].add(n_sub_tokens)
             return self
 
-        def remove(self, types: Union[Type, Iterable[Type]]) -> 'TokenTypeSubset.Builder':
+        def remove(self, types: Union[Type, Iterable[Type]]) -> 'TokenCategory.Builder':
             self.excluded = self._change_types(self.excluded, types)
             return self
 
-        def build(self) -> 'TokenTypeSubset':
+        def build(self) -> 'TokenCategory':
             all_included = all_subclasses(self.included)
             all_excluded = all_subclasses(self.excluded)
             spec = {k: frozenset(v) for k, v in self.types_of_specific_length.items()}
-            return TokenTypeSubset(all_included_types=frozenset(all_included.difference(all_excluded)),
-                                   short_summary=self._short_summary(),
-                                   spec_len_summary=self._spec_len_summary(),
-                                   types_of_specific_length=frozendict(spec))
+            return TokenCategory(all_included_types=frozenset(all_included.difference(all_excluded)),
+                                 short_summary=self._short_summary(),
+                                 spec_len_summary=self._spec_len_summary(),
+                                 types_of_specific_length=frozendict(spec))
 
     def summary(self) -> str:
         return f'{self.short_summary}{self.spec_len_summary} -> ' \
@@ -117,15 +117,15 @@ class TokenTypeSubset(object):
         return str(self)
     
     @classmethod
-    def full_set(cls) -> 'TokenTypeSubset':
+    def full_set(cls) -> 'TokenCategory':
         return cls.Builder().add(ParsedToken).build()
 
     @classmethod
-    def full_set_without_comments(cls) -> 'TokenTypeSubset':
+    def full_set_without_comments(cls) -> 'TokenCategory':
         return cls.Builder().add(ParsedToken).remove(Comment).build()
 
     @classmethod
-    def only_comments(cls) -> 'TokenTypeSubset':
+    def only_comments(cls) -> 'TokenCategory':
         return cls.Builder().add(Comment).build()
 
     def contains(self, token_characteristics: TokenCharacteristics) -> bool:
@@ -135,13 +135,13 @@ class TokenTypeSubset(object):
                (token_type in self.types_of_specific_length and n_subtokens in self.types_of_specific_length[token_type])
 
 
-def each_token_type_separately() -> Set[TokenTypeSubset]:
+def each_token_type_separately() -> Set[TokenCategory]:
     all_parsed_token_subclasses = all_subclasses([ParsedToken])
-    return {TokenTypeSubset.Builder().add(clazz).build() for clazz in all_parsed_token_subclasses}
+    return {TokenCategory.Builder().add(clazz).build() for clazz in all_parsed_token_subclasses}
 
 
-def each_token_type_separately_and_lengths_for_identifiers() -> Set[TokenTypeSubset]:
+def each_token_type_separately_and_lengths_for_identifiers() -> Set[TokenCategory]:
     all_token_types = each_token_type_separately()
     for i in range(5):
-        all_token_types.add(TokenTypeSubset.Builder().add_with_n_sub_tokens(Identifier, i).build())
+        all_token_types.add(TokenCategory.Builder().add_with_n_sub_tokens(Identifier, i).build())
     return all_token_types

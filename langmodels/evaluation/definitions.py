@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple, Dict
 import numpy as np
 from dataclasses import dataclass
 
-from langmodels.evaluation.customization import TokenTypeSubset
+from langmodels.evaluation.customization import TokenCategory
 from langmodels.model.context import ContextInformation
 from langmodels.util.misc import merge_dicts_
 
@@ -52,10 +52,10 @@ class EvaluationResultSummary(object):
 @dataclass(frozen=True)
 class EvaluationScenario(object):
     metric_name: MetricName
-    type_subset: TokenTypeSubset = TokenTypeSubset.full_set()
+    token_category: TokenCategory = TokenCategory.full_set()
 
     def __str__(self):
-        return f'{self.metric_name}/{self.type_subset}'
+        return f'{self.metric_name}/{self.token_category}'
 
     def __repr__(self):
         return str(self)

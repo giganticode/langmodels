@@ -7,7 +7,7 @@ from codeprep.preprocess.metadata import PreppedTokenMetadata
 from codeprep.tokens import PreppedFullTokenSequence
 from codeprep.tokentypes.containers import Identifier
 from langmodels.evaluation.evaluation import evaluate_model_on_string
-from langmodels.evaluation.customization import TokenTypeSubset
+from langmodels.evaluation.customization import TokenCategory
 from langmodels.evaluation.definitions import EvaluationResult, EvaluationScenario, Evaluation
 from langmodels.model.model import TrainedModel
 
@@ -35,7 +35,7 @@ def test_evaluate_on_string_default_args(mocker: MockFixture):
     trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.get_entropies_for_text.return_value = ([1.0, 2.0], prep_line, types)
 
-    mocked_metric = Mock(spec=callable, return_value={TokenTypeSubset.full_set(): result})
+    mocked_metric = Mock(spec=callable, return_value={TokenCategory.full_set(): result})
     mocker.patch('langmodels.evaluation.evaluation._get_metric_by_name', new=lambda x: mocked_metric)
     mocker.patch('langmodels.evaluation.evaluation.get_metrics_name', new=lambda x: 'full_token_entropy')
 
@@ -53,7 +53,7 @@ def test_evaluate_on_string_default_args_not_result_per_line(mocker: MockFixture
 
     trained_model_mock = Mock(spec=TrainedModel)
 
-    mocked_metric = Mock(spec=callable, return_value={TokenTypeSubset.full_set(): result})
+    mocked_metric = Mock(spec=callable, return_value={TokenCategory.full_set(): result})
     mocker.patch('langmodels.evaluation.evaluation._get_metric_by_name', new=lambda x: mocked_metric)
     mocker.patch('langmodels.evaluation.evaluation.get_metrics_name', new=lambda x: 'full_token_entropy')
 
@@ -67,7 +67,7 @@ def test_evaluate_on_string_default_args_not_result_per_line(mocker: MockFixture
 
 def test_evaluate_on_string_non_default_token_types_and_metrics_multiline(mocker: MockFixture):
     text = 'MyClass\n{'
-    token_type_subsets = {TokenTypeSubset.full_set(), TokenTypeSubset.full_set_without_comments()}
+    token_categories = {TokenCategory.full_set(), TokenCategory.full_set_without_comments()}
 
     metrics = {'full_token_entropy', 'mrr'}
 
@@ -78,12 +78,12 @@ def test_evaluate_on_string_non_default_token_types_and_metrics_multiline(mocker
     mocked_evaluate_on_line.side_effect = evaluation_mocks
     mocker.patch('langmodels.evaluation.evaluation._evaluate_model_on_line', new=mocked_evaluate_on_line)
 
-    actual = evaluate_model_on_string(trained_model_mock, text, 'java', metrics, token_type_subsets,
+    actual = evaluate_model_on_string(trained_model_mock, text, 'java', metrics, token_categories,
                                       result_per_line=True, append_eof=True)
 
     mocked_evaluate_on_line.assert_has_calls([
-        mock.call(trained_model_mock, 'MyClass', 'java', metrics, token_type_subsets, False, context_modification=None),
-        mock.call(trained_model_mock, '{', 'java', metrics, token_type_subsets, True, context_modification=None)
+        mock.call(trained_model_mock, 'MyClass', 'java', metrics, token_categories, False, context_modification=None),
+        mock.call(trained_model_mock, '{', 'java', metrics, token_categories, True, context_modification=None)
     ])
 
     assert actual == evaluation_mocks

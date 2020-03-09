@@ -3,7 +3,7 @@ from unittest.mock import Mock
 from codeprep.preprocess.metadata import PreppedTokenMetadata
 from codeprep.tokens import PreppedFullTokenSequence, PreppedSubTokenSequence
 from codeprep.tokentypes.containers import Identifier, OneLineComment
-from langmodels.evaluation.customization import TokenTypeSubset
+from langmodels.evaluation.customization import TokenCategory
 from langmodels.evaluation.metrics import bin_entropy, mrr
 from langmodels.evaluation.definitions import EvaluationResult
 from langmodels.model.model import TrainedModel, TokenCharacteristics
@@ -16,7 +16,7 @@ def test_bin_entropy_empty():
     trained_model_mock = Mock(spec=TrainedModel)
     trained_model_mock.get_entropies_for_text.return_value = (PreppedFullTokenSequence([], PreppedTokenMetadata([], [])), [], [])
 
-    expected = {TokenTypeSubset.full_set(): EvaluationResult([], [], [], 0.)}
+    expected = {TokenCategory.full_set(): EvaluationResult([], [], [], 0.)}
     actual = bin_entropy(trained_model_mock, '', extension=any_1, append_eof=False, )
 
     assert expected == actual
@@ -30,12 +30,12 @@ def test_bin_entropy_simple_args():
     context_lengths = [1, 2]
     trained_model_mock.get_entropies_for_text.return_value = (
         PreppedSubTokenSequence(prep_text, PreppedTokenMetadata([2], [Identifier]), return_metadata=True), entropies, context_lengths)
-    token_set = TokenTypeSubset.Builder().add(Identifier).build()
+    token_category = TokenCategory.Builder().add(Identifier).build()
 
-    expected = {token_set: EvaluationResult(prep_text, list(map(lambda tt: tt.__name__, types)), entropies, 1.5,
+    expected = {token_category: EvaluationResult(prep_text, list(map(lambda tt: tt.__name__, types)), entropies, 1.5,
                                             {1: (1.0, 1), 2: (2.0, 1)})}
     actual = bin_entropy(trained_model_mock, 'MyClass', extension=any_1, append_eof=False,
-                         token_type_subsets={token_set},
+                         token_categories={token_category},
                          context_modification=ContextModification(max_context_length=4),
                          full_tokens=False)
 
@@ -57,16 +57,16 @@ def test_bin_entropy_with_comment():
     )
 
     expected = {
-        TokenTypeSubset.full_set(): EvaluationResult(prep_text, types_str, [1.0, 2.0, 3.0, 6.0], 3.0, {}),
-        TokenTypeSubset.only_comments(): EvaluationResult(prep_text, types_str, [None, None, 3.0, 6.0], 4.5, {}),
-        TokenTypeSubset.full_set_without_comments(): EvaluationResult(prep_text, types_str, [1.0, 2.0, None, None], 1.5, {})
+        TokenCategory.full_set(): EvaluationResult(prep_text, types_str, [1.0, 2.0, 3.0, 6.0], 3.0, {}),
+        TokenCategory.only_comments(): EvaluationResult(prep_text, types_str, [None, None, 3.0, 6.0], 4.5, {}),
+        TokenCategory.full_set_without_comments(): EvaluationResult(prep_text, types_str, [1.0, 2.0, None, None], 1.5, {})
     }
 
     actual = bin_entropy(trained_model_mock, 'MyClass //', extension='java', append_eof=False,
-                         token_type_subsets={
-                             TokenTypeSubset.full_set(),
-                             TokenTypeSubset.only_comments(),
-                             TokenTypeSubset.full_set_without_comments()
+                         token_categories={
+                             TokenCategory.full_set(),
+                             TokenCategory.only_comments(),
+                             TokenCategory.full_set_without_comments()
                          }, full_tokens=False, context_modification=ContextModification(max_context_length=1))
 
     assert actual == expected
@@ -80,12 +80,12 @@ def test_mrr_default_args():
     ]
 
     expected = {
-        TokenTypeSubset.full_set(): EvaluationResult(['a1</t>', 'b2</t>'],
-                                                     ['Identifier', 'Identifier'], [1.0, 0.5], 0.75)
+        TokenCategory.full_set(): EvaluationResult(['a1</t>', 'b2</t>'],
+                                                   ['Identifier', 'Identifier'], [1.0, 0.5], 0.75)
     }
 
     actual = mrr(trained_model_mock, 'a1 b2', extension='java', append_eof=False,
-                 token_type_subsets={TokenTypeSubset.full_set()})
+                 token_categories={TokenCategory.full_set()})
 
     assert actual == expected
 
@@ -102,18 +102,18 @@ def test_mrr_default_all_token_types():
     trained_model_mock.get_predictions_and_feed.side_effect = [method_call_result] * 3
 
     expected = {
-        TokenTypeSubset.full_set(): EvaluationResult(prep_tokens, str_types,
-                                                     [1.0, None, 0.5, None, 0., 0.], 0.375),
-        TokenTypeSubset.only_comments(): EvaluationResult(prep_tokens, str_types,
-                                                          [None, None, None, None, 0., 0.], 0.),
-        TokenTypeSubset.full_set_without_comments(): EvaluationResult(prep_tokens, str_types,
-                                                                      [1.0, None, 0.5, None, None, None], 0.75)
+        TokenCategory.full_set(): EvaluationResult(prep_tokens, str_types,
+                                                   [1.0, None, 0.5, None, 0., 0.], 0.375),
+        TokenCategory.only_comments(): EvaluationResult(prep_tokens, str_types,
+                                                        [None, None, None, None, 0., 0.], 0.),
+        TokenCategory.full_set_without_comments(): EvaluationResult(prep_tokens, str_types,
+                                                                    [1.0, None, 0.5, None, None, None], 0.75)
     }
     actual = mrr(trained_model_mock, 'a1 b2 //', 'java', append_eof=False,
-                 token_type_subsets={
-                     TokenTypeSubset.full_set(),
-                     TokenTypeSubset.only_comments(),
-                     TokenTypeSubset.full_set_without_comments()
+                 token_categories={
+                     TokenCategory.full_set(),
+                     TokenCategory.only_comments(),
+                     TokenCategory.full_set_without_comments()
                  })
 
     assert sorted(actual, key=lambda s: str(s)) == sorted(expected, key=lambda s: str(s))

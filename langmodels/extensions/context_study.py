@@ -35,7 +35,7 @@ if __name__ == '__main__':
     path = "/path/to/dataset"
     result = evaluate_model_on_path(m, Path(path),
                                     context_modification=ContextModification(max_context_length=200),
-                                    token_type_subsets=each_token_type_separately())
+                                    token_categories=each_token_type_separately())
 
     matplotlib.use('Agg')
 
@@ -45,7 +45,7 @@ if __name__ == '__main__':
         os.makedirs(dir)
 
     for scenario, summary in result.items():
-        title = scenario.type_subset.short_summary
+        title = scenario.token_category.short_summary
         plot(list(map(lambda x: x[0], summary.values_for_contexts)), dir, title)
         with open(os.path.join(dir, f'{title}.json'), 'w') as f:
             f.write(jsons.dumps(summary))

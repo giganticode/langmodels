@@ -4,9 +4,8 @@ from typing import List, Optional, Tuple, Dict
 import numpy as np
 from dataclasses import dataclass
 
-from langmodels.evaluation.customization import TokenCategory
-from langmodels.model.context import ContextInformation
-from langmodels.util.misc import merge_dicts_
+from langmodels.evaluation.customization import TokenTypeSubset
+
 
 MetricName = str
 
@@ -17,17 +16,17 @@ class EvaluationResult(object):
     token_types: List[str]
     values: List[float]
     aggregated_value: float
-    values_for_contexts: Optional[Dict[ContextInformation, Tuple[float, int]]] = None
+    of_context_length: Optional[List[Tuple[float, int]]] = None
 
     def to_summary(self) -> 'EvaluationResultSummary':
-        return EvaluationResultSummary(self.aggregated_value, sum(x is not None for x in self.values), self.values_for_contexts)
+        return EvaluationResultSummary(self.aggregated_value, sum(x is not None for x in self.values), self.of_context_length)
 
 
 @dataclass(frozen=True)
 class EvaluationResultSummary(object):
     value: float
     n_samples: int
-    values_for_contexts: Optional[Dict[ContextInformation, Tuple[float, int]]]
+    of_context_length: Optional[List[Tuple[float, int]]]
 
     def _avg(self, values: List[float], n_samples_list: List[int]) -> Tuple[float, int]:
         total_samples = sum(n_samples_list)
@@ -38,24 +37,23 @@ class EvaluationResultSummary(object):
 
     def merge(self, other_summary: 'EvaluationResultSummary'):
         resulting_value, total_samples = self._avg([self.value, other_summary.value], [self.n_samples, other_summary.n_samples])
-        if self.values_for_contexts is None:
-            of_context_length_result = other_summary.values_for_contexts
-        elif other_summary.values_for_contexts is None:
-            of_context_length_result = self.values_for_contexts
+        if self.of_context_length is None:
+            of_context_length_result = other_summary.of_context_length
+        elif other_summary.of_context_length is None:
+            of_context_length_result = self.of_context_length
         else:
-            of_context_length_result = merge_dicts_(self.values_for_contexts,
-                                                    other_summary.values_for_contexts,
-                                                    value_merger=lambda x,y: self._avg([x[0], y[0]], [x[1], y[1]]))
+            of_context_length_result = [self._avg([v1, v2], [n1, n2]) for ((v1, n1), (v2, n2))
+                                        in zip(self.of_context_length, other_summary.of_context_length)]
         return EvaluationResultSummary(resulting_value, total_samples, of_context_length_result)
 
 
 @dataclass(frozen=True)
 class EvaluationScenario(object):
     metric_name: MetricName
-    token_category: TokenCategory = TokenCategory.full_set()
+    type_subset: TokenTypeSubset = TokenTypeSubset.full_set()
 
     def __str__(self):
-        return f'{self.metric_name}/{self.token_category}'
+        return f'{self.metric_name}/{self.type_subset}'
 
     def __repr__(self):
         return str(self)

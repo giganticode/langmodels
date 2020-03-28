@@ -10,7 +10,7 @@ from langmodels import app_name
 import docopt_subcommands as dsc
 
 from langmodels.training.training import train
-from langmodels.util.cuda import CudaNotAvailable
+from langmodels.cuda_util import CudaNotAvailable
 from langmodels.lmconfig.datamodel import DeviceOptions, LMTrainingConfig
 from langmodels import __version__
 

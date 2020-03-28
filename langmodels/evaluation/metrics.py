@@ -1,13 +1,10 @@
 import logging
-from collections import defaultdict
-
+import sys
 from typing import List, Optional, Set, Callable, Dict, Type
 
-from codeprep.tokens import PreppedTokenSequence
 from langmodels.evaluation.definitions import EvaluationResult
-from langmodels.evaluation.customization import TokenCategory
-from langmodels.model.model import TrainedModel, TokenCharacteristics
-from langmodels.model.context import ContextModification
+from langmodels.evaluation.customization import TokenTypeSubset
+from langmodels.model import TrainedModel
 
 DEFAULT_N_MODEL_SUGGESTIONS = 100
 
@@ -15,77 +12,66 @@ DEFAULT_N_MODEL_SUGGESTIONS = 100
 logger = logging.getLogger(__name__)
 
 
-def get_token_characteristics(prepped_token_sequence: PreppedTokenSequence) -> List[TokenCharacteristics]:
-    return [TokenCharacteristics.from_metadata(t.metadata) for t in prepped_token_sequence.with_metadata()]
-
-
 def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool,
-                token_categories: Optional[Set[TokenCategory]] = None,
-                context_modification: Optional[ContextModification] = None,
-                full_tokens: bool = True) -> Dict[TokenCategory, EvaluationResult]:
+                token_type_subsets: Optional[Set[TokenTypeSubset]] = None, max_context_allowed: int = sys.maxsize,
+                full_tokens: bool = True) \
+        -> Dict[TokenTypeSubset, EvaluationResult]:
     """
     Changes the state of the model!
     """
-    token_categories = token_categories or {TokenCategory.full_set()}
+    token_type_subsets = token_type_subsets or {TokenTypeSubset.full_set()}
 
-    prepped_token_sequence, all_entropies, context_information_list = model.get_entropies_for_text(line, extension,
-                                                                                                    full_tokens=full_tokens,
-                                                                                                    append_eof=append_eof,
-                                                                                                    context_modification=context_modification)
-
-    tokens = [i for i in prepped_token_sequence.without_metadata()]
-    token_characteristics_list = get_token_characteristics(prepped_token_sequence)
-    all_token_types = [i for i in prepped_token_sequence.get_iterator(prepped_token_sequence.metadata.token_types, over_full_tokens=True)]
-    evaluation_results: Dict[TokenCategory, EvaluationResult] = {}
-    for token_category in token_categories:
+    all_entropies, tokens, all_token_types, context_lengths = model.get_entropies_for_text(line, extension, full_tokens=full_tokens, append_eof=append_eof, max_context_allowed=max_context_allowed)
+    evaluation_results: Dict[TokenTypeSubset, EvaluationResult] = {}
+    for token_type_subset in token_type_subsets:
         res = []
         sum = 0.0
         count = 0
-        for entropy, token_characteristics in zip(all_entropies, token_characteristics_list):
-            if token_category.contains(token_characteristics):
+        for entropy, token_type in zip(all_entropies, all_token_types):
+            if token_type_subset.contains(token_type):
                 res.append(entropy)
                 sum += entropy
                 count += 1
             else:
                 res.append(None)
-        if context_modification:
-            of_context_length_cumul = defaultdict(lambda: (0.0, 0))
-            for entropy, token_characteristics, context_information in zip(all_entropies, token_characteristics_list, context_information_list):
-                if token_category.contains(token_characteristics):
-                    if context_information is not None:
-                        of_context_length_cumul[context_information] = (of_context_length_cumul[context_information][0] + entropy, of_context_length_cumul[context_information][1] + 1)
-            of_context_length = {k: (val / n if n != 0 else 0.0, n) for k, (val, n) in of_context_length_cumul.items()}
+        if max_context_allowed < 1000:
+            of_context_length_cumul = [(0.0, 0)] * max_context_allowed
+            for entropy, token_type, context_length in zip(all_entropies, all_token_types, context_lengths):
+                if token_type_subset.contains(token_type):
+                    if context_length is not None:
+                        of_context_length_cumul[context_length] = (of_context_length_cumul[context_length][0] + entropy, of_context_length_cumul[context_length][1] + 1)
+            of_context_length = [(val / n if n != 0 else 0.0, n) for (val, n) in of_context_length_cumul]
         else:
             of_context_length = None
-        evaluation_results[token_category] = EvaluationResult(tokens, list(map(lambda tt: tt.__name__, all_token_types)),
+        evaluation_results[token_type_subset] = EvaluationResult(tokens, list(map(lambda tt: tt.__name__, all_token_types)),
                                                                  res, sum / count if count else 0., of_context_length)
     return evaluation_results
 
 
 def mrr(model: TrainedModel, line: str, extension: str, append_eof: bool,
-        token_categories: Optional[Set[TokenCategory]] = None) \
-        -> Dict[TokenCategory, EvaluationResult]:
+        token_type_subsets: Optional[Set[TokenTypeSubset]] = None) \
+        -> Dict[TokenTypeSubset, EvaluationResult]:
     """
     Changes the state of the model!
     """
-    token_categories = token_categories or {TokenCategory.full_set()}
+    token_type_subsets = token_type_subsets or {TokenTypeSubset.full_set()}
 
-    evaluation_results: Dict[TokenCategory, EvaluationResult] = {}
-    for token_categories in token_categories:
+    evaluation_results: Dict[TokenTypeSubset, EvaluationResult] = {}
+    for token_type_subsets in token_type_subsets:
         inverse_rank_sum = .0
         count = 0
         inverse_ranks: List[Optional[float]] = []
         all_tokens: List[str] = []
         all_token_types: List[str] = []
 
-        for predictions, prep_token, token_characteristics in \
+        for predictions, prep_token, token_type in \
                 model.get_predictions_and_feed(line, extension,
                                                n_suggestions=DEFAULT_N_MODEL_SUGGESTIONS,
                                                append_eof=append_eof):
             all_tokens.append(prep_token)
-            all_token_types.append(token_characteristics.token_type.__name__)
+            all_token_types.append(token_type.__name__)
             predicted_tokens = list(map(lambda p: p[0], predictions))
-            if token_categories.contains(token_characteristics):
+            if token_type_subsets.contains(token_type):
                 try:
                     rank = predicted_tokens.index(prep_token) + 1
                     inverse_rank = 1. / rank
@@ -96,13 +82,13 @@ def mrr(model: TrainedModel, line: str, extension: str, append_eof: bool,
                 count += 1
             else:
                 inverse_ranks.append(None)
-        evaluation_results[token_categories] = EvaluationResult(all_tokens, all_token_types, inverse_ranks, inverse_rank_sum / count if count else 1.)
+        evaluation_results[token_type_subsets] = EvaluationResult(all_tokens, all_token_types, inverse_ranks, inverse_rank_sum / count if count else 1.)
 
     return evaluation_results
 
 
-Metric = Callable[[TrainedModel, List[str], str, bool, Optional[Set[TokenCategory]], Dict[Type, float], int],
-                  Dict[TokenCategory, EvaluationResult]]
+Metric = Callable[[TrainedModel, List[str], str, bool, Optional[Set[TokenTypeSubset]], Dict[Type, float], int],
+                  Dict[TokenTypeSubset, EvaluationResult]]
 
 
 def entropy_to_probability(entropy: float) -> float:

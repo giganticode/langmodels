@@ -2,10 +2,10 @@ from typing import List
 
 from columnar import columnar
 
-from langmodels.model.model import ModelSummary
+from langmodels.model import ModelDescription
 
 
-def query_all_models(cached: bool = False) -> List[ModelSummary]:
+def query_all_models(cached: bool = False) -> List[ModelDescription]:
     return _get_all_models_query(cached=cached).sorted_by_entropy().execute()
 
 
@@ -15,7 +15,7 @@ class _ModelQuery(object):
 
     def __str__(self):
         desc_list = self.execute()
-        return columnar(headers=ModelSummary.get_attribute_list(),
+        return columnar(headers=ModelDescription.get_attribute_list(),
                         data=list(map(lambda l: l.get_value_list(), desc_list)),
                         no_borders=True, terminal_width=200)
 
@@ -40,5 +40,5 @@ class _SortByEntropyQuery(_ModelQuery):
     def __init__(self, previous_query: _ModelQuery):
         super().__init__(previous_query)
 
-    def execute(self) -> List[ModelSummary]:
+    def execute(self) -> List[ModelDescription]:
         return sorted(self.get_previous_query().execute(), key=lambda m: m.bin_entropy)

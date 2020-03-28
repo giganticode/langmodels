@@ -70,11 +70,11 @@ Set `cached` parameter to `True` (default is `False`) to display only cached LMs
   dev_10k_1_10_190923.132328                                            10k         10/1/10        AWD_LSTM  9.15688191092  0                                0         -1          ['RANDOM']
 ```
 
-Use `query_all_models` method to get a list of `ModelSummary` objects
+Use `query_all_models` method to get a list of `ModelDescription` objects
 ```python
 >>> import langmodels.repository as repo
 >>> repo.query_all_models()[0]
-ModelSummary(id='langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344', bpe_merges='10k', layers_config='1024/2/1024', arch='AWD_LSTM', bin_entropy=2.1455788479, training_time_minutes_per_epoch=1429, n_epochs=6, best_epoch=5, tags=['BEST', 'DEFAULT'])
+ModelDescription(id='langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344', bpe_merges='10k', layers_config='1024/2/1024', arch='AWD_LSTM', bin_entropy=2.1455788479, training_time_minutes_per_epoch=1429, n_epochs=6, best_epoch=5, tags=['BEST', 'DEFAULT'])
 ```
 
 **A model can be loaded by tag or by id.**
@@ -268,7 +268,7 @@ to initial state and change the context of the model respectively.
 
 {full_token_entropy/ParsedToken: EvaluationResult(
     tokens=['public</t>', 'class</t>', 'MyClass</t>', '{</t>'],
-    token_types=['KeyWord', 'KeyWord', 'Identifier', 'OpeningCurlyBracket'],
+    token_types=['KeyWord', 'KeyWord', 'SplitContainer', 'OpeningCurlyBracket'],
     values=[1.8144783973693848, 3.668722629547119, 0.5620064437389374, 0.2571456730365753], 
     aggregated_value=1.5755882859230042
 )}

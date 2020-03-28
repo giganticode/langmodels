@@ -1,5 +1,5 @@
 fastai==1.0.57
-git+https://github.com/giganticode/codeprep@v2
+codeprep==1.0.0
 future==0.18.2
 comet-ml==3.0.2
 flatdict==3.4.0
@@ -14,4 +14,3 @@ requests==2.22.0
 pysftp==0.2.9
 semver==2.9.0
 jq==0.1.6
-frozendict==1.2

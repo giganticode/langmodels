@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from fastai.text import SequentialRNN
 from torch.nn.functional import log_softmax
 
-from langmodels.model.nn import get_last_layer_activations, take_hidden_state_snapshot, TORCH_LONG_MIN_VAL
-from langmodels.model.nn import restore_snapshot
-from langmodels.util.cuda import get_device
+from langmodels.nn import get_last_layer_activations, take_hidden_state_snapshot, TORCH_LONG_MIN_VAL
+from langmodels.cuda_util import get_device
+from langmodels.nn import restore_snapshot
 
 DEVICE = get_device()
 

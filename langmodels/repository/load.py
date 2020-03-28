@@ -7,11 +7,11 @@ import requests
 
 from langmodels import MODEL_ZOO_PATH
 from langmodels.lmconfig.datamodel import CONFIG_VERSION
-from langmodels.model.model import TrainedModel, METRICS_FILE_NAME, VOCAB_FILE_NAME, CONFIG_FILE_NAME, TAGS_FILE_NAME
+from langmodels.model import TrainedModel, METRICS_FILE_NAME, VOCAB_FILE_NAME, CONFIG_FILE_NAME, TAGS_FILE_NAME
 from langmodels.repository.download import download_metadata, download_model
 from langmodels.repository.query import query_all_models, _get_all_models_query, _GetAllModelsQuery
 from langmodels.repository.settings import MODEL_LIST_URL, MODEL_DIR_URL
-from langmodels.model.model import BEST_MODEL_FILE_NAME
+from langmodels.model import BEST_MODEL_FILE_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def _get_all_model_ids(cached: bool = False) -> List[str]:
 
 def _get_all_models(cached: bool) -> List[TrainedModel]:
     model_ids = _get_all_model_ids(cached=cached)
-    loaded_models = [load_model_by_id(model_id, load_description_only=True).get_model_summary()
+    loaded_models = [load_model_by_id(model_id, load_description_only=True).get_model_description()
                      for model_id in model_ids]
     return loaded_models
 

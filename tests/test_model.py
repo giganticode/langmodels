@@ -1,7 +1,7 @@
 from codeprep.preprocess.placeholders import placeholders
 from fastai.text import Vocab
 
-from langmodels.model.model import _create_term_vocab
+from langmodels.model import _create_term_vocab
 
 cpe = placeholders['compound_word_end']
 

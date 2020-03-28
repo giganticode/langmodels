@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Optional, List, Tuple
 
 from codeprep.api.corpus import PreprocessedCorpus
-from langmodels.util.file import get_all_files
+from langmodels.file_util import get_all_files
 from langmodels.training.data import create_databunch, check_data
 
 BIG_EPOCH_FILE_LIMIT = 10 * 1000

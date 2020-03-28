@@ -9,7 +9,7 @@ from langmodels import app_name
 from langmodels.lmconfig.datamodel import LMTrainingMetrics, LMTrainingConfig
 from langmodels.lmconfig.serialization import dump_to_file, load_config_or_metrics_form_dict
 from langmodels.repository.settings import CONVERTERS_URL
-from langmodels.model.model import CONFIG_FILE_NAME, METRICS_FILE_NAME
+from langmodels.model import CONFIG_FILE_NAME, METRICS_FILE_NAME
 
 logger = logging.getLogger(__name__)
 

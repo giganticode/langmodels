@@ -263,13 +263,10 @@ class ContextUsage(object):
         tokens_in_first_chunk = n_tokens_in_chunk(prep_text_chunks[0])
         tokens_in_last_chunk = n_tokens_in_chunk(prep_text_chunks[-1])
 
-        context_usage = ContextUsage(length_start=context_length_for_next_prediction,
+        return ContextUsage(length_start=context_length_for_next_prediction,
                             reset_at=tokens_in_first_chunk + context_length_for_next_prediction,
                             reset_times=context_reset_times,
                             length_end=tokens_in_last_chunk if context_reset_times != 0 else tokens_in_first_chunk + context_length_for_next_prediction)
-
-        print(context_usage)
-        return context_usage
 
 
 class TrainedModel(object):

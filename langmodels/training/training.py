@@ -70,11 +70,11 @@ def choose_schedule_and_fit(learner: Learner, training: Training) -> None:
 def load_base_model_if_needed(learner: Learner, lm_training_config: LMTrainingConfig, model_file='best') -> None:
     if lm_training_config.base_model:
         model = os.path.join(lm_training_config.base_model, model_file)
-        print(f"Using pretrained model: {model}.pth")
+        logger.info(f"Using pretrained model: {model}.pth")
         # not setting purge to True raises a pickle serialization error
         learner.load(model, purge=False)
     else:
-        print("Training form scratch")
+        logger.info("Training form scratch")
 
 
 def save_experiment_input(run: ExperimentRun, learner: Learner, vocab: Vocab):
@@ -153,7 +153,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
         prep_corpus = training_config.corpus
 
     vocab = create_vocab_for_lm(prep_corpus)
-    print(f"Vocab size: {len(vocab.itos)}")
+    logger.info(f"Vocab size: {len(vocab.itos)}")
     device = get_device_id(device_options.fallback_to_cpu, device_options.non_default_device_to_use)
     empty_data_bunch: DataBunch = EmptyDataBunch(vocab=vocab, path=prep_corpus.path_to_prep_dataset, device=device)
 
@@ -181,7 +181,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
 
     load_base_model_if_needed(learner, training_config)
 
-    print(f"Starting training... Model will be saved to {experiment_run.perm_path_to_model} "
+    logger.info(f"Starting training... Model will be saved to {experiment_run.perm_path_to_model} "
           f"(Saving config and vocab to {experiment_run.path_to_trained_model} before getting the first trained model)")
     choose_schedule_and_fit(learner, training_config.training)
     if experiment_run.comet_experiment:

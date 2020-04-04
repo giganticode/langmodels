@@ -17,12 +17,14 @@ from codeprep.api.corpus import PreprocessedCorpus
 from fastai.text import AWD_LSTM, Transformer, Activation
 
 from langmodels import MODEL_ZOO_PATH, __version__, __major_version__
+from langmodels.file_util import check_path_exists, check_path_writable
 from langmodels.nn import GRU
 from langmodels.util import HOME
 
 CONFIG_VERSION = __major_version__ if __major_version__ > 0 else __version__
 
 TMP_SUFFIX = '.tmp'
+BEST_MODEL_FILE_NAME = 'best.pth'
 
 
 @dataclass(frozen=True)
@@ -325,14 +327,18 @@ class LMTrainingMetrics(object):
                             f'to {type(self).__name__} {CONFIG_VERSION} object')
 
 
-class ExperimentRun:
-    def __init__(self, run_id: str, config: LMTrainingConfig,
-                 device_options: DeviceOptions, comet_experiment: Optional):
-        self.id = run_id
-        self.config = config
-        self.gpu = device_options
-        self.comet_experiment: Optional[Experiment] = comet_experiment
-        self.first_model_trained = False
+@dataclass
+class ExperimentRun(object):
+    id: str
+    config: LMTrainingConfig
+    gpu: DeviceOptions
+    comet_experiment: Optional[Experiment]
+    first_model_trained: bool = False
+
+    def __post_init__(self):
+        if self.config.base_model:
+            check_path_exists(os.path.join(self.config.base_model, BEST_MODEL_FILE_NAME))
+        check_path_writable(self.path_to_trained_model)
 
     @classmethod
     def with_config(cls, config: LMTrainingConfig, device_options: DeviceOptions = DeviceOptions(), comet: bool = True):

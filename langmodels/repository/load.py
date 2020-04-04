@@ -6,12 +6,11 @@ from typing import List
 import requests
 
 from langmodels import MODEL_ZOO_PATH
-from langmodels.lmconfig.datamodel import CONFIG_VERSION
+from langmodels.lmconfig.datamodel import CONFIG_VERSION, BEST_MODEL_FILE_NAME
 from langmodels.model import TrainedModel, METRICS_FILE_NAME, VOCAB_FILE_NAME, CONFIG_FILE_NAME, TAGS_FILE_NAME
 from langmodels.repository.download import download_metadata, download_model
 from langmodels.repository.query import query_all_models, _get_all_models_query, _GetAllModelsQuery
 from langmodels.repository.settings import MODEL_LIST_URL, MODEL_DIR_URL
-from langmodels.model import BEST_MODEL_FILE_NAME
 
 logger = logging.getLogger(__name__)
 

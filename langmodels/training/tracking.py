@@ -9,9 +9,9 @@ from fastai.basic_train import LearnerCallback, Learner
 from fastai.callbacks import SaveModelCallback, TrackerCallback
 from retrying import retry
 
-from langmodels.lmconfig.datamodel import ExperimentRun, LMTrainingMetrics
+from langmodels.lmconfig.datamodel import ExperimentRun, LMTrainingMetrics, BEST_MODEL_FILE_NAME
 from langmodels.lmconfig.serialization import dump_to_file
-from langmodels.model import METRICS_FILE_NAME, BEST_MODEL_FILE_NAME
+from langmodels.model import METRICS_FILE_NAME
 from langmodels.nn import get_param_number
 
 logger = logging.getLogger(__name__)

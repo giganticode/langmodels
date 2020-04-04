@@ -1,5 +1,4 @@
 import logging
-import math
 import os
 from collections import OrderedDict
 from threading import Lock
@@ -18,10 +17,10 @@ from codeprep.preprocess.metadata import check_metadata_validity, PreprocessingM
 from codeprep.preprocess.placeholders import placeholders
 from codeprep.subtokens import is_terminal_subtoken, FullTokenIterator, SubtokenIterator
 
-from langmodels.beamsearch import beam_search, FlattenedCandidateList
+from langmodels.beamsearch import beam_search
 from langmodels.cuda_util import get_device, get_map_location
 from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig, GruArch, \
-    LMTrainingMetrics
+    LMTrainingMetrics, BEST_MODEL_FILE_NAME
 from langmodels.lmconfig.serialization import load_config_or_metrics_from_file, read_value_from_file
 from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
 from langmodels.util import to_binary_entropy, split_list_into_nested_chunks
@@ -32,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 PAD_TOKEN_INDEX = 1
 
-BEST_MODEL_FILE_NAME = 'best.pth'
 METRICS_FILE_NAME = 'metrics'
 CONFIG_FILE_NAME = 'config'
 VOCAB_FILE_NAME = 'vocab'

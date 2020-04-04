@@ -21,10 +21,10 @@ from codeprep.api.corpus import PreprocessedCorpus
 from codeprep.util import to_literal_str
 
 from langmodels.cuda_util import get_device_id
-from langmodels.file_util import check_path_exists, check_path_writable, get_all_files
+from langmodels.file_util import get_all_files
 from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, RafaelsTrainingSchedule, Training, \
     CosineLRSchedule, ExperimentRun, DeviceOptions
-from langmodels.model import TrainedModel, create_custom_config, BEST_MODEL_FILE_NAME
+from langmodels.model import TrainedModel, create_custom_config
 from langmodels.repository.load import load_from_path
 from langmodels.tensor_ops import mrr
 from langmodels.training.data import EmptyDataBunch, create_databunch
@@ -82,12 +82,6 @@ def save_experiment_input(run: ExperimentRun, learner: Learner, vocab: Vocab):
     dump_to_file(run.config, os.path.join(run.path_to_trained_model, CONFIG_FILE_NAME))
     if run.comet_experiment:
         save_params_to_comet(run.comet_experiment, run.config, vocab)
-
-
-def check_run_prerequisites(run: ExperimentRun) -> None:
-    if run.config.base_model:
-        check_path_exists(os.path.join(run.config.base_model, BEST_MODEL_FILE_NAME))
-    check_path_writable(run.path_to_trained_model)
 
 
 def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_files: bool = False,
@@ -150,7 +144,6 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
           tune: bool = False, comet: bool = True, save_every_epoch: bool = False, allow_unks: bool = False) -> TrainedModel:
     logger.info(f'Using the following config: \n{pformat(jsons.dump(training_config))}')
     experiment_run = ExperimentRun.with_config(training_config, device_options=device_options, comet=comet)
-    check_run_prerequisites(experiment_run)
 
     if isinstance(training_config.corpus, Corpus):
         prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply(training_config.corpus,

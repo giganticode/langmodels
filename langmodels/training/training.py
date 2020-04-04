@@ -20,10 +20,10 @@ import codeprep.api.corpus as api
 from codeprep.api.corpus import PreprocessedCorpus
 from codeprep.util import to_literal_str
 
-from langmodels.cuda_util import get_device_id
+from langmodels.cuda_util import DeviceOptions
 from langmodels.file_util import get_all_files
 from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, RafaelsTrainingSchedule, Training, \
-    CosineLRSchedule, ExperimentRun, DeviceOptions
+    CosineLRSchedule, ExperimentRun
 from langmodels.model import TrainedModel, create_custom_config
 from langmodels.repository.load import load_from_path
 from langmodels.tensor_ops import mrr
@@ -85,14 +85,14 @@ def save_experiment_input(run: ExperimentRun, learner: Learner, vocab: Vocab):
 
 
 def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_files: bool = False,
-                   fallback_to_cpu: bool = True, non_default_device_to_use: Optional[int] = None):
+                   device_options: DeviceOptions = DeviceOptions(fallback_to_cpu=True)):
     """
     Validation using fastai's `validation` method
     """
     prep_corpus: api.PreprocessedCorpus = trained_model.prep_corpus(corpus)
     config: LMTrainingConfig = trained_model.config
 
-    device_id = get_device_id(fallback_to_cpu, non_default_device_to_use)
+    device_id = device_options.get_device_id()
 
     logger.info(f"Vocab size: {len(trained_model.vocab.itos)}")
     all_files = [f for f in get_all_files(prep_corpus.path_to_prep_dataset, None)]
@@ -154,7 +154,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
 
     vocab = create_vocab_for_lm(prep_corpus)
     logger.info(f"Vocab size: {len(vocab.itos)}")
-    device = get_device_id(device_options.fallback_to_cpu, device_options.non_default_device_to_use)
+    device = device_options.get_device_id()
     empty_data_bunch: DataBunch = EmptyDataBunch(vocab=vocab, path=prep_corpus.path_to_prep_dataset, device=device)
 
     config = create_custom_config(training_config)

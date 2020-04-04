@@ -2,7 +2,8 @@ from pytest import fixture
 from pytest_mock.plugin import MockFixture
 
 import langmodels.training.cli as cli
-from langmodels.lmconfig.datamodel import DeviceOptions, LMTrainingConfig
+from langmodels.lmconfig.datamodel import LMTrainingConfig
+from langmodels.cuda_util import DeviceOptions
 
 
 @fixture

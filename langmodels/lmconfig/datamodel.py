@@ -17,6 +17,7 @@ from codeprep.api.corpus import PreprocessedCorpus
 from fastai.text import AWD_LSTM, Transformer, Activation
 
 from langmodels import MODEL_ZOO_PATH, __version__, __major_version__
+from langmodels.cuda_util import DeviceOptions
 from langmodels.file_util import check_path_exists, check_path_writable
 from langmodels.nn import GRU
 from langmodels.util import HOME
@@ -254,12 +255,6 @@ class Training(object):
     activation_regularization: ActivationRegularization = ActivationRegularization()
     schedule: TrainingSchedule = RafaelsTrainingSchedule()
     files_per_epoch: Optional[int] = 50 * 1000
-
-
-@dataclass(frozen=True)
-class DeviceOptions(object):
-    fallback_to_cpu: bool = False
-    non_default_device_to_use: Optional[int] = None
 
 
 @dataclass(frozen=True)

@@ -10,7 +10,7 @@ from fastai.basic_train import validate
 from fastai.callback import CallbackHandler, Callback
 from fastai.callbacks.mem import PeakMemMetric
 from fastai.callbacks.misc import StopAfterNBatches
-from fastai.metrics import accuracy
+from fastai.metrics import accuracy, Perplexity
 from fastai.text import Vocab, language_model_learner
 from fastai.train import fit_one_cycle, Learner, EarlyStoppingCallback
 from flatdict import FlatDict
@@ -169,7 +169,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     training = training_config.training
     learner = language_model_learner(empty_data_bunch, arch_class, opt_func=training.optimizer.get_callable(),
                                      drop_mult=dropout_multiplier,
-                                     config=config, pretrained=not config, metrics=[accuracy, mrr],
+                                     config=config, pretrained=not config, metrics=[accuracy, mrr, Perplexity()],
                                      clip=training.gradient_clip,
                                      alpha=training.activation_regularization.alpha,
                                      beta=training.activation_regularization.beta,

@@ -3,33 +3,19 @@ from pprint import pformat
 
 import logging
 from fastai.basic_data import DataBunch
-from fastai.layers import FlattenedLoss
+from fastai.layers import FlattenedLoss, CrossEntropyFlat
 from fastai.text import LMLabelList, Vocab, TextList
 from pathlib import Path
-from torch.nn import CrossEntropyLoss
 from typing import Sequence
 
 from langmodels.profiling import get_cpu_memory_used_mb
 from langmodels.tensor_ops import contains_no_value
 from langmodels.training.numericalize import Numericalizer
-from langmodels.util import to_binary_entropy
 
 logger = logging.getLogger(__name__)
 
 
 UNKNOWN_TOKEN_INDEX = 0
-
-
-def binary_cross_entropy_flat(*args, axis:int=-1, **kwargs):
-
-    class BinaryCrossEntropyLoss(CrossEntropyLoss):
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-
-        def forward(self, input, target):
-            return to_binary_entropy(super().forward(input, target))
-
-    return FlattenedLoss(BinaryCrossEntropyLoss, *args, axis=axis, **kwargs)
 
 
 @dataclass
@@ -46,7 +32,7 @@ class EmptyDataBunch(object):
     path: str
     device: str
     backwards: bool = False
-    loss_func: FlattenedLoss = binary_cross_entropy_flat()
+    loss_func: FlattenedLoss = CrossEntropyFlat()
     train_ds: EmptyTrainDS = EmptyTrainDS()
     train_dl: EmptyTrainDL = EmptyTrainDL()
 

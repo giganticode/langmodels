@@ -8,8 +8,8 @@ from comet_ml import Experiment
 from fastai.basic_data import DataBunch
 from fastai.basic_train import validate
 from fastai.callback import CallbackHandler, Callback
-from fastai.callbacks.mem import PeakMemMetric
 from fastai.callbacks.misc import StopAfterNBatches
+from fastai.layers import CrossEntropyFlat
 from fastai.metrics import accuracy, Perplexity
 from fastai.text import Vocab, language_model_learner
 from fastai.train import fit_one_cycle, Learner, EarlyStoppingCallback
@@ -19,6 +19,7 @@ from typing import Optional, Tuple
 import codeprep.api.corpus as api
 from codeprep.api.corpus import PreprocessedCorpus
 from codeprep.util import to_literal_str
+
 from langmodels.cuda_util import get_device_id
 from langmodels.file_util import check_path_exists, check_path_writable, get_all_files
 from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, RafaelsTrainingSchedule, Training, \
@@ -26,7 +27,7 @@ from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, RafaelsTrain
 from langmodels.model import TrainedModel, create_custom_config, BEST_MODEL_FILE_NAME
 from langmodels.repository.load import load_from_path
 from langmodels.tensor_ops import mrr
-from langmodels.training.data import EmptyDataBunch, create_databunch, binary_cross_entropy_flat
+from langmodels.training.data import EmptyDataBunch, create_databunch
 from langmodels.training.schedule import ReduceLRCallback
 from langmodels.training.subepoch_files import EpochFileLoader
 from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, RetryingSaveModelCalback, \
@@ -110,7 +111,7 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
             """Save the extra outputs for later and only returns the true output."""
             return {'last_output': last_output[0]}
 
-    return validate(trained_model.model, databunch.valid_dl, loss_func=binary_cross_entropy_flat(),
+    return validate(trained_model.model, databunch.valid_dl, loss_func=CrossEntropyFlat(),
                     cb_handler=CallbackHandler([DetupleCallback()]))
 
 

@@ -3,7 +3,7 @@ from torch.nn import Embedding, ModuleList
 from typing import List, Tuple, Optional
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 from fastai.text import SequentialRNN, AWD_LSTM, WeightDropout, EmbeddingDropout, RNNDropout, one_param, to_detach, \
     Module
 
@@ -104,5 +104,5 @@ def add_gru_to_model_data():
     _model_meta[GRU] = gru_meta_data
 
 
-def get_param_number(model: SequentialRNN) -> int:
+def get_param_number(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)

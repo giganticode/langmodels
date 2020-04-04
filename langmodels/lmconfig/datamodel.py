@@ -16,9 +16,7 @@ import codeprep.api.corpus as corpus_api
 from codeprep.api.corpus import PreprocessedCorpus
 from fastai.text import AWD_LSTM, Transformer, Activation
 
-from langmodels import MODEL_ZOO_PATH, __version__, __major_version__
-from langmodels.cuda_util import DeviceOptions
-from langmodels.file_util import check_path_exists, check_path_writable
+from langmodels import __version__, __major_version__
 from langmodels.nn import GRU
 from langmodels.util import HOME
 
@@ -320,57 +318,6 @@ class LMTrainingMetrics(object):
             raise TypeError(f'Trying to deserealize '
                             f'{type(self).__name__} {self.config_version} '
                             f'to {type(self).__name__} {CONFIG_VERSION} object')
-
-
-@dataclass
-class ExperimentRun(object):
-    id: str
-    config: LMTrainingConfig
-    gpu: DeviceOptions
-    comet_experiment: Optional[Experiment]
-    first_model_trained: bool = False
-
-    def __post_init__(self):
-        if self.config.base_model:
-            check_path_exists(os.path.join(self.config.base_model, BEST_MODEL_FILE_NAME))
-        check_path_writable(self.path_to_trained_model)
-
-    @classmethod
-    def with_config(cls, config: LMTrainingConfig, device_options: DeviceOptions = DeviceOptions(), comet: bool = True):
-        run_id = ExperimentRun._generate_run_id(config)
-        comet_experiment = create_comet_experiment(run_id) if comet else None
-        return cls(run_id, config, device_options, comet_experiment)
-
-    def set_first_model_trained(self):
-        self.first_model_trained = True
-
-    @staticmethod
-    def _generate_run_id(config: LMTrainingConfig) -> str:
-        name_parts = []
-        if config.base_model:
-            name_parts.append([os.path.basename(config.base_model)])
-
-        dataset = os.path.basename(config.corpus.path)
-        prep_func_param = config.prep_function.params[0]
-        n_layers = config.arch.n_layers
-        n_hid = config.arch.n_hid if not isinstance(config.arch, TransformerArch) \
-            else config.arch.d_inner
-
-        import datetime
-        time_now = datetime.datetime.now()
-        timestamp = f"{time_now:%y%m%d.%H%M%S}"
-
-        name_parts.append([dataset, str(prep_func_param), str(n_layers), str(n_hid), timestamp])
-
-        return "_-_".join(map(lambda p: "_".join(p), name_parts))
-
-    @property
-    def path_to_trained_model(self) -> str:
-        return self.perm_path_to_model if self.first_model_trained else f'{self.perm_path_to_model}{TMP_SUFFIX}'
-
-    @property
-    def perm_path_to_model(self) -> str:
-        return os.path.join(MODEL_ZOO_PATH, self.id)
 
 
 jsons.set_serializer(LMTrainingConfig.serializer, cls=LMTrainingConfig)

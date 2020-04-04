@@ -9,7 +9,8 @@ from fastai.basic_train import LearnerCallback, Learner
 from fastai.callbacks import SaveModelCallback, TrackerCallback
 from retrying import retry
 
-from langmodels.lmconfig.datamodel import ExperimentRun, LMTrainingMetrics, BEST_MODEL_FILE_NAME
+from langmodels.lmconfig.datamodel import LMTrainingMetrics, BEST_MODEL_FILE_NAME
+from langmodels.training.experiment import ExperimentRun, MODEL_AVAILABLE_METRIC_NAME, TERMINATED_NORMALLY_METRIC_NAME
 from langmodels.lmconfig.serialization import dump_to_file
 from langmodels.model import METRICS_FILE_NAME
 from langmodels.nn import get_param_number
@@ -17,9 +18,6 @@ from langmodels.nn import get_param_number
 logger = logging.getLogger(__name__)
 
 BYTES_IN_MB = 1 << 20
-
-MODEL_AVAILABLE_METRIC_NAME = 'model available'
-TERMINATED_NORMALLY_METRIC_NAME = 'terminated normally'
 
 
 def change_path_to_permanent(experiment_run: ExperimentRun, learner: Learner) -> None:

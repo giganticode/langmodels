@@ -61,6 +61,8 @@ def choose_schedule_and_fit(learner: Learner, training: Training) -> None:
         fit_one_cycle(learner, cyc_len=schedule.cyc_len, tot_epochs=schedule.max_epochs,
                       max_lr=schedule.max_lr,
                       wd=training.weight_decay)
+    else:
+        raise ValueError(f"Unknown schedule: {schedule}")
     # not saving the model explicitly because it should have been saved by the callbacks
 
 

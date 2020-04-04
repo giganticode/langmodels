@@ -170,7 +170,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     training = training_config.training
     learner = language_model_learner(empty_data_bunch, arch_class, opt_func=training.optimizer.get_callable(),
                                      drop_mult=dropout_multiplier,
-                                     config=config, pretrained=not config, metrics=[accuracy, mrr, Perplexity()],
+                                     config=config, pretrained=False, metrics=[accuracy, mrr, Perplexity()],
                                      clip=training.gradient_clip,
                                      alpha=training.activation_regularization.alpha,
                                      beta=training.activation_regularization.beta,

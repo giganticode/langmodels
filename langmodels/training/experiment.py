@@ -49,7 +49,10 @@ class ExperimentRun(object):
             name_parts.append([os.path.basename(config.base_model)])
 
         dataset = os.path.basename(config.corpus.path)
-        prep_func_param = config.prep_function.params[0]
+        if config.prep_function.params:
+            prep_func_param = config.prep_function.params[0]
+        else:
+            prep_func_param = config.prep_function.callable.__name__
         n_layers = config.arch.n_layers
         n_hid = config.arch.n_hid if not isinstance(config.arch, TransformerArch) \
             else config.arch.d_inner

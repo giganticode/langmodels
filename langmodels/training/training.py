@@ -18,8 +18,7 @@ from codeprep.util import to_literal_str
 
 from langmodels.cuda_util import DeviceOptions
 from langmodels.file_util import get_all_files
-from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus, RafaelsTrainingSchedule, Training, \
-    CosineLRSchedule
+from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus
 from langmodels.training.experiment import ExperimentRun
 from langmodels.model import TrainedModel, create_custom_config
 from langmodels.repository.load import load_from_path
@@ -39,26 +38,6 @@ PATH_TO_PREP_DATASETS = os.environ['PATH_TO_PREP_DATASETS'] if 'PATH_TO_PREP_DAT
 
 def create_vocab_for_lm(prep_corpus: PreprocessedCorpus) -> Vocab:
     return Vocab(['`unk', '`pad'] + list(map(lambda x: to_literal_str(x), prep_corpus.load_vocab().keys())))
-
-
-def choose_schedule_and_fit(learner: Learner, training: Training) -> None:
-    schedule = training.schedule
-    if isinstance(schedule, RafaelsTrainingSchedule):
-        reduce_lr_callback = ReduceLRCallback(learner,
-                                              mult_coeff=schedule.mult_coeff,
-                                              max_times_lr_decrease=schedule.max_lr_reduction_times,
-                                              patience=schedule.patience)
-        learner.callbacks.append(reduce_lr_callback)
-        learner.fit(epochs=schedule.max_epochs, lr=schedule.init_lr, wd=training.weight_decay)
-    elif isinstance(schedule, CosineLRSchedule):
-        if schedule.early_stop:
-            learner.callbacks.append(EarlyStoppingCallback(learner, patience=schedule.early_stop.patience))
-        fit_one_cycle(learner, cyc_len=schedule.cyc_len, tot_epochs=schedule.max_epochs,
-                      max_lr=schedule.max_lr,
-                      wd=training.weight_decay)
-    else:
-        raise ValueError(f"Unknown schedule: {schedule}")
-    # not saving the model explicitly because it should have been saved by the callbacks
 
 
 def load_base_model_if_needed(learner: Learner, lm_training_config: LMTrainingConfig, model_file='best') -> None:
@@ -159,7 +138,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
 
     logger.info(f"Starting training... Model will be saved to {experiment_run.perm_path_to_model} "
           f"(Saving config and vocab to {experiment_run.path_to_trained_model} before getting the first trained model)")
-    choose_schedule_and_fit(learner, training_config.training)
+    training_config.training.schedule.fit(learner, training.weight_decay)
     if experiment_run.comet_experiment:
         report_experiment_terminated_mormally(experiment_run.comet_experiment)
 

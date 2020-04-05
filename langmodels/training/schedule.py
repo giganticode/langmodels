@@ -1,8 +1,11 @@
 import logging
+from dataclasses import dataclass
 from typing import Any, Dict
 
 from fastai.basic_train import Learner
 from fastai.callbacks import TrackerCallback
+
+from langmodels.lmconfig.datamodel import TrainingSchedule
 
 logger = logging.getLogger(__name__)
 
@@ -36,3 +39,21 @@ class ReduceLRCallback(TrackerCallback):
             self.lr_decreased_times += 1
             if self.lr_decreased_times > self.max_lr_decrease_times:
                 return {"stop_training": True}
+
+
+@dataclass(frozen=True)
+class RafaelsTrainingSchedule(TrainingSchedule):
+    name: str = 'rafael'
+    init_lr: float = 1e-4
+    mult_coeff: float = 0.5
+    max_epochs: int = 50
+    max_lr_reduction_times: int = 6
+    patience: int = 0
+
+    def fit(self, learner: Learner, weigth_decay: float):
+        reduce_lr_callback = ReduceLRCallback(learner,
+                                              mult_coeff=self.mult_coeff,
+                                              max_times_lr_decrease=self.max_lr_reduction_times,
+                                              patience=self.patience)
+        learner.callbacks.append(reduce_lr_callback)
+        learner.fit(epochs=self.max_epochs, lr=self.init_lr, wd=weigth_decay)

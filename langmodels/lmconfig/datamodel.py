@@ -1,5 +1,6 @@
 import os
 import re
+from abc import ABC, abstractmethod
 
 import torch
 from functools import partial
@@ -9,6 +10,9 @@ import sys
 from dataclasses import dataclass, field, asdict
 
 from comet_ml import Experiment
+from fastai.basic_train import Learner
+from fastai.callbacks import EarlyStoppingCallback
+from fastai.train import fit_one_cycle
 from torch import optim
 from typing import Optional, Callable, Tuple, List, Type, Dict, Any
 
@@ -43,9 +47,13 @@ class ActivationRegularization(object):
 
 
 @dataclass(frozen=True)
-class TrainingSchedule(object):
+class TrainingSchedule(ABC):
     name: str
     _serializer: Any = None
+
+    @abstractmethod
+    def fit(self, learn: Learner, weight_decay: float):
+        pass
 
     @classmethod
     def get_serializer(cls):
@@ -53,16 +61,6 @@ class TrainingSchedule(object):
             cls._serializer = jsons.fork()
 
         return cls._serializer
-
-
-@dataclass(frozen=True)
-class RafaelsTrainingSchedule(TrainingSchedule):
-    name: str = 'rafael'
-    init_lr: float = 1e-4
-    mult_coeff: float = 0.5
-    max_epochs: int = 50
-    max_lr_reduction_times: int = 6
-    patience: int = 0
 
 
 @dataclass(frozen=True)
@@ -77,6 +75,11 @@ class CosineLRSchedule(TrainingSchedule):
     cyc_len: int = 3
     max_epochs: int = 30
     early_stop: EarlyStop = EarlyStop()
+
+    def fit(self, learner: Learner, weight_decay):
+        if self.early_stop:
+            learner.callbacks.append(EarlyStoppingCallback(learner, patience=self.early_stop.patience))
+        fit_one_cycle(learner, cyc_len=self.cyc_len, tot_epochs=self.max_epochs, max_lr=self.max_lr, wd=weight_decay)
 
 
 @dataclass(frozen=True)
@@ -251,7 +254,7 @@ class Training(object):
     weight_decay: float = 1e-6
     gradient_clip: float = 0.3
     activation_regularization: ActivationRegularization = ActivationRegularization()
-    schedule: TrainingSchedule = RafaelsTrainingSchedule()
+    schedule: TrainingSchedule = CosineLRSchedule()
     files_per_epoch: Optional[int] = 50 * 1000
 
 

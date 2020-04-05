@@ -132,9 +132,13 @@ class PrepFunction(object):
 
 
 @dataclass(frozen=True)
-class Optimizer(object):
+class Optimizer(ABC):
     name: str
     _serializer: Any = None
+
+    @abstractmethod
+    def get_callable(self):
+        pass
 
     @classmethod
     def get_serializer(cls):
@@ -179,7 +183,7 @@ def field_based_deserializer_func(dct: Dict[str, Any], cls: Type, **kwargs) -> A
 
 
 @dataclass(frozen=True)
-class Arch(object):
+class Arch(ABC):
     name: str
     bidir: bool = False
     emb_sz: int = 1024
@@ -197,6 +201,10 @@ class Arch(object):
             cls._serializer = jsons.fork()
 
         return cls._serializer
+
+    @abstractmethod
+    def get_module(self):
+        pass
 
 
 @dataclass(frozen=True)

@@ -3,7 +3,7 @@ from fastai.text import Vocab, TextList
 from pathlib import Path
 from unittest.mock import patch
 
-from langmodels.training.numericalize import Numericalizer
+from langmodels.training.data import Numericalizer
 from tests.file_test_util import file_mock_with_lines
 
 

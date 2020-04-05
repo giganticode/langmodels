@@ -111,13 +111,20 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     experiment_run.log_vocab(vocab)
 
     device = device_options.get_device_id()
-    empty_data_bunch: DataBunch = EmptyDataBunch(vocab=vocab, path=prep_corpus.path_to_prep_dataset, device=device)
 
     config = create_custom_config(training_config)
     arch_class = training_config.arch.get_module()
     dropout_multiplier = training_config.arch.drop.multiplier
     training = training_config.training
-    learner = language_model_learner(empty_data_bunch, arch_class, opt_func=training.optimizer.get_callable(),
+
+    if training_config.training.sub_epochs:
+        data_bunch: DataBunch = EmptyDataBunch(vocab=vocab, path=prep_corpus.path_to_prep_dataset, device=device)
+    else:
+        data_bunch = create_databunch(prep_corpus.path_to_prep_dataset, get_all_files(prep_corpus.path_to_prep_dataset, None),
+                                     vocab, bs=training_config.bs, bptt=training_config.bptt,
+                                     device=device, verbose=True, allow_unks=allow_unks)
+
+    learner = language_model_learner(data_bunch, arch_class, opt_func=training.optimizer.get_callable(),
                                      drop_mult=dropout_multiplier,
                                      config=config, pretrained=False, metrics=[accuracy, mrr, Perplexity()],
                                      clip=training.gradient_clip,
@@ -126,10 +133,11 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
                                      path=os.path.dirname(experiment_run.path_to_trained_model),
                                      model_dir=os.path.basename(experiment_run.path_to_trained_model))
 
-    files_per_epoch = training_config.training.files_per_epoch
-    learner.callbacks.append(EpochFileLoader(learner, prep_corpus, vocab,
-                                             bs=training_config.bs, bptt=training_config.bptt, device=device,
-                                             n_files_per_epoch=files_per_epoch, allow_unks=allow_unks))
+    if training_config.training.sub_epochs:
+        files_per_epoch = training_config.training.sub_epochs.n_files
+        learner.callbacks.append(EpochFileLoader(learner, prep_corpus, vocab,
+                                                 bs=training_config.bs, bptt=training_config.bptt, device=device,
+                                                 n_files_per_epoch=files_per_epoch, allow_unks=allow_unks))
 
 
     add_callbacks(experiment_run, learner, vocab, tune, save_every_epoch=save_every_epoch)

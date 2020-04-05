@@ -257,13 +257,22 @@ class TransformerArch(Arch):
 
 
 @dataclass(frozen=True)
+class SubEpochs(object):
+    n_files: int = 50 * 1000
+
+
+@dataclass(frozen=True)
 class Training(object):
     optimizer: Optimizer = Adam()
     weight_decay: float = 1e-6
     gradient_clip: float = 0.3
     activation_regularization: ActivationRegularization = ActivationRegularization()
     schedule: TrainingSchedule = CosineLRSchedule()
-    files_per_epoch: Optional[int] = 50 * 1000
+    sub_epochs: Optional[SubEpochs] = None
+
+    def __post_init__(self):
+        if self.sub_epochs is not None and isinstance(self.schedule, CosineLRSchedule):
+            raise AssertionError(f"Cannot use CosineLRSchedule when training with subepochs")
 
 
 @dataclass(frozen=True)

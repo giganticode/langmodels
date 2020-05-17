@@ -105,8 +105,10 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
         prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply(training_config.corpus,
                                                                               calc_vocab=True,
                                                                               output_path=PATH_TO_PREP_DATASETS)
-    else:
+    elif isinstance(training_config.corpus, PreprocessedCorpus):
         prep_corpus = training_config.corpus
+    else:
+        raise AssertionError(f'Unknown corpus type: {type(training_config.corpus)}')
 
     vocab = create_vocab_for_lm(prep_corpus)
     experiment_run.log_vocab(vocab)

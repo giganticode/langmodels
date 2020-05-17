@@ -7,7 +7,6 @@
     <orderEntry type="jdk" jdkName="langmodels-python-3.7.3" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="codeprep" />
-    <orderEntry type="module" module-name="rose6icse" />
   </component>
   <component name="PyDocumentationSettings">
     <option name="format" value="PLAIN" />

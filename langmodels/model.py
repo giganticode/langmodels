@@ -87,7 +87,7 @@ def create_custom_config(lm_training_config: LMTrainingConfig):
     elif isinstance(arch, TransformerArch):
         return create_custom_transformer_config(arch)
     else:
-        raise ValueError(f"Unknown architecture: {arch}")
+        raise ValueError(f"Unknown architecture: {type(arch)}")
 
 
 def _create_term_vocab(vocab: Vocab) -> Tuple[Vocab, int]:

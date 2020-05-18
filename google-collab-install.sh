@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+pip uninstall -y coveralls datascience chainer albumentations Pygments pyyaml
+
 git clone https://github.com/giganticode/langmodels
 git clone https://github.com/giganticode/datasets
 cd langmodels

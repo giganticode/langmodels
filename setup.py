@@ -3,6 +3,7 @@ import os
 from setuptools import setup, find_packages
 
 root_package_name = 'langmodels'
+training_package_name = f'{root_package_name}.training'
 
 
 def readme():
@@ -45,5 +46,10 @@ setup(name='giganticode-langmodels',
       keywords='big large data source code corpus machine learning nlp '
                'pytorch torch fastai language modeling',
       install_requires=requirements,
+      entry_points={
+          'console_scripts': [
+              f'langmodels = {training_package_name}.__main__:main'
+          ]
+      },
       include_package_data=True,
       zip_safe=False)

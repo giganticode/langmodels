@@ -16,10 +16,6 @@ def version():
         return version_file.read().strip()
 
 
-with open('requirements.txt', 'r') as f:
-    requirements = f.read().splitlines()
-
-
 setup(name='giganticode-langmodels',
       version=version(),
       description='A toolkit for applying machine learning to large source code corpora',
@@ -45,7 +41,24 @@ setup(name='giganticode-langmodels',
       python_requires='>=3.6',
       keywords='big large data source code corpus machine learning nlp '
                'pytorch torch fastai language modeling',
-      install_requires=requirements,
+      install_requires=[
+        'fastai>=1.0.57,<2',
+        'codeprep>=1.0.0,<2',
+        'future>=0.18.2,<0.19',
+        'comet-ml>=3.0.2,<4',
+        'flatdict>=3.4.0,<4',
+        'retrying>=1.3.3,<2',
+        'psutil>=5.6.7,<6',
+        'tqdm>=4.39,<5',
+        'jsons>=1.0.0,<2',
+        'numpy>=1.17,<2',
+        'appdirs>=1.4.3,<2',
+        'Columnar>=1.3.1,<2',
+        'requests>=2.22,<3',
+        'pysftp>=0.2.9,<0.3',
+        'semver>=2.9.0,<3',
+        'jq>=0.1.6,<0.2',
+      ],
       entry_points={
           'console_scripts': [
               f'langmodels = {training_package_name}.__main__:main'

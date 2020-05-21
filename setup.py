@@ -44,6 +44,7 @@ setup(name='giganticode-langmodels',
       install_requires=[
         'fastai>=1.0.57,<2',
         'torch>=1.0.0,<=1.4.0',
+        'torchvision<0.6.0', #indirect dependency, necessary because fastai will install torch==0.5.0 by default
         'codeprep>=1.0.0,<2',
         'future>=0.18.2,<0.19',
         'comet-ml>=3.0.2,<4',

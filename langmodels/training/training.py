@@ -98,9 +98,9 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
           device_options: DeviceOptions = DeviceOptions(),
           tune: bool = False, comet: bool = True, save_every_epoch: bool = False,
           allow_unks: bool = False, return_fastai_learner: bool = False,
-          output_path: Optional[str]= None) -> Union[TrainedModel, Tuple[TrainedModel, Learner]]:
+          output_path: Optional[str]= None, rewrite_output: bool = False) -> Union[TrainedModel, Tuple[TrainedModel, Learner]]:
     experiment_run = ExperimentRun.with_config(training_config, device_options=device_options,
-                                               comet=comet, output_path=output_path)
+                                               comet=comet, output_path=output_path, rewrite_output=rewrite_output)
     experiment_run.log_experiment_input()
 
     if isinstance(training_config.corpus, Corpus):

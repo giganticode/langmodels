@@ -1,5 +1,7 @@
 import logging
 import os
+import shutil
+
 import sys
 from typing import Any
 
@@ -28,6 +30,8 @@ def change_path_to_permanent(experiment_run: ExperimentRun, learner: Learner) ->
         raise AssertionError(f"When changing model path to permanent, path to models must remain the same. "
                              f"However trying to rename: {old_full_path} -> {new_full_path}")
     learner.model_dir = new_model_dir
+    if os.path.exists(new_full_path):
+        shutil.rmtree(new_full_path)
     os.rename(old_full_path, new_full_path)
 
 

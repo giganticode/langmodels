@@ -26,7 +26,7 @@ def is_option_true(args: Dict, option: str) -> bool:
 @dsc.command()
 def train_handler(args):
     """usage: {program} train [--config <config>] [--patch <patch>] [--fallback-to-cpu] [--tune] [--disable-comet]
-    [--save-every-epoch] [--allow-unks] [--device=<device>] [--output-path <path>]
+    [--save-every-epoch] [--allow-unks] [--device=<device>] [--output-path <path> [-f]]
 
     Trains a language model according to the given config.
 
@@ -44,11 +44,16 @@ def train_handler(args):
       -o, --output-path=<path>                     Path to where the models and metrics will be saved.
                                                    If not specified:
                                                    On Mac OS X:
-                                                       ~/Library/Application Support/langmodels/<langmodels-version>/modelzoo
+                                                       ~/Library/Application Support/langmodels/<langmodels-version>/modelzoo/<run-id>
                                                    On Unix:
-                                                       ~/.local/share/langmodels/<langmodels-version>/modelzoo
+                                                       ~/.local/share/langmodels/<langmodels-version>/modelzoo/<run-id>
                                                        or if XDG_DATA_HOME is defined:
-                                                       $XDG_DATA_HOME/langmodels/<langmodels-version>/modelzoo
+                                                       $XDG_DATA_HOME/langmodels/<langmodels-version>/modelzoo/<run-id>
+
+                                                    Run id is generated based on the current timestamp and is normally
+                                                    unique unless multiple ids are generated at the same second
+                                                    (if multiple experiments are run at the same time)
+      -f, --rewrite-output                          Rewrite already existing output
 
     """
     handle_train(args)
@@ -68,6 +73,7 @@ def handle_train(args) -> None:
     device = int(device) if device else 0
     path_to_config = get_option(args, '--config')
     output_path = get_option(args, '--output-path')
+    rewrite_output = is_option_true(args, '--rewrite-output')
     try:
         lm_training_config = load_config_or_metrics_from_file(path_to_config, LMTrainingConfig) if path_to_config else LMTrainingConfig()
     except jsons.exceptions.DecodeError:
@@ -81,7 +87,7 @@ def handle_train(args) -> None:
     try:
         train(training_config=lm_training_config, device_options=device_options,
               tune=tune, comet=comet, save_every_epoch=save_every_epoch,
-              allow_unks=allow_unks, output_path=output_path)
+              allow_unks=allow_unks, output_path=output_path, rewrite_output=rewrite_output)
     except CudaNotAvailable:
         print('Gpu with CUDA-support is not available on this machine. '
               'Use --fallback-to-cpu  switch if you want to train on gpu')

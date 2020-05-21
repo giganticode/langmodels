@@ -27,19 +27,28 @@ class ExperimentRun(object):
     gpu: DeviceOptions
     comet_experiment: Optional[Experiment]
     output_path: Optional[str] = None
+    rewrite_output: bool =False
     first_model_trained: bool = False
 
     def __post_init__(self):
         if self.config.base_model:
             check_path_exists(os.path.join(self.config.base_model, BEST_MODEL_FILE_NAME))
-        check_path_writable(self.path_to_trained_model)
+        check_path_writable(self.tmp_path_to_model)
+        if os.path.exists(self.perm_path_to_model):
+            if self.rewrite_output:
+                logger.info(f'Directory {self.perm_path_to_model} will be rewritten.')
+            else:
+                raise FileExistsError(f"Directory {self.perm_path_to_model} already exists.\n"
+                                      f"If you want to rewrite it run the training with flag --rewrite-output.")
+
 
     @classmethod
     def with_config(cls, config: LMTrainingConfig, device_options: DeviceOptions = DeviceOptions(),
-                    comet: bool = True, output_path: Optional[str] = None) -> 'ExperimentRun':
+                    comet: bool = True, output_path: Optional[str] = None,
+                    rewrite_output: bool = False) -> 'ExperimentRun':
         run_id = ExperimentRun._generate_run_id(config)
         comet_experiment = create_comet_experiment(run_id) if comet else None
-        return cls(run_id, config, device_options, comet_experiment, output_path)
+        return cls(run_id, config, device_options, comet_experiment, output_path, rewrite_output)
 
     def set_first_model_trained(self):
         self.first_model_trained = True
@@ -69,12 +78,15 @@ class ExperimentRun(object):
 
     @property
     def path_to_trained_model(self) -> str:
-        return self.perm_path_to_model if self.first_model_trained else f'{self.perm_path_to_model}{TMP_SUFFIX}'
+        return self.perm_path_to_model if self.first_model_trained else self.tmp_path_to_model
 
     @property
     def perm_path_to_model(self) -> str:
-        path_to_models = self.output_path if self.output_path is not None else MODEL_ZOO_PATH
-        return os.path.join(path_to_models, self.id)
+        return os.path.join(MODEL_ZOO_PATH, self.id) if self.output_path is None else self.output_path
+
+    @property
+    def tmp_path_to_model(self):
+        return f'{self.perm_path_to_model}{TMP_SUFFIX}'
 
     def log_vocab(self, vocab: Vocab) -> None:
         logger.info(f"Vocab size: {len(vocab.itos)}")

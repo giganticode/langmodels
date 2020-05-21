@@ -17,15 +17,16 @@ def test_defaults(train_func_mocker):
     cli.run(argv)
     cli.train.assert_called_with(allow_unks=False, tune=False, comet=True, save_every_epoch=False,
                                  device_options=DeviceOptions(fallback_to_cpu=False, non_default_device_to_use=0),
-                                 training_config=LMTrainingConfig())
+                                 training_config=LMTrainingConfig(), output_path=None)
 
 
 def test_device_comet_cpu(train_func_mocker):
-    argv = ['train', '--fallback-to-cpu', '--tune', '--disable-comet', '--device=3', '--save-every-epoch']
+    argv = ['train', '--fallback-to-cpu', '--tune', '--disable-comet',
+            '--device=3', '--save-every-epoch', '--output-path=/home/username']
     cli.run(argv)
     cli.train.assert_called_with(allow_unks=False, tune=True, comet=False, save_every_epoch=True,
                                  device_options=DeviceOptions(fallback_to_cpu=True, non_default_device_to_use=3),
-                                 training_config=LMTrainingConfig())
+                                 training_config=LMTrainingConfig(), output_path='/home/username')
 
 
 def test_short_options(train_func_mocker):
@@ -33,4 +34,4 @@ def test_short_options(train_func_mocker):
     cli.run(argv)
     cli.train.assert_called_with(allow_unks=False, tune=True, comet=False, save_every_epoch=True,
                                  device_options=DeviceOptions(fallback_to_cpu=True, non_default_device_to_use=3),
-                                 training_config=LMTrainingConfig())
+                                 training_config=LMTrainingConfig(), output_path=None)

@@ -26,6 +26,7 @@ class ExperimentRun(object):
     config: LMTrainingConfig
     gpu: DeviceOptions
     comet_experiment: Optional[Experiment]
+    output_path: Optional[str] = None
     first_model_trained: bool = False
 
     def __post_init__(self):
@@ -34,10 +35,11 @@ class ExperimentRun(object):
         check_path_writable(self.path_to_trained_model)
 
     @classmethod
-    def with_config(cls, config: LMTrainingConfig, device_options: DeviceOptions = DeviceOptions(), comet: bool = True):
+    def with_config(cls, config: LMTrainingConfig, device_options: DeviceOptions = DeviceOptions(),
+                    comet: bool = True, output_path: Optional[str] = None) -> 'ExperimentRun':
         run_id = ExperimentRun._generate_run_id(config)
         comet_experiment = create_comet_experiment(run_id) if comet else None
-        return cls(run_id, config, device_options, comet_experiment)
+        return cls(run_id, config, device_options, comet_experiment, output_path)
 
     def set_first_model_trained(self):
         self.first_model_trained = True
@@ -71,7 +73,8 @@ class ExperimentRun(object):
 
     @property
     def perm_path_to_model(self) -> str:
-        return os.path.join(MODEL_ZOO_PATH, self.id)
+        path_to_models = self.output_path if self.output_path is not None else MODEL_ZOO_PATH
+        return os.path.join(path_to_models, self.id)
 
     def log_vocab(self, vocab: Vocab) -> None:
         logger.info(f"Vocab size: {len(vocab.itos)}")

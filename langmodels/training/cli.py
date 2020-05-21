@@ -26,7 +26,7 @@ def is_option_true(args: Dict, option: str) -> bool:
 @dsc.command()
 def train_handler(args):
     """usage: {program} train [--config <config>] [--patch <patch>] [--fallback-to-cpu] [--tune] [--disable-comet]
-    [--save-every-epoch] [--allow-unks] [--device=<device>]
+    [--save-every-epoch] [--allow-unks] [--device=<device>] [--output-path <path>]
 
     Trains a language model according to the given config.
 
@@ -41,6 +41,14 @@ def train_handler(args):
       -d <device>, --device=<device>               Device id to use
       -c, --config=<config>                        Path to the json with config to be used to train the model
       -p, --patch=<patch>                          'Patch' to apply to the default lm training config e.g
+      -o, --output-path=<path>                     Path to where the models and metrics will be saved.
+                                                   If not specified:
+                                                   On Mac OS X:
+                                                       ~/Library/Application Support/langmodels/<langmodels-version>/modelzoo
+                                                   On Unix:
+                                                       ~/.local/share/langmodels/<langmodels-version>/modelzoo
+                                                       or if XDG_DATA_HOME is defined:
+                                                       $XDG_DATA_HOME/langmodels/<langmodels-version>/modelzoo
 
     """
     handle_train(args)
@@ -59,6 +67,7 @@ def handle_train(args) -> None:
     device = get_option(args, '--device')
     device = int(device) if device else 0
     path_to_config = get_option(args, '--config')
+    output_path = get_option(args, '--output-path')
     try:
         lm_training_config = load_config_or_metrics_from_file(path_to_config, LMTrainingConfig) if path_to_config else LMTrainingConfig()
     except jsons.exceptions.DecodeError:
@@ -71,7 +80,8 @@ def handle_train(args) -> None:
 
     try:
         train(training_config=lm_training_config, device_options=device_options,
-              tune=tune, comet=comet, save_every_epoch=save_every_epoch, allow_unks=allow_unks)
+              tune=tune, comet=comet, save_every_epoch=save_every_epoch,
+              allow_unks=allow_unks, output_path=output_path)
     except CudaNotAvailable:
         print('Gpu with CUDA-support is not available on this machine. '
               'Use --fallback-to-cpu  switch if you want to train on gpu')

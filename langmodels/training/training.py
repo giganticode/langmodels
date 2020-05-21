@@ -10,7 +10,7 @@ from fastai.layers import CrossEntropyFlat
 from fastai.metrics import accuracy, Perplexity
 from fastai.text import Vocab, language_model_learner
 from fastai.train import fit_one_cycle, Learner, EarlyStoppingCallback
-from typing import Tuple, Union
+from typing import Tuple, Union, Optional
 
 import codeprep.api.corpus as api
 from codeprep.api.corpus import PreprocessedCorpus
@@ -97,8 +97,10 @@ def add_callbacks(experiment_run: ExperimentRun, learner: Learner, vocab: Vocab,
 def train(training_config: LMTrainingConfig = LMTrainingConfig(),
           device_options: DeviceOptions = DeviceOptions(),
           tune: bool = False, comet: bool = True, save_every_epoch: bool = False,
-          allow_unks: bool = False, return_fastai_learner: bool = False) -> Union[TrainedModel, Tuple[TrainedModel, Learner]]:
-    experiment_run = ExperimentRun.with_config(training_config, device_options=device_options, comet=comet)
+          allow_unks: bool = False, return_fastai_learner: bool = False,
+          output_path: Optional[str]= None) -> Union[TrainedModel, Tuple[TrainedModel, Learner]]:
+    experiment_run = ExperimentRun.with_config(training_config, device_options=device_options,
+                                               comet=comet, output_path=output_path)
     experiment_run.log_experiment_input()
 
     if isinstance(training_config.corpus, Corpus):

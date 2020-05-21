@@ -43,6 +43,7 @@ setup(name='giganticode-langmodels',
                'pytorch torch fastai language modeling',
       install_requires=[
         'fastai>=1.0.57,<2',
+        'torch>=1.0.0,<=1.4.0',
         'codeprep>=1.0.0,<2',
         'future>=0.18.2,<0.19',
         'comet-ml>=3.0.2,<4',

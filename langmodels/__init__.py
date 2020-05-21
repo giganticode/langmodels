@@ -1,6 +1,9 @@
 from importlib import import_module
 import_module('comet_ml')
 
+import numpy as np
+import torch
+
 import logging
 import logging.config
 import os
@@ -8,6 +11,9 @@ import os
 import appdirs
 import yaml
 import matplotlib
+
+np.random.seed(13)
+torch.manual_seed(13)
 
 matplotlib.use('PS')  # to avoid error on OSX - this should go here, before other imports
 

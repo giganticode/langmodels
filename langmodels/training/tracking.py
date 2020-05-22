@@ -7,7 +7,7 @@ from typing import Any, List
 
 import time
 from comet_ml import Experiment
-from dagshub import dagshub_logger
+from dagshub import DAGsHubLogger
 from fastai.basic_train import LearnerCallback, Learner, MetricsList
 from fastai.callbacks import SaveModelCallback, TrackerCallback
 from retrying import retry
@@ -114,6 +114,8 @@ class MetricSavingCallback(TrackerCallback):
             trainable_params=get_param_number(learner.model),
             size_on_disk_mb=None
         )
+        training_metrics_path = os.path.join(self.experiment_run.path_to_trained_model, 'training_metrics.csv')
+        self.dagshub_logger = DAGsHubLogger(metrics_path=training_metrics_path, should_log_hparams=False)
 
     @staticmethod
     def _log_metrics_to_comet(comet_experiment, metric_values) -> None:
@@ -122,14 +124,12 @@ class MetricSavingCallback(TrackerCallback):
         comet_experiment.log_metric("model size mb", metric_values.size_on_disk_mb)
         comet_experiment.log_metric("best epoch", metric_values.best_epoch)
 
-    @staticmethod
-    def _log_training_metrics_to_csv(metrics: List, last_metric_values: MetricsList, epoch: int, path: str) -> None:
+    def _log_training_metrics_to_csv(self, metrics: List, last_metric_values: MetricsList, epoch: int) -> None:
         custom_metric_names = [m.__name__ if callable(m) else type(m).__name__ for m in metrics]
         last_metric_names = ['train_loss', 'valid_loss'] + custom_metric_names
         metrics = {k:v for k,v in zip(last_metric_names, last_metric_values)}
 
-        with dagshub_logger(metrics_path=path, should_log_hparams=False) as logger:
-            logger.log_metrics(metrics=metrics, step_num=epoch)
+        self.dagshub_logger.log_metrics(metrics=metrics, step_num=epoch)
 
     def _update_training_time_per_epoch(self) -> int:
         total_training_time_before_this_epoch = self.metric_values.training_time_minutes_per_epoch * (self.metric_values.n_epochs - 1)
@@ -161,10 +161,13 @@ class MetricSavingCallback(TrackerCallback):
         path_to_metrics_file = os.path.join(self.experiment_run.path_to_trained_model, METRICS_FILE_NAME)
         dump_to_file(self.metric_values, path_to_metrics_file)
 
-        training_metrics_path = os.path.join(self.experiment_run.path_to_trained_model, 'training_metrics.csv')
         self._log_training_metrics_to_csv(metrics,
                                           last_metric_values=[smooth_loss.item(), valid_loss] + custom_metric_values,
-                                          epoch=epoch, path=training_metrics_path)
+                                          epoch=epoch)
         comet_experiment = self.experiment_run.comet_experiment
         if comet_experiment:
             self._log_metrics_to_comet(comet_experiment, self.metric_values)
+
+    def on_train_end(self, **kwargs:Any) ->None:
+        self.dagshub_logger.save()
+        self.dagshub_logger.close()

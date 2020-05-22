@@ -17,6 +17,7 @@ configobj==5.0.6
 cryptography==2.9.2
 cycler==0.10.0
 cymem==2.0.3
+dagshub==0.0.2rc1
 dill==0.3.1.1
 docopt==0.6.2
 docopt-subcommands==3.0.0

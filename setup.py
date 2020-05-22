@@ -60,6 +60,7 @@ setup(name='giganticode-langmodels',
         'pysftp>=0.2.9,<0.3',
         'semver>=2.9.0,<3',
         'jq>=0.1.6,<0.2',
+        'dagshub>=0.0.2rc1,<0.1.0',
       ],
       entry_points={
           'console_scripts': [

@@ -3,13 +3,15 @@ import os
 import shutil
 
 import sys
-from typing import Any
+from typing import Any, List
 
 import time
 from comet_ml import Experiment
-from fastai.basic_train import LearnerCallback, Learner
+from dagshub import dagshub_logger
+from fastai.basic_train import LearnerCallback, Learner, MetricsList
 from fastai.callbacks import SaveModelCallback, TrackerCallback
 from retrying import retry
+from torch import Tensor
 
 from langmodels.lmconfig.datamodel import LMTrainingMetrics, BEST_MODEL_FILE_NAME
 from langmodels.training.experiment import ExperimentRun, MODEL_AVAILABLE_METRIC_NAME, TERMINATED_NORMALLY_METRIC_NAME
@@ -120,6 +122,15 @@ class MetricSavingCallback(TrackerCallback):
         comet_experiment.log_metric("model size mb", metric_values.size_on_disk_mb)
         comet_experiment.log_metric("best epoch", metric_values.best_epoch)
 
+    @staticmethod
+    def _log_training_metrics_to_csv(metrics: List, last_metric_values: MetricsList, epoch: int, path: str) -> None:
+        custom_metric_names = [m.__name__ if callable(m) else type(m).__name__ for m in metrics]
+        last_metric_names = ['train_loss', 'valid_loss'] + custom_metric_names
+        metrics = {k:v for k,v in zip(last_metric_names, last_metric_values)}
+
+        with dagshub_logger(metrics_path=path, should_log_hparams=False) as logger:
+            logger.log_metrics(metrics=metrics, step_num=epoch)
+
     def _update_training_time_per_epoch(self) -> int:
         total_training_time_before_this_epoch = self.metric_values.training_time_minutes_per_epoch * (self.metric_values.n_epochs - 1)
         this_epoch_training_time = (time.time() - self.start_epoch_time) / 60
@@ -134,8 +145,10 @@ class MetricSavingCallback(TrackerCallback):
     def on_epoch_begin(self, **kwargs:Any) ->None:
         self.start_epoch_time = time.time()
 
-    def on_epoch_end(self, epoch: int, **kwargs: Any) -> None:
-        super().on_epoch_end(**kwargs)
+    def on_epoch_end(self, epoch: int, metrics: List, smooth_loss: Tensor, last_metrics: MetricsList,
+                     **kwargs: Any) -> None:
+
+        valid_loss, custom_metric_values = last_metrics[0], [t.item() for t in last_metrics[1:]]
 
         self.metric_values.n_epochs = epoch + 1
         if self.get_monitor_value() < self.metric_values.bin_entropy:
@@ -148,6 +161,10 @@ class MetricSavingCallback(TrackerCallback):
         path_to_metrics_file = os.path.join(self.experiment_run.path_to_trained_model, METRICS_FILE_NAME)
         dump_to_file(self.metric_values, path_to_metrics_file)
 
+        training_metrics_path = os.path.join(self.experiment_run.path_to_trained_model, 'training_metrics.csv')
+        self._log_training_metrics_to_csv(metrics,
+                                          last_metric_values=[smooth_loss.item(), valid_loss] + custom_metric_values,
+                                          epoch=epoch, path=training_metrics_path)
         comet_experiment = self.experiment_run.comet_experiment
         if comet_experiment:
             self._log_metrics_to_comet(comet_experiment, self.metric_values)

@@ -40,14 +40,13 @@ jobs:
         - conda install matplotlib
         - conda install pytorch torchvision cudatoolkit=10.1 -c pytorch
         - pip install --upgrade pip
-        - pip install -r requirements.txt
+        - pip install -r requirements-win.txt
         - pip install -r requirements-dev.txt
       before_script: echo "Not sending code coverage to code climate on OSx"
       after_script: echo "Not sending code coverage to code climate on OSx"
 before_install:
   - sudo apt-get install autoconf automake build-essential libtool python-dev # needed to install jq
 install:
-  - pip3 install torch==1.3.0
   - pip install -r requirements.txt
   - pip install -r requirements-dev.txt
 before_script:

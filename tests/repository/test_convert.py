@@ -1,8 +1,9 @@
 import os
+from sys import platform
 from typing import Dict
 
 import jsons
-from jq import jq
+import pytest
 from langmodels import project_dir
 
 from langmodels.repository.convert import convert_dict
@@ -78,6 +79,7 @@ metrics_v002 = {"bin_entropy": 2.1455788479, "n_epochs": 6, "best_epoch": 5, "tr
 metrics_v003 = {"bin_entropy": 2.1455788479, "n_epochs": 6, "best_epoch": 5, "training_time_minutes_per_epoch": 1429, "trainable_params": 27726250, "size_on_disk_mb": 350, "config_version": "0.0.3-alpha.0"}
 
 
+@pytest.mark.skipif(platform != "linux", reason="jq is complicated to install on OSx and Windows")
 def test_003_to_002():
     assert convert_dict(config_v003_gru_cosine, 'config', '0.0.2-alpha.0') == config_v002_gru_cosine
     assert convert_dict(config_v003_lstm_rafael, 'config', '0.0.2-alpha.0') == config_v002_lstm_rafael
@@ -92,7 +94,10 @@ def _get_transformation_dict(version: str) -> Dict[str, str]:
     return transformation_dict
 
 
+@pytest.mark.skipif(platform != "linux", reason="jq is complicated to install on OSx and Windows")
 def test_002_to_003():
+    from jq import jq
+
     version = '0.0.2-alpha.0'
     tranformation_string = _get_transformation_dict(version)
 

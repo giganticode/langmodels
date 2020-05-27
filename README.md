@@ -37,6 +37,10 @@ source langmodels-venv/bin/activate
 pip install -r requirements.txt
 ```
 
+#### Note for windows users:
+
+The library is no longer tested under Windows but most of the functionality is expected to work.
+
 ## Using existing pre-trained models
 ### Loading a default pre-trained model
 ```python

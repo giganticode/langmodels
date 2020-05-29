@@ -34,8 +34,11 @@ def test_evaluate_model_on_path():
                               Path(project_dir) /'data' /'dev' /'valid',
                               evaluation_scenario_grid=EvaluationScenarioGrid(context_modifier=ContextModifier(max_context_length=50), token_categories={TokenCategory.full_set()}),
                               batch_size=3)
-    assert actual.scenarios[EvaluationScenario('perplexity')] \
-           == ShortEvaluationResult(sum=26293.088098963723, n_samples=1522, exp=True)
+
+    scenario = actual.scenarios[EvaluationScenario('perplexity')]
+    assert int(scenario.sum) == 26293
+    assert scenario.n_samples == 1522
+    assert scenario.exp
 
 
 def test_evaluate_model_on_file():
@@ -45,7 +48,10 @@ def test_evaluate_model_on_file():
                               batch_size=3)
 
     assert len(actual.scenarios) == 1
-    assert actual.scenarios[EvaluationScenario('perplexity')] == ShortEvaluationResult(sum=26293.088098963723, n_samples=1522, exp=True)
+    scenario = actual.scenarios[EvaluationScenario('perplexity')]
+    assert int(scenario.sum) == 26293
+    assert scenario.n_samples == 1522
+    assert scenario.exp
 
 
 def test_evaluate_model_on_string():
@@ -56,11 +62,15 @@ def test_evaluate_model_on_string():
                                 )
 
     assert len(actual.scenarios) == 2
-    assert actual.scenarios[EvaluationScenario('perplexity', TokenCategory.Builder().add({KeyWord}).build())] \
-           == ShortEvaluationResult(sum=8.018324851989746, n_samples=1, exp=True)
+    scenario1 = actual.scenarios[EvaluationScenario('perplexity', TokenCategory.Builder().add({KeyWord}).build())]
+    assert int(scenario1.sum) == 8
+    assert scenario1.n_samples == 1
+    assert scenario1.exp
 
-    assert actual.scenarios[EvaluationScenario('perplexity', TokenCategory.full_set())] \
-           == ShortEvaluationResult(sum=57.25079941749573, n_samples=7, exp=True)
+    scenario2 = actual.scenarios[EvaluationScenario('perplexity', TokenCategory.full_set())]
+    assert int(scenario2.sum) == 57
+    assert scenario2.n_samples == 7
+    assert scenario2.exp
 
 
 def test_train():
@@ -70,4 +80,4 @@ def test_train():
     model = train(comet=False, device_options=DeviceOptions(fallback_to_cpu=True),
           training_config=LMTrainingConfig(Corpus(os.path.join(project_dir, 'data', 'dev')),
                                            training=Training(schedule=RafaelsTrainingSchedule(max_epochs=1))))
-    assert model.metrics.bin_entropy == 9.139766693115234
+    assert int(model.metrics.bin_entropy) == 9

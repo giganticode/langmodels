@@ -1,35 +1,29 @@
 import logging
 import os
-import sys
 from collections import OrderedDict
+from dataclasses import asdict
 from threading import Lock
-from typing import List, Tuple, Optional, Union, Type, Generator
+from typing import List, Tuple, Optional, Generator, Callable
 
 import torch
-from dataclasses import asdict, dataclass
-from fastai.text import SequentialRNN, get_language_model, F, Vocab, convert_weights
+from fastai.text import SequentialRNN, get_language_model, Vocab, convert_weights
 from math import exp
 from torch import cuda
 
 from codeprep.api.corpus import PreprocessedCorpus
 from codeprep.pipeline.dataset import normalize_extension_string
-from codeprep.preprocess.metadata import PreppedTokenMetadata
 from codeprep.preprocess.placeholders import placeholders
-from codeprep.tokens import PreppedSubTokenSequence, PreppedFullTokenSequence, is_terminal_subtoken, \
-    PreppedTokenSequence
-
-from langmodels.model.beamsearch import beam_search
+from codeprep.preprocess.tokens import TokenSequence, is_terminal_subtoken
 from langmodels.lmconfig.datamodel import Corpus, TransformerArch, LMTrainingConfig, LMTrainingMetrics
 from langmodels.lmconfig.serialization import load_config_or_metrics_from_file, read_value_from_file
-from langmodels.model.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
-from langmodels.util.misc import to_binary_entropy, chunk_prepped_tokens
-from langmodels.model.nn import take_hidden_state_snapshot
-from langmodels.model.context import ModelContext, ContextInformation
+from langmodels.model.beamsearch import beam_search
 from langmodels.model.config import create_custom_config
-from langmodels.model.context import ContextUsage
+from langmodels.model.context import ModelContext
+from langmodels.model.nn import take_hidden_state_snapshot, HiddenStateSnapshot, restore_snapshot
+from langmodels.model.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
 from langmodels.model.summary import ModelSummary
+from langmodels.model.tokencategories import TokenCharacteristics
 from langmodels.util.cuda import get_map_location, get_device
-from langmodels.model.context import ContextModification, modify_context
 
 logger = logging.getLogger(__name__)
 
@@ -87,14 +81,14 @@ PredictionList = List[Tuple[str, float]]
 lock = Lock()
 
 
-@dataclass
-class TokenCharacteristics(object):
-    token_type: Type
-    n_subtokens: int
-
-    @classmethod
-    def from_metadata(cls, metadata: PreppedTokenMetadata) -> 'TokenCharacteristics':
-        return cls(metadata.token_type(), metadata.n_subtokens() if metadata.n_subtokens() < 5 else 5)
+def retain_models_state(func: Callable) -> Callable:
+    def wrapper(model: TrainedModel, *args, **kwargs):
+        model_snapshot: HiddenStateSnapshot = take_hidden_state_snapshot(model.model)
+        try:
+            return func(model, *args, **kwargs)
+        finally:
+            restore_snapshot(model.model, model_snapshot)
+    return wrapper
 
 
 class TrainedModel(object):
@@ -124,7 +118,7 @@ class TrainedModel(object):
             value = read_value_from_file(path_to_tags_file, value_type=str)
             if value != '':
                 self._tags = value.split(',')
-        self._prep_function = self._config.prep_function
+        self.prep_function = self._config.prep_function
 
         self._load_only_description = load_only_description
         if not load_only_description:
@@ -194,20 +188,22 @@ class TrainedModel(object):
     BEAM_SIZE = 500
 
     def prep_corpus(self, corpus: Corpus, **kwargs) -> PreprocessedCorpus:
-        return self._prep_function.apply(corpus, **kwargs)
+        return self.prep_function.apply(corpus, **kwargs)
 
-    def prep_text(self, text: str, extension: str, **kwargs) -> PreppedSubTokenSequence:
+    def prep_text(self, text: str, extension: str, **kwargs) -> TokenSequence:
         import codeprep.api.text as text_api
-        text_callable = getattr(text_api, self._prep_function.callable.__name__)
-        prepped_token = text_callable(text, extension=extension, force_reinit_bpe_data=False,
-                                            *self._prep_function.params, **asdict(self._prep_function.options), **kwargs)
+        func_name = self.prep_function.callable.__name__
+        text_callable = getattr(text_api, func_name)
+        reinit_bpe_data_param = {'force_reinit_bpe_data': False } if func_name == 'bpe' else {}
+        prepped_token = text_callable(text, extension=extension,
+                                      *self.prep_function.params, **reinit_bpe_data_param, **asdict(self.prep_function.options), **kwargs)
         return prepped_token
 
-    def get_predictions_and_feed(self, text: str, extension: str, n_suggestions: int, append_eof: bool)\
+    def get_predictions_and_feed(self, text: str, extension: str, n_suggestions: int, append_eof: bool) \
             -> Generator[Tuple[PredictionList, str, TokenCharacteristics], None, None]:
         prepped_tokens = self.prep_text(text, extension, return_metadata=True, append_eof=append_eof)
 
-        for prepped_token in prepped_tokens.full_tokens_view(return_metadata=True):
+        for prepped_token in prepped_tokens.full_token_view(return_metadata=True):
             predictions = self.predict_next_full_token(n_suggestions)
             token_characteristics = TokenCharacteristics.from_metadata(prepped_token.metadata)
 
@@ -220,7 +216,7 @@ class TrainedModel(object):
             raise RuntimeError("Operation not supported. Only model's description is loaded. "
                                "Prease reload the model with param load_only_description set to False.")
 
-    def _feed_prep_tokens(self, prepped_tokens: PreppedSubTokenSequence) -> None:
+    def _feed_prep_tokens(self, prepped_tokens: TokenSequence) -> None:
         self._check_model_loaded()
         context_tensor = torch.tensor([self._vocab.numericalize(prepped_tokens.tokens)], device=get_device(self._force_use_cpu))
         with lock:
@@ -230,85 +226,16 @@ class TrainedModel(object):
 
     def check_inference_possible_for_file_type(self, extension: str) -> bool:
         try:
-            self._assert_inference_possible_for_file_type(extension)
+            self.assert_extension_supported(extension)
             return True
         except ValueError:
             return False
 
     def feed_text(self, text: str, extension: str) -> None:
-        self._assert_inference_possible_for_file_type(extension)
+        self.assert_extension_supported(extension)
 
         prepped_tokens = self.prep_text(text, extension=extension)
         self._feed_prep_tokens(prepped_tokens)
-
-    def get_entropies_for_text(self, text: str, extension: str, full_tokens: bool,
-                               append_eof: bool, context_modification: Optional[ContextModification]) \
-            -> Tuple[PreppedTokenSequence, List[float], List[ContextInformation]]:
-        current_context_size = self.context.size(full_tokens)
-        max_context_allowed = context_modification.max_context_length if context_modification else sys.maxsize
-        if current_context_size > max_context_allowed:
-            raise ValueError(f"The length of the current context ({current_context_size}) is larger "
-                             f"than the max allowed that was set ({max_context_allowed}).\n"
-                             f"Please reset the trainedmodel's context")
-
-        prepped_tokens = self.prep_text(text, extension, append_eof=append_eof)
-
-        prepped_tokens = prepped_tokens.full_tokens_view(formatter=lambda x: "".join(x)) if full_tokens else prepped_tokens
-
-        chunked_prepped_tokens = chunk_prepped_tokens(prepped_tokens, max_context_allowed - current_context_size, max_context_allowed)
-        context_usage = ContextUsage(length_start=current_context_size,
-                                     reset_at=max_context_allowed,
-                                     reset_times=len(chunked_prepped_tokens) - 1,
-                                     length_end=len(chunked_prepped_tokens[-1]) if len(chunked_prepped_tokens) > 1 else len(chunked_prepped_tokens[-1]) + current_context_size,
-                                     shuffle_interval=context_modification.get_absolute_shuffle_interval() if context_modification else None)
-        if context_modification:
-            chunked_prepped_tokens = list(map(lambda x: modify_context(x, context_modification), chunked_prepped_tokens))
-        subtoken_entropies = self._get_entropies_for_prep_text(
-            chunked_prepped_tokens,
-            reset_after_last_chunk=context_usage.is_last_chunk_complete()
-        )
-
-        all_entropies = [i for i in prepped_tokens.get_iterator(subtoken_entropies, over_full_tokens=False, formatter=sum)]
-        context_information = [i for i in prepped_tokens.get_iterator(context_usage, over_full_tokens=True)]
-
-        return prepped_tokens, all_entropies, context_information
-
-    def _get_entropies_for_prep_text(self, prepped_token_sequence_chunks: Union[List[PreppedSubTokenSequence], List[PreppedFullTokenSequence]],
-                                     reset_after_last_chunk: bool) -> List[float]:
-        """
-        changes hidden states of the model!!
-        """
-        max_subtokens_per_chunk = 200
-
-        with lock:
-            self._check_model_loaded()
-
-        if len(prepped_token_sequence_chunks) == 0:
-            return []
-
-        loss_list = []
-
-        # if the line is too big, we break it down to chunks to fit it into gpu memory
-        # big chunks require more memory, small chunks require more time
-        for ind, prepped_token_sequence in enumerate(prepped_token_sequence_chunks):
-            prepped_sub_token_sequence = prepped_token_sequence.sub_token_view()
-            for i in range(0, len(prepped_sub_token_sequence), max_subtokens_per_chunk):
-                sub_chunk = prepped_sub_token_sequence[i:i+max_subtokens_per_chunk]
-                numericalized_prep_text = torch.tensor([self._vocab.numericalize(sub_chunk.tokens)],
-                                                       device=get_device(self._force_use_cpu))
-
-                inp = torch.cat([self._last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1)
-                last_layer = get_last_layer_activations(self._model, inp)
-                loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
-                                       numericalized_prep_text.view(-1),
-                                       reduction='none')
-                binary_loss = to_binary_entropy(loss)
-                loss_list.extend(binary_loss.tolist())
-                self._last_predicted_token_tensor = numericalized_prep_text[:, -1:]
-            self._context.add(prepped_sub_token_sequence)
-            if ind < len(prepped_token_sequence_chunks) - 1 or reset_after_last_chunk:
-                self._reset()
-        return loss_list
 
     def _reset(self) -> None:
         self._model.reset()
@@ -359,13 +286,15 @@ class TrainedModel(object):
                             arch=str(self._config.arch.get_module().__name__),
                             bin_entropy=self._metrics.bin_entropy if self._metrics else 1e+6,
                             training_time_minutes_per_epoch=self._metrics.training_time_minutes_per_epoch
-                                if self._metrics else 0,
+                            if self._metrics else 0,
                             n_epochs=self._metrics.n_epochs if self._metrics else 0,
                             best_epoch=self._metrics.best_epoch if self._metrics else -1,
                             size_on_disk_mb=self._metrics.size_on_disk_mb,
                             tags=self._tags)
 
-    def _assert_inference_possible_for_file_type(self, extension: str) -> None:
+
+
+    def assert_extension_supported(self, extension: str) -> None:
         if extension not in normalize_extension_string(self._config.corpus.extensions):
             raise ValueError(f'The model was not trained on .{extension} files. Cannot do inference.')
 

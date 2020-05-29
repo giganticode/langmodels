@@ -20,10 +20,12 @@ def check_path_exists(path: str) -> None:
 
 
 def get_all_files(path: str, extension: Optional[str] = 'java') -> Generator[Path, None, None]:
+    if not os.path.exists(path):
+        raise FileNotFoundError(path)
     if os.path.isfile(path):
         yield Path(path)
     else:
-        for root, dirs, files in os.walk(path, followlinks=True):
+        for root, dirs, files in os.walk(path, followlinks=True, topdown=False):
             for file in files:
                 if not extension or file.endswith(f'.{extension}'):
                     yield Path(os.path.join(root, file))

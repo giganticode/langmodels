@@ -1,12 +1,8 @@
-from langmodels.evaluation.evaluation import evaluate_model_on_file, evaluate_model_on_string, evaluate_model_on_path, \
-    evaluate_model_on_project_set
-from langmodels.evaluation.customization import TokenCategory
+from langmodels.evaluation.api import evaluate_on_file, evaluate_on_string, evaluate_on_path
 
 
 __all__ = [
-    'evaluate_model_on_file',
-    'evaluate_model_on_string',
-    'evaluate_model_on_path',
-    'evaluate_model_on_project_set',
-    'TokenCategory'
+    'evaluate_on_file',
+    'evaluate_on_string',
+    'evaluate_on_path'
 ]

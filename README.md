@@ -252,68 +252,7 @@ For more options, run:
 
 ## LM Evaluation
 
-When training a language model, it is important to be able to evaluate LM's performance.
-In this section we describe different ways to do this using `langmodels` library. 
-You can also use our [tool](https://github.com/giganticode/lm-powered) to visualize the evaluation.
-
-### Evaluation on a string / file
-
-First, a model can be evaluate on a string with `evaluate_model_on_string` method. Note that the result may differ a lot depending 
-on the state of the model. Use methods `reset` and `feed_text` to reset the model 
-to initial state and change the context of the model respectively.
-
-```python
-
->>> import langmodels.repository as repo 
->>> from langmodels.evaluation import evaluate_model_on_string    
-
->>> model = repo.load_default_model()
->>> evaluate_model_on_string(model, 'public class MyClass {')
-
-{full_token_entropy/ParsedToken: EvaluationResult(
-    tokens=['public</t>', 'class</t>', 'MyClass</t>', '{</t>'],
-    token_types=['KeyWord', 'KeyWord', 'Identifier', 'OpeningCurlyBracket'],
-    values=[1.8144783973693848, 3.668722629547119, 0.5620064437389374, 0.2571456730365753], 
-    aggregated_value=1.5755882859230042
-)}
-
-```
-
-Similarly, `evaluate_model_on_file` will return a list of `Evaluation` object (1 per each line)
-
-### Evaluation on a corpus
-
-Evaluation can be run on a set of files with `evaluate_model_on_path` method
-
-```python
->>> import langmodels.repository as repo 
->>> from langmodels.evaluation import evaluate_model_on_path
-
->>> model = repo.load_default_model()
->>> evaluate_model_on_path(model, '/path/to/file')
-
-100%|████████████████████████████████████████████████████████████████████████████| 28/28 [00:11<00:00,  2.35it/s]
-{full_token_entropy/ParsedToken: (5.859160765187885, 5745)}
-```
-
-In `full_token_entropy/ParsedToken`: `full_token_entropy` is a metric used to evaluate the performance; 
-`ParsedToken` means that all the tokens were considered when evaluating (See the next section for more details).
-Thus, the average full-token-entropy is ~ 5.85 evaluated on 5.7k tokens.
-
-### Specifying metrics
-
-You can specify based on which metrics the model is to be evaluated.
-
-```python
->>> import langmodels.repository as repo 
->>> from langmodels.evaluation import evaluate_model_on_path
-
->>> model = repo.load_default_model()
->>> evaluate_model_on_path(model, '/path/to/file', metrics={'full_token_entropy', 'mrr'})
-```
-
-Possible metric values are `full_token_entropy`, `subtoken_entropy`, `mrr`. Default metric set is `{full_token_entropy}`
-
+TBD
 
 ## Release Notes
 

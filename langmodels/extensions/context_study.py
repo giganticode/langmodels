@@ -1,19 +1,17 @@
 import os
-
-import time
 from pathlib import Path
+from typing import List, Tuple
 
 import jsons
 import matplotlib
+import time
 from matplotlib import pyplot as plt
 
-from typing import List, Tuple
-
-from langmodels import repository
-from langmodels.evaluation import evaluate_model_on_path
-from langmodels.evaluation.customization import each_token_type_separately
 from langmodels import project_dir
-from langmodels.model.context import ContextModification
+from langmodels import repository
+from langmodels.evaluation import evaluate_on_path
+from langmodels.model.context import ContextModifier
+from langmodels.model.tokencategories import each_token_type_separately
 from langmodels.util.misc import HOME
 
 
@@ -41,9 +39,9 @@ def run_and_plot():
     m = repository.load_default_model()
 
     path = os.path.join(HOME, "dev/raw_datasets/allamanis/java-small-test")
-    result = evaluate_model_on_path(m, Path(path),
-                                    context_modification=ContextModification(max_context_length=300),
-                                    token_categories=each_token_type_separately())
+    result = evaluate_on_path(m, Path(path),
+                              context_modification=ContextModifier(max_context_length=300),
+                              token_categories=each_token_type_separately())
 
     matplotlib.use('Agg')
 

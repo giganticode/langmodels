@@ -2,7 +2,7 @@ import os
 from math import log
 
 from torch import FloatTensor
-from typing import Union, List, TypeVar, Sequence, Dict, Callable
+from typing import Union, List, TypeVar, Sequence, Dict, Callable, Any
 
 
 def to_binary_entropy(entropy: Union[float, FloatTensor]) -> Union[float, FloatTensor]:
@@ -53,6 +53,47 @@ def merge_dicts_(dict1: Dict[K, V], dict2: Dict[K, V], value_merger: Callable[[V
         else:
             dict1[k] = value_merger(dict1[k], v)
     return dict1
+
+
+def split_list_into_consequtive_chunks(lst: List[Any], n_chunks) -> List[List[Any]]:
+    """
+    >>> split_list_into_consequtive_chunks([1, 2, 3, 4, 5, 6, 7, 8], 3)
+    [[1, 2, 3], [4, 5, 6], [7, 8]]
+    >>> split_list_into_consequtive_chunks([1, 2, 3, 4, 5, 6, 7], 3)
+    [[1, 2, 3], [4, 5], [6, 7]]
+    >>> split_list_into_consequtive_chunks([1, 2, 3, 4, 5, 6], 3)
+    [[1, 2], [3, 4], [5, 6]]
+    >>> split_list_into_consequtive_chunks([], 2)
+    [[], []]
+    >>> split_list_into_consequtive_chunks([1], 2)
+    [[1], []]
+    """
+    result = []
+    min_files_in_chunk = len(lst) // n_chunks
+    chunks_with_aditional_file = len(lst) - min_files_in_chunk * n_chunks
+    for i in range(chunks_with_aditional_file):
+        result.append(lst[i * (min_files_in_chunk + 1):i * (min_files_in_chunk + 1) + (min_files_in_chunk + 1)])
+    n_packed = (min_files_in_chunk+1) * chunks_with_aditional_file
+    for i in range(n_chunks - chunks_with_aditional_file):
+        result.append(lst[n_packed + i * min_files_in_chunk: n_packed + i * min_files_in_chunk + min_files_in_chunk])
+    return result
+
+
+def entropy_to_probability(entropy: float) -> float:
+    """
+    >>> entropy_to_probability(0.0)
+    1.0
+
+    >>> entropy_to_probability(1.0)
+    0.5
+
+    >>> entropy_to_probability(3.0)
+    0.125
+
+    >>> entropy_to_probability(100.0)
+    7.888609052210118e-31
+    """
+    return 2 ** -entropy
 
 
 HOME = os.environ['HOME']

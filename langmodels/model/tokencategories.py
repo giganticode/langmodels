@@ -1,15 +1,15 @@
 import logging
 from collections import defaultdict
 from functools import reduce
-from typing import Type, Union, Set, Iterable, FrozenSet, Dict, Mapping
+from typing import Type, Union, Set, Iterable, FrozenSet, Dict, Mapping, List
 
 from dataclasses import dataclass, field
 from frozendict import frozendict
 
 from codeprep.preprocess.metadata import PreppedTokenMetadata
+from codeprep.preprocess.tokens import TokenSequence
 from codeprep.tokentypes.containers import Comment, Identifier
 from codeprep.tokentypes.rootclasses import ParsedToken
-from langmodels.model.model import TokenCharacteristics
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,20 @@ def all_subclasses(classes: Iterable[Type]) -> Set[Type]:
     return reduce(set.union, [{cls}.union(
         [s for c in cls.__subclasses__() for s in all_subclasses([c])])
         for cls in classes], set())
+
+
+@dataclass
+class TokenCharacteristics(object):
+    token_type: Type
+    n_subtokens: int
+
+    @classmethod
+    def from_metadata(cls, metadata: PreppedTokenMetadata) -> 'TokenCharacteristics':
+        return cls(metadata.token_type(), metadata.n_subtokens() if metadata.n_subtokens() < 5 else 5)
+
+
+def get_token_characteristics(prepped_token_sequence: TokenSequence) -> List[TokenCharacteristics]:
+    return [TokenCharacteristics.from_metadata(t.metadata) for t in prepped_token_sequence.with_metadata()]
 
 
 @dataclass(eq=True, frozen=True)

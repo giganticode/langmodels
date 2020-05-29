@@ -1,11 +1,10 @@
-from torch.nn import Embedding, ModuleList
-
 from typing import List, Tuple, Optional
 
 import torch
-from torch import Tensor
 from fastai.text import SequentialRNN, AWD_LSTM, WeightDropout, EmbeddingDropout, RNNDropout, one_param, to_detach, \
     Module
+from torch import Tensor
+from torch.nn import Embedding, ModuleList
 
 TORCH_LONG_MIN_VAL = -2 ** 63
 
@@ -19,11 +18,14 @@ def to_test_mode(model: SequentialRNN) -> None:
     model.reset()
 
 
-def take_hidden_state_snapshot(model: SequentialRNN) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+HiddenStateSnapshot = List[Tuple[torch.Tensor, torch.Tensor]]
+
+
+def take_hidden_state_snapshot(model: SequentialRNN) -> HiddenStateSnapshot:
     return [(hl[0].clone(), hl[1].clone()) if isinstance(hl, (tuple, list)) else hl.clone() for hl in model[0].hidden]
 
 
-def restore_snapshot(model: SequentialRNN, snapshot: List[Tuple[torch.Tensor, torch.Tensor]]):
+def restore_snapshot(model: SequentialRNN, snapshot: HiddenStateSnapshot):
     model[0].hidden = snapshot
     model[0].bs = snapshot[0][0].size(0)
 

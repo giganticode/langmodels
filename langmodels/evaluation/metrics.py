@@ -1,124 +1,59 @@
 import logging
 from collections import defaultdict
+from typing import Mapping
 
-from typing import List, Optional, Set, Callable, Dict, Type
+from tqdm import tqdm
 
-from codeprep.tokens import PreppedTokenSequence
-from langmodels.evaluation.definitions import EvaluationResult
-from langmodels.evaluation.customization import TokenCategory
-from langmodels.model.model import TrainedModel, TokenCharacteristics
-from langmodels.model.context import ContextModification
-
-DEFAULT_N_MODEL_SUGGESTIONS = 100
-
+from langmodels.evaluation.dataloader import BatchedTokenLoader
+from langmodels.evaluation.result import ShortEvaluation, EvaluationScenarioGrid, EvaluationScenario, \
+    ShortEvaluationResult
+from langmodels.model._evaluator import calculate_losses
+from langmodels.model.model import TrainedModel, retain_models_state
+from langmodels.model.tokencategories import TokenCharacteristics, TokenCategory
 
 logger = logging.getLogger(__name__)
 
 
-def get_token_characteristics(prepped_token_sequence: PreppedTokenSequence) -> List[TokenCharacteristics]:
-    return [TokenCharacteristics.from_metadata(t.metadata) for t in prepped_token_sequence.with_metadata()]
+@retain_models_state
+def perplexity(model: TrainedModel, batched_token_loader: BatchedTokenLoader,
+                evaluation_scenario_grid: EvaluationScenarioGrid,
+                full_tokens: bool = True) -> ShortEvaluation:
+    total_evaluation = ShortEvaluation()
+    tqdmed_batched_losses = tqdm(calculate_losses(model, batched_token_loader), total=batched_token_loader.estimated_n_batches())
+    for entropies_batch, file_structure_batch, prepped_tokens_batch in tqdmed_batched_losses:
+        for entropies, prepped_tokens in zip(entropies_batch, prepped_tokens_batch):
+            cur_batch_evaluation: ShortEvaluation = sequence_perplexity(entropies, prepped_tokens, evaluation_scenario_grid, full_tokens)
+            total_evaluation = total_evaluation.merge(cur_batch_evaluation)
+
+        update_progress_bar(tqdmed_batched_losses, batched_token_loader, total_evaluation, file_structure_batch)
+    tqdmed_batched_losses.close()
+    return total_evaluation
 
 
-def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool,
-                token_categories: Optional[Set[TokenCategory]] = None,
-                context_modification: Optional[ContextModification] = None,
-                full_tokens: bool = True) -> Dict[TokenCategory, EvaluationResult]:
-    """
-    Changes the state of the model!
-    """
-    token_categories = token_categories or {TokenCategory.full_set()}
-
-    prepped_token_sequence, all_entropies, context_information_list = model.get_entropies_for_text(line, extension,
-                                                                                                    full_tokens=full_tokens,
-                                                                                                    append_eof=append_eof,
-                                                                                                    context_modification=context_modification)
-
-    tokens = [i for i in prepped_token_sequence.without_metadata()]
-    token_characteristics_list = get_token_characteristics(prepped_token_sequence)
-    all_token_types = [i for i in prepped_token_sequence.get_iterator(prepped_token_sequence.metadata.token_types, over_full_tokens=True)]
-    evaluation_results: Dict[TokenCategory, EvaluationResult] = {}
-    for token_category in token_categories:
-        res = []
-        sum = 0.0
-        count = 0
-        for entropy, token_characteristics in zip(all_entropies, token_characteristics_list):
-            if token_category.contains(token_characteristics):
-                res.append(entropy)
-                sum += entropy
-                count += 1
-            else:
-                res.append(None)
-        if context_modification:
-            of_context_length_cumul = defaultdict(lambda: (0.0, 0))
-            for entropy, token_characteristics, context_information in zip(all_entropies, token_characteristics_list, context_information_list):
-                if token_category.contains(token_characteristics):
-                    if context_information is not None:
-                        of_context_length_cumul[context_information] = (of_context_length_cumul[context_information][0] + entropy, of_context_length_cumul[context_information][1] + 1)
-            of_context_length = {k: (val / n if n != 0 else 0.0, n) for k, (val, n) in of_context_length_cumul.items()}
-        else:
-            of_context_length = None
-        evaluation_results[token_category] = EvaluationResult(tokens, list(map(lambda tt: tt.__name__, all_token_types)),
-                                                                 res, sum / count if count else 0., of_context_length)
-    return evaluation_results
+def sequence_perplexity(entropies, prepped_tokens, evaluation_scenario_grid, full_tokens):
+    assert prepped_tokens.is_complete()
+    current_eval_summary: Mapping[EvaluationScenario, ShortEvaluationResult] = defaultdict(ShortEvaluationResult)
+    tokens = prepped_tokens.full_token_view(return_metadata=True) if full_tokens else prepped_tokens.sub_token_view(return_metadata=True)
+    entropies_iterator = tokens.get_iterator(over=entropies, over_full_tokens=False, formatter=sum)
+    for single_token_seq_elm, entropy in zip(tokens, entropies_iterator):
+        for token_category in evaluation_scenario_grid.token_categories:
+            if token_category.contains(TokenCharacteristics.from_metadata(single_token_seq_elm.metadata)):
+                current_eval_summary[EvaluationScenario('perplexity', token_category)].add(single_token_seq_elm, entropy)
+    return ShortEvaluation(current_eval_summary)
 
 
-def mrr(model: TrainedModel, line: str, extension: str, append_eof: bool,
-        token_categories: Optional[Set[TokenCategory]] = None) \
-        -> Dict[TokenCategory, EvaluationResult]:
-    """
-    Changes the state of the model!
-    """
-    token_categories = token_categories or {TokenCategory.full_set()}
-
-    evaluation_results: Dict[TokenCategory, EvaluationResult] = {}
-    for token_categories in token_categories:
-        inverse_rank_sum = .0
-        count = 0
-        inverse_ranks: List[Optional[float]] = []
-        all_tokens: List[str] = []
-        all_token_types: List[str] = []
-
-        for predictions, prep_token, token_characteristics in \
-                model.get_predictions_and_feed(line, extension,
-                                               n_suggestions=DEFAULT_N_MODEL_SUGGESTIONS,
-                                               append_eof=append_eof):
-            all_tokens.append(prep_token)
-            all_token_types.append(token_characteristics.token_type.__name__)
-            predicted_tokens = list(map(lambda p: p[0], predictions))
-            if token_categories.contains(token_characteristics):
-                try:
-                    rank = predicted_tokens.index(prep_token) + 1
-                    inverse_rank = 1. / rank
-                except ValueError:  # actual token is not in prediction list
-                    inverse_rank = 0.
-                inverse_rank_sum += inverse_rank
-                inverse_ranks.append(inverse_rank)
-                count += 1
-            else:
-                inverse_ranks.append(None)
-        evaluation_results[token_categories] = EvaluationResult(all_tokens, all_token_types, inverse_ranks, inverse_rank_sum / count if count else 1.)
-
-    return evaluation_results
-
-
-Metric = Callable[[TrainedModel, List[str], str, bool, Optional[Set[TokenCategory]], Dict[Type, float], int],
-                  Dict[TokenCategory, EvaluationResult]]
-
-
-def entropy_to_probability(entropy: float) -> float:
-    """
-    >>> entropy_to_probability(0.0)
-    1.0
-
-    >>> entropy_to_probability(1.0)
-    0.5
-
-    >>> entropy_to_probability(3.0)
-    0.125
-
-    >>> entropy_to_probability(100.0)
-    7.888609052210118e-31
-    """
-    return 2 ** -entropy
-
-
+def update_progress_bar(tqdmed_batched_losses, batched_token_loader, total_evaluation, file_structure_batch):
+    tqdmed_batched_losses.update(sum(map(lambda cs: len(cs.snippets) - 1, file_structure_batch)))
+    try:
+        evaluation_result_to_display = total_evaluation.scenarios[EvaluationScenario('perplexity', TokenCategory.full_set())]
+    except KeyError:
+        evaluation_result_to_display = next(iter(total_evaluation.scenarios.values()))
+    estimated_n_batches = batched_token_loader.estimated_n_batches()
+    current_iteration = batched_token_loader.current_iteration
+    estimated_iterations_left = estimated_n_batches - current_iteration
+    progress_bar_needs_to_be_updated = (estimated_iterations_left & (estimated_iterations_left - 1) == 0
+                                        or current_iteration & (current_iteration - 1) == 0)
+    tqdmed_batched_losses.set_postfix(ordered_dict={'perplexity': evaluation_result_to_display})
+    if progress_bar_needs_to_be_updated:
+        tqdmed_batched_losses.total = estimated_n_batches
+        tqdmed_batched_losses.refresh()

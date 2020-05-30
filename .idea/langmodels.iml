@@ -5,7 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/tests-b2b" isTestSource="true" />
     </content>
-    <orderEntry type="jdk" jdkName="langmodels-python-3.7.3" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="langmodels-evaluation-v2-python-3.7.3" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="codeprep" />
   </component>

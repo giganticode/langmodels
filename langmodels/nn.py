@@ -7,6 +7,8 @@ from torch import Tensor, nn
 from fastai.text import SequentialRNN, AWD_LSTM, WeightDropout, EmbeddingDropout, RNNDropout, one_param, to_detach, \
     Module
 
+from langmodels.torchtypes import AnyDeviceFloatTensor, AnyDeviceLongTensor
+
 TORCH_LONG_MIN_VAL = -2 ** 63
 
 
@@ -28,7 +30,7 @@ def restore_snapshot(model: SequentialRNN, snapshot: List[Tuple[torch.Tensor, to
     model[0].bs = snapshot[0][0].size(0)
 
 
-def get_last_layer_activations(model: SequentialRNN, input: torch.FloatTensor) -> Optional[torch.FloatTensor]:
+def get_last_layer_activations(model: SequentialRNN, input: AnyDeviceLongTensor) -> Optional[AnyDeviceFloatTensor]:
     tensor_rank = len(input.size())
     if tensor_rank != 2:
         if tensor_rank == 0:

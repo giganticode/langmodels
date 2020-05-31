@@ -1,4 +1,4 @@
-from typing import Tuple, Callable
+from typing import Tuple, Callable, Optional
 
 import torch
 from torch import FloatTensor, LongTensor, Tensor
@@ -7,13 +7,14 @@ from fastai.text import SequentialRNN
 from torch.nn.functional import log_softmax
 
 from langmodels.nn import get_last_layer_activations, take_hidden_state_snapshot, TORCH_LONG_MIN_VAL
-from langmodels.cuda_util import get_device
+from langmodels.cuda_util import get_device, Device
 from langmodels.nn import restore_snapshot
+from langmodels.torchtypes import AnyDeviceFloatTensor, AnyDeviceLongTensor
 
-DEVICE = get_device()
+DEFAULT_DEVICE: Device = get_device()
 
 
-def _get_topk_predictions(model: SequentialRNN, context: FloatTensor, top_k: int) -> Tuple[FloatTensor, LongTensor]:
+def _get_topk_predictions(model: SequentialRNN, context: AnyDeviceLongTensor, top_k: int) -> Tuple[AnyDeviceFloatTensor, AnyDeviceLongTensor]:
     last_token_activations = get_last_layer_activations(model, context)
     predictions = log_softmax(last_token_activations[:, -1], dim=-1)  # TODO log_softmax not really needed
     return predictions.topk(top_k, dim=-1)
@@ -66,9 +67,9 @@ class FlattenedCandidateList(object):
     hidden_indices: Tensor
 
     def __post_init__(self):
-        assert len(self.subtokens.size()) == 2 and isinstance(self.subtokens, LongTensor)
-        assert len(self.scores.size()) == 1 and isinstance(self.scores, FloatTensor)
-        assert len(self.hidden_indices.size()) == 1 and isinstance(self.hidden_indices, LongTensor)
+        assert len(self.subtokens.size()) == 2 and self.subtokens.dtype == torch.int64
+        assert len(self.scores.size()) == 1 and self.scores.dtype == torch.float
+        assert len(self.hidden_indices.size()) == 1 and self.hidden_indices.dtype == torch.int64
 
         assert self.subtokens.size(0) == self.scores.size(0) == self.hidden_indices.size(0)
 
@@ -81,14 +82,15 @@ class FlattenedCandidateList(object):
         assert n_full_tokens == subtokens.size(0)
 
         best_tokens = FlattenedCandidateList(subtokens=subtokens, scores=scores,
-                                             hidden_indices=torch.full((n_full_tokens,), fill_value=TORCH_LONG_MIN_VAL, dtype=torch.long, device=DEVICE))
+                                             hidden_indices=torch.full((n_full_tokens,), fill_value=TORCH_LONG_MIN_VAL, dtype=torch.long, device=subtokens.device))
         return best_tokens
 
     @staticmethod
-    def empty():
+    def empty(device: Optional[Device] = None) -> 'FlattenedCandidateList':
+        device = device or DEFAULT_DEVICE
         return FlattenedCandidateList.of(
-            subtokens=torch.empty((0, 0), dtype=torch.long, device=DEVICE),
-            scores=torch.empty(0, dtype=torch.float, device=DEVICE)
+            subtokens=torch.empty((0, 0), dtype=torch.long, device=device),
+            scores=torch.empty(0, dtype=torch.float, device=device)
         )
 
     def add(self, candidates: 'FlattenedCandidateList') -> 'FlattenedCandidateList':
@@ -112,30 +114,32 @@ class FlattenedCandidateList(object):
         )
 
     @staticmethod
-    def single_empty():
-        return FlattenedCandidateList.of(subtokens=torch.empty(1, 0, device=DEVICE).long(), scores=torch.zeros(1, device=DEVICE).float())
+    def single_empty(device: Optional[Device] = None) -> 'FlattenedCandidateList':
+        device: Device = device or DEFAULT_DEVICE
+        return FlattenedCandidateList.of(subtokens=torch.empty(1, 0, device=device).long(), scores=torch.zeros(1, device=device).float())
 
     def add_empty_subword_to_all(self) -> None:
         self.subtokens = torch.cat([self.subtokens,
-                   torch.full((self.size(), 1), fill_value=TORCH_LONG_MIN_VAL, dtype=torch.long, device=DEVICE)], dim=-1)
+                   torch.full((self.size(), 1), fill_value=TORCH_LONG_MIN_VAL, dtype=torch.long, device=self.subtokens.device)], dim=-1)
 
 
-def _expand_with_new_candidates(model: SequentialRNN, context: LongTensor, n_predictions: int,
+def _expand_with_new_candidates(model: SequentialRNN, context: AnyDeviceLongTensor, n_predictions: int,
                                 current_candidates: FlattenedCandidateList) -> FlattenedCandidateList:
     assert len(context.size()) == 2
 
     loss, num_tokens = _get_topk_predictions(model, context, n_predictions)
     batch_size = context.size(0)
 
+    current_candidate_subtokens = current_candidates.subtokens
     return FlattenedCandidateList(scores= (-loss + current_candidates.scores[:, None]).view(-1),
-                                  hidden_indices= torch.arange(0, batch_size, device=DEVICE)[:, None].expand(batch_size, n_predictions).contiguous().view(-1),
-                                  subtokens= torch.cat([current_candidates.subtokens.repeat(n_predictions, 1), num_tokens.view(-1)[:, None]], dim=-1))
+                                  hidden_indices= torch.arange(0, batch_size, device=current_candidate_subtokens.device)[:, None].expand(batch_size, n_predictions).contiguous().view(-1),
+                                  subtokens= torch.cat([current_candidate_subtokens.repeat(n_predictions, 1), num_tokens.view(-1)[:, None]], dim=-1))
 
 
 CompleteTokenPredicate = Callable[[Tensor], Tuple[Tensor, Tensor]]
 
 
-def beam_search(model: SequentialRNN, context: torch.LongTensor, complete_token_predicate: CompleteTokenPredicate,
+def beam_search(model: SequentialRNN, context: AnyDeviceLongTensor, complete_token_predicate: CompleteTokenPredicate,
                 top_k: int, beam_size: int) -> Tuple[Tensor, Tensor]:
     if len(context.size()) != 1:
         raise ValueError("The rank of context tensor should be one. Beam search is only possible with batch size = 1.")

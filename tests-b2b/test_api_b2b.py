@@ -36,8 +36,8 @@ def test_evaluate_model_on_path():
                               batch_size=3)
 
     scenario = actual.scenarios[EvaluationScenario('perplexity')]
-    assert int(scenario.sum) == 26293
-    assert scenario.n_samples == 1522
+    assert int(scenario.sum) == 26258
+    assert scenario.n_samples == 1528
     assert scenario.exp
 
 
@@ -49,8 +49,8 @@ def test_evaluate_model_on_file():
 
     assert len(actual.scenarios) == 1
     scenario = actual.scenarios[EvaluationScenario('perplexity')]
-    assert int(scenario.sum) == 26293
-    assert scenario.n_samples == 1522
+    assert int(scenario.sum) == 26258
+    assert scenario.n_samples == 1528
     assert scenario.exp
 
 

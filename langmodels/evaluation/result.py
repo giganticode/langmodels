@@ -6,7 +6,7 @@ from typing import List, Optional, Mapping, Set
 from math import exp
 
 from codeprep.preprocess.tokens import TokenSequence
-from langmodels.evaluation.codestructure import CodeLocation
+from codeprep.preprocess.codestructure import CodeLocation
 from langmodels.model.context import ContextInformation, ContextModifier
 from langmodels.model.tokencategories import TokenCategory
 from langmodels.util.misc import merge_dicts_

@@ -10,7 +10,7 @@ from codeprep.api.text import basic
 from codeprep.preprocess.metadata import PreppedTokenMetadata
 from codeprep.preprocess.tokens import TokenSequence
 from codeprep.tokentypes.word import SpecialToken
-from langmodels.evaluation.codestructure import CodeBaseStructure, CodeSnippetStructure
+from codeprep.preprocess.codestructure import CodeBaseStructure
 from langmodels.model.context import ContextModifier
 from langmodels.util.file import read_file_contents, get_all_files
 from langmodels.util.misc import split_list_into_consequtive_chunks
@@ -173,22 +173,16 @@ class BatchedTokenLoader:
     def __iter__(self) -> Iterator[Tuple[List[TokenSequence], Mapping[int, int], List[CodeBaseStructure], bool]]:
         return self
 
-    def _load_file_batch(self):
+    def _load_file_batch(self) -> None:
         new_files = next(self.batch_file_loader_iter)
         for i, path_and_text in enumerate(new_files):
             if path_and_text is None:
                 continue
-            file, text = path_and_text
-            extension = file.suffix[1:]
-            text_lines = text.split("\n")
-            prepped_text_lines = []
-            for j, text_line in enumerate(text_lines):
-                prepped_line = self.prep_function(text_line, extension, append_eof=(self.append_eof and j == len(text_lines) -1))
-                prepped_text_lines.append(prepped_line)
-            snippet_structure = CodeSnippetStructure(file, list(map(lambda l: l.sub_token_size(), prepped_text_lines)), 0)
-            self.code_structures[i].add_snippet(snippet_structure)
-            for prepped_line in prepped_text_lines:
-                self.buffer[i] = self.buffer[i].add(prepped_line)
+            path, text = path_and_text
+            extension = path.suffix[1:]
+            prepped_text, code_snippet_structure = self.prep_function(text, extension, append_eof=self.append_eof, path=path)
+            self.code_structures[i].add_snippet(code_snippet_structure)
+            self.buffer[i] = self.buffer[i].add(prepped_text) if len(self.buffer[i]) > 0 else prepped_text
 
     def _get_new_sequence(self, i: int) -> TokenSequence:
         n_full_tokens_needed = self.reset_every-self.tokens_after_reset[i]

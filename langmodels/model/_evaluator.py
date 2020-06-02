@@ -4,7 +4,7 @@ import torch
 from torch.nn.functional import cross_entropy
 
 from codeprep.preprocess.tokens import TokenSequence
-from langmodels.evaluation.codestructure import CodeBaseStructure
+from codeprep.preprocess.codestructure import CodeBaseStructure
 from langmodels.evaluation.dataloader import BatchedTokenLoader
 from langmodels.model.model import TrainedModel
 from langmodels.model.nn import get_last_layer_activations

@@ -55,7 +55,7 @@ def _check_is_term_vocab(vocab: Vocab, first_non_term: int) -> None:
                              f"that has index {vocab.itos.index(token)}")
 
 
-def to_full_token_string(subtokens: List[str], include_debug_tokens=False) -> str:
+def to_full_token_string(subtokens: List[str], include_debug_tokens=False, keep_word_end_token: bool =True) -> str:
     """
     >>> to_full_token_string(['the', 're</t>'], include_debug_tokens=True)
     'the|re</t>'
@@ -65,6 +65,9 @@ def to_full_token_string(subtokens: List[str], include_debug_tokens=False) -> st
 
     >>> to_full_token_string([placeholders['olc_end']])
     '<EOL>'
+
+    >>> to_full_token_string(['re', 'vol', 'v', 'er</t>'], keep_word_end_token=False)
+    'revolver'
     """
     separator = '|' if include_debug_tokens else ''
     full_token = separator.join(subtokens)
@@ -73,6 +76,7 @@ def to_full_token_string(subtokens: List[str], include_debug_tokens=False) -> st
 
     if not is_terminal_subtoken(full_token):
         raise ValueError(f'{full_token} is not a full token')
+    full_token = full_token if keep_word_end_token else full_token[:-len(placeholders['compound_word_end'])]
     return full_token
 
 

@@ -1,18 +1,14 @@
 import os
+import tempfile
 from pathlib import Path
 
-import torch
 import numpy as np
+import torch
 
-from codeprep.tokentypes.word import KeyWord
 from langmodels import project_dir
-from langmodels.evaluation.api import evaluate_on_path, evaluate_on_string
-from langmodels.evaluation.result import EvaluationScenarioGrid, ShortEvaluation, EvaluationScenario, \
-    ShortEvaluationResult
+from langmodels.evaluation.api import evaluate_on_path, evaluate_on_string, evaluate_on_file
 from langmodels.lmconfig.datamodel import Corpus, LMTrainingConfig, DeviceOptions, Training, RafaelsTrainingSchedule
-from langmodels.model.context import ContextModifier
 from langmodels.model.nn import take_hidden_state_snapshot
-from langmodels.model.tokencategories import TokenCategory
 from langmodels.repository.load import load_default_model
 from langmodels.training.training import train
 
@@ -30,47 +26,33 @@ def test_hidden_state_not_changed_after_evaluation():
 
 
 def test_evaluate_model_on_path():
+    f = tempfile.TemporaryDirectory()
     actual = evaluate_on_path(load_default_model(),
                               Path(project_dir) /'data' /'dev' /'valid',
-                              evaluation_scenario_grid=EvaluationScenarioGrid(context_modifier=ContextModifier(max_context_length=50), token_categories={TokenCategory.full_set()}),
+                              save_to=Path(f.name),
                               batch_size=3)
 
-    scenario = actual.scenarios[EvaluationScenario('perplexity')]
-    assert int(scenario.sum) == 26258
-    assert scenario.n_samples == 1528
-    assert scenario.exp
+    total = actual.total()
+    assert int(total['Entropy']) == 15
+    assert total['n_samples'] == 1528
 
 
 def test_evaluate_model_on_file():
-    actual = evaluate_on_path(load_default_model(),
-                              Path(project_dir) /'data' /'dev' /'valid' /'StandardDataTypeEmitter.java',
-                              evaluation_scenario_grid=EvaluationScenarioGrid(context_modifier=ContextModifier(max_context_length=50), token_categories={TokenCategory.full_set()}),
-                              batch_size=3)
+    actual = evaluate_on_file(load_default_model(),
+                              Path(project_dir) /'data' /'dev' /'valid' /'StandardDataTypeEmitter.java')
 
-    assert len(actual.scenarios) == 1
-    scenario = actual.scenarios[EvaluationScenario('perplexity')]
-    assert int(scenario.sum) == 26258
-    assert scenario.n_samples == 1528
-    assert scenario.exp
+    total = actual.total()
+    assert int(total['Entropy']) == 15
+    assert total['n_samples'] == 1528
 
 
 def test_evaluate_model_on_string():
     actual = evaluate_on_string(load_default_model(),
-                                    'import java.lang,collections;',
-                                evaluation_scenario_grid=EvaluationScenarioGrid(
-                                        token_categories={TokenCategory.full_set(), TokenCategory.Builder().add({KeyWord}).build()}),
-                                )
+                                'import java.lang.collections;')
 
-    assert len(actual.scenarios) == 2
-    scenario1 = actual.scenarios[EvaluationScenario('perplexity', TokenCategory.Builder().add({KeyWord}).build())]
-    assert int(scenario1.sum) == 8
-    assert scenario1.n_samples == 1
-    assert scenario1.exp
-
-    scenario2 = actual.scenarios[EvaluationScenario('perplexity', TokenCategory.full_set())]
-    assert int(scenario2.sum) == 57
-    assert scenario2.n_samples == 7
-    assert scenario2.exp
+    total = actual.total()
+    assert int(total['Entropy']) == 8
+    assert total['n_samples'] == 7
 
 
 def test_train():

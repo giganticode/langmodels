@@ -10,8 +10,6 @@ from matplotlib import pyplot as plt
 from langmodels import project_dir
 from langmodels import repository
 from langmodels.evaluation import evaluate_on_path
-from langmodels.model.context import ContextModifier
-from langmodels.model.tokencategories import each_token_type_separately
 from langmodels.util.misc import HOME
 
 
@@ -39,9 +37,7 @@ def run_and_plot():
     m = repository.load_default_model()
 
     path = os.path.join(HOME, "dev/raw_datasets/allamanis/java-small-test")
-    result = evaluate_on_path(m, Path(path),
-                              context_modification=ContextModifier(max_context_length=300),
-                              token_categories=each_token_type_separately())
+    result = evaluate_on_path(m, Path(path))
 
     matplotlib.use('Agg')
 

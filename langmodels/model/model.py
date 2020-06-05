@@ -22,7 +22,6 @@ from langmodels.model.context import ModelContext
 from langmodels.model.nn import take_hidden_state_snapshot, HiddenStateSnapshot, restore_snapshot
 from langmodels.model.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
 from langmodels.model.summary import ModelSummary
-from langmodels.model.tokencategories import TokenCharacteristics
 from langmodels.util.cuda import get_map_location, get_device
 
 logger = logging.getLogger(__name__)
@@ -86,10 +85,10 @@ lock = Lock()
 
 
 def retain_models_state(func: Callable) -> Callable:
-    def wrapper(model: TrainedModel, *args, **kwargs):
+    def wrapper(metric, model: TrainedModel, *args, **kwargs):
         model_snapshot: HiddenStateSnapshot = take_hidden_state_snapshot(model.model)
         try:
-            return func(model, *args, **kwargs)
+            return func(metric, model, *args, **kwargs)
         finally:
             restore_snapshot(model.model, model_snapshot)
     return wrapper
@@ -204,16 +203,15 @@ class TrainedModel(object):
         return prepped_token
 
     def get_predictions_and_feed(self, text: str, extension: str, n_suggestions: int, append_eof: bool) \
-            -> Generator[Tuple[PredictionList, str, TokenCharacteristics], None, None]:
+            -> Generator[Tuple[PredictionList, str], None, None]:
         prepped_tokens = self.prep_text(text, extension, return_metadata=True, append_eof=append_eof)
 
         for prepped_token in prepped_tokens.full_token_view(return_metadata=True):
             predictions = self.predict_next_full_token(n_suggestions)
-            token_characteristics = TokenCharacteristics.from_metadata(prepped_token.metadata)
 
             self._feed_prep_tokens(prepped_tokens.sub_token_view())
 
-            yield predictions, "".join(prepped_token.token_str), token_characteristics
+            yield predictions, "".join(prepped_token.token_str)
 
     def _check_model_loaded(self, only_description=False):
         if not only_description and self._load_only_description:

@@ -1,8 +1,10 @@
 import os
+from functools import reduce
+
 from math import log
 
 from torch import FloatTensor
-from typing import Union, List, TypeVar, Sequence, Dict, Callable, Any
+from typing import Union, List, TypeVar, Sequence, Dict, Callable, Any, Iterable, Type, Set
 
 
 def to_binary_entropy(entropy: Union[float, FloatTensor]) -> Union[float, FloatTensor]:
@@ -96,4 +98,20 @@ def entropy_to_probability(entropy: float) -> float:
     return 2 ** -entropy
 
 
+def all_subclasses(classes: Iterable[Type]) -> Set[Type]:
+    """
+    >>> from codeprep.tokentypes.rootclasses import ParsedToken
+    >>> subclasses = all_subclasses([ParsedToken])
+    >>> sorted(map(lambda t: t.__name__, subclasses))
+    ['ClosingBracket', 'ClosingCurlyBracket', 'Comment', 'Identifier', 'KeyWord', 'MultilineComment', 'NewLine', 'NonCodeChar', \
+'NonEng', 'NonProcessibleToken', 'Number', 'One', 'OneLineComment', 'OpeningBracket', 'OpeningCurlyBracket', \
+'Operator', 'ParsedToken', 'ProcessableTokenContainer', 'Semicolon', 'SpaceInString', 'SpecialToken', \
+'StringLiteral', 'Tab', 'TextContainer', 'Whitespace', 'Zero']
+    """
+    return reduce(set.union, [{cls}.union(
+        [s for c in cls.__subclasses__() for s in all_subclasses([c])])
+        for cls in classes], set())
+
+
 HOME = os.environ['HOME']
+

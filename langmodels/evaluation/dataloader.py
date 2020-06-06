@@ -254,7 +254,7 @@ class BatchedTokenLoader:
         if reset_context:
             self.tokens_after_reset: List[int] = [0 for _ in range(self.batch_size)]
 
-        if buffers_are_empty:
+        if buffers_are_empty and not self.can_still_load_files:
             reset_context = True
             self.tokens_are_finished = True
 

@@ -62,7 +62,7 @@ def evaluate_on_file(model: TrainedModel, file: Path,
 def evaluate_on_path(model: TrainedModel, path: Path, save_to: Path,
                      evaluation_options: EvaluationOptions = EvaluationOptions(),
                      full_tokens: bool = True,
-                     batch_size: int = 32) -> EvaluationResult:
+                     batch_size: int = 16) -> EvaluationResult:
 
     token_loader = BatchedTokenLoader.from_path(path, model.prep_text, batch_size=batch_size,
                                                 return_file_structure=False,

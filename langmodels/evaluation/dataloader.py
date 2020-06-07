@@ -15,7 +15,7 @@ from langmodels.model.context import ContextModifier
 from langmodels.util.file import read_file_contents, get_all_files
 from langmodels.util.misc import split_list_into_consequtive_chunks
 
-TOTAL_BATCH_ELEMENTS = 10 * 1000
+DEFAULT_MAX_SIZE = 500
 
 
 def split_without_looking_at_files(all_files: List[Any], batch_size: int) -> List[List[Any]]:
@@ -155,7 +155,7 @@ class BatchedTokenLoader:
         self.batch_file_loader_iter: Iterator[List[Tuple[Optional[Path], str]]] = iter(batch_file_loader)
         self.append_eof: bool = batch_file_loader.should_append_eof()
         self.prep_function: Callable[[Any], TokenSequence] = prep_function
-        self.max_seq_len: int = max_seq_len or TOTAL_BATCH_ELEMENTS // batch_file_loader.batch_size
+        self.max_seq_len: int = max_seq_len or DEFAULT_MAX_SIZE
         self.batch_size: int = batch_file_loader.batch_size
         self.reset_every: int = context_modifier.max_context_length if context_modifier else sys.maxsize
         self.tokens_after_reset: List[int] = [0 for _ in range(self.batch_size)]

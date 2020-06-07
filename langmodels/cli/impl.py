@@ -1,10 +1,13 @@
+from pathlib import Path
 from typing import Dict, Optional, Any
 
 import jsons
 
+from langmodels.evaluation import evaluate_on_path
 from langmodels.lmconfig.datamodel import LMTrainingConfig, DeviceOptions
 from langmodels.lmconfig.patch import patch_config
 from langmodels.lmconfig.serialization import load_config_or_metrics_from_file
+from langmodels.repository import load_from_path
 from langmodels.training.training import train
 from langmodels.util.cuda import CudaNotAvailable
 
@@ -47,3 +50,14 @@ def handle_train(args) -> None:
         print('Gpu with CUDA-support is not available on this machine. '
               'Use --fallback-to-cpu  switch if you want to train on gpu')
         exit(4)
+
+
+def handle_evaluation(args) -> None:
+    model = load_from_path(get_option(args, '<path-to-model>'))
+    batch_size = get_option(args, '--batch-size')
+    kw = {"batch_size": batch_size} if batch_size else {}
+    path = get_option(args, '--path')
+    output_path = get_option(args, '--output-path')
+    evaluation = evaluate_on_path(model, path, Path(output_path),
+                     full_tokens=not is_option_true(args, '--sub-token'), **kw)
+    print(evaluation.total())

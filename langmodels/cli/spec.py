@@ -1,13 +1,14 @@
-from langmodels.cli.impl import handle_train
+from langmodels.cli.impl import handle_train, handle_evaluation
 from langmodels import app_name
 
 import docopt_subcommands as dsc
 
 from langmodels import __version__
+from langmodels.evaluation import evaluate_on_path
 
 
 @dsc.command()
-def train_handler(args):
+def train(args):
     """usage: {program} train [--config <config>] [--patch <patch>] [--fallback-to-cpu] [--tune] [--disable-comet]
     [--save-every-epoch] [--allow-unks] [--device=<device>]
 
@@ -27,6 +28,23 @@ def train_handler(args):
 
     """
     handle_train(args)
+
+
+@dsc.command()
+def evaluate(args):
+    """usage: {program} evaluate <path-to-model> -p <path> -o <path-out> [--sub-tokens] [--batch-size <batch-size>]
+
+    Evaluates the language model on the given corpus
+
+    Options:
+      <path-to-model>
+      -p, --path <path>
+      -o <path-out>, --output-path <path-out>
+      -s, --sub-tokens
+      -b, --batch-size
+
+    """
+    handle_evaluation(args)
 
 
 def run(args):

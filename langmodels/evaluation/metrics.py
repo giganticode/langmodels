@@ -1,6 +1,6 @@
 import logging
 from abc import ABC
-from typing import Mapping
+from typing import Mapping, List
 
 from tqdm import tqdm
 
@@ -28,13 +28,14 @@ class Entropy(Metric):
                 evaluation_options: EvaluationOptions,
                 full_tokens: bool = True) -> EvaluationResultAccumulator:
         total_evaluation: EvaluationResultAccumulator = EvaluationResultAccumulator.empty(evaluation_options.characteristics, list(metric_name_to_function.keys()))
-        tqdmed_batched_losses = tqdm(calculate_losses(model, batched_token_loader), total=batched_token_loader.estimated_n_batches())
-        for entropies_batch, file_structure_batch, prepped_tokens_batch in tqdmed_batched_losses:
+        tqdmed_batched_losses = tqdm(total=batched_token_loader.n_files, unit='files')
+        all_structure_batches: List[CodeBaseStructure] = [CodeBaseStructure([]) for i in range(batched_token_loader.batch_size)]
+        for entropies_batch, file_structure_batch, prepped_tokens_batch in calculate_losses(model, batched_token_loader):
             for entropies, prepped_tokens in zip(entropies_batch, prepped_tokens_batch):
                 cur_batch_evaluation: EvaluationResultAccumulator = Entropy.sequence_entropy(entropies, prepped_tokens, evaluation_options, full_tokens)
                 total_evaluation = total_evaluation.merge(cur_batch_evaluation)
-
-            Entropy.update_progress_bar(tqdmed_batched_losses, batched_token_loader, total_evaluation, file_structure_batch)
+            all_structure_batches = [all_structure_batches[i].merge(file_structure) for i, file_structure in enumerate(file_structure_batch)]
+            Entropy.update_progress_bar(tqdmed_batched_losses, total_evaluation, all_structure_batches)
         tqdmed_batched_losses.close()
         return total_evaluation
 
@@ -50,19 +51,12 @@ class Entropy(Metric):
         return evaluation_result
 
     @staticmethod
-    def update_progress_bar(tqdmed_batched_losses: tqdm, batched_token_loader: BatchedTokenLoader,
-                            total_evaluation: EvaluationResultAccumulator, file_structure_batch: CodeBaseStructure) -> None:
-        tqdmed_batched_losses.update(sum(map(lambda cs: len(cs.snippets) - 1, file_structure_batch)))
-        evaluation_result_to_display = total_evaluation.build().total()
-        estimated_n_batches = batched_token_loader.estimated_n_batches()
-        current_iteration = batched_token_loader.current_iteration
-        estimated_iterations_left = estimated_n_batches - current_iteration
-        progress_bar_needs_to_be_updated = (estimated_iterations_left & (estimated_iterations_left - 1) == 0
-                                            or current_iteration & (current_iteration - 1) == 0)
-        tqdmed_batched_losses.set_postfix(ordered_dict=evaluation_result_to_display)
-        if progress_bar_needs_to_be_updated:
-            tqdmed_batched_losses.total = estimated_n_batches
-            tqdmed_batched_losses.refresh()
+    def update_progress_bar(tqdmed_batched_losses: tqdm,
+                            total_evaluation: EvaluationResultAccumulator, file_structure_batch: List[CodeBaseStructure]) -> None:
+        prep_file_estimate = int(sum(map(lambda cs: len(cs.snippets), file_structure_batch)))
+        tqdmed_batched_losses.update(prep_file_estimate - tqdmed_batched_losses.n)
+
+        tqdmed_batched_losses.set_postfix(ordered_dict=total_evaluation.build().total())
 
 
 metric_name_to_function: Mapping[str, Metric] = {

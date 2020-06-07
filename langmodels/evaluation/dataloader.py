@@ -7,10 +7,10 @@ from typing import List, Callable, Any, Optional, Tuple, Mapping, Iterator
 import sys
 
 from codeprep.api.text import basic
+from codeprep.preprocess.codestructure import CodeBaseStructure
 from codeprep.preprocess.metadata import PreppedTokenMetadata
 from codeprep.preprocess.tokens import TokenSequence
 from codeprep.tokentypes.word import SpecialToken
-from codeprep.preprocess.codestructure import CodeBaseStructure
 from langmodels.model.context import ContextModifier
 from langmodels.util.file import read_file_contents, get_all_files
 from langmodels.util.misc import split_list_into_consequtive_chunks
@@ -94,6 +94,9 @@ class AllTextLoader(BatchedFileLoader):
     extension: str = 'java'
     append_eof: bool = False
 
+    def __post_init__(self):
+        self.all_files = [Path(f'{i}.java') for i in range(len(self.text_list))]
+
     def n_total_files(self) -> int:
         return len(self.text_list)
 
@@ -148,6 +151,7 @@ class BatchedTokenLoader:
         StopIteration
         """
         self.n_file_batches = len(batch_file_loader)
+        self.n_files = len(batch_file_loader.all_files)
         self.batch_file_loader_iter: Iterator[List[Tuple[Optional[Path], str]]] = iter(batch_file_loader)
         self.append_eof: bool = batch_file_loader.should_append_eof()
         self.prep_function: Callable[[Any], TokenSequence] = prep_function
@@ -159,8 +163,6 @@ class BatchedTokenLoader:
         self.buffer: List[TokenSequence] = [TokenSequence.empty() for _ in range(batch_file_loader.batch_size)]
         self.code_structures: List[CodeBaseStructure] = [CodeBaseStructure() for _ in range(batch_file_loader.batch_size)]
         self.can_still_load_files: bool = True
-        self.file_batches_loaded = 0
-        self.current_iteration = 0
 
         self.tokens_are_finished: bool = False
 
@@ -208,10 +210,6 @@ class BatchedTokenLoader:
             self.code_structures[i] = CodeBaseStructure()
         return code_structure_to_return
 
-    def estimated_n_batches(self) -> int:
-        estimated_file_batch_loads_per_iteration = self.file_batches_loaded / float(self.current_iteration) if self.current_iteration != 0 else 1.
-        return int(self.n_file_batches / estimated_file_batch_loads_per_iteration)
-
     def __next__(self) -> Tuple[List[TokenSequence], Mapping[int, int], List[CodeBaseStructure], bool]:
         if self.tokens_are_finished:
             raise StopIteration
@@ -219,7 +217,6 @@ class BatchedTokenLoader:
         while self.can_still_load_files and self._need_to_load_files():
             try:
                 self._load_file_batch()
-                self.file_batches_loaded += 1
             except StopIteration:
                 self.can_still_load_files = False
         min_non_empty_chunk_len = self._min_non_empty_buffer_len()
@@ -258,7 +255,6 @@ class BatchedTokenLoader:
             reset_context = True
             self.tokens_are_finished = True
 
-        self.current_iteration += 1
         return result, non_max_seq_lens, code_structure, reset_context
 
     def _min_non_empty_buffer_len(self) -> int:

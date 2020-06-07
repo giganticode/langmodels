@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def evaluate(model: TrainedModel, token_loader: BatchedTokenLoader, save_to: Optional[Path] = None,
-             evaluation_options: Optional[EvaluationOptions] = None, full_tokens: bool = True) -> EvaluationResult:
+             evaluation_options: EvaluationOptions = EvaluationOptions(), full_tokens: bool = True) -> EvaluationResult:
     if save_to:
         if not save_to.exists():
             save_to.mkdir(parents=False)
@@ -21,8 +21,7 @@ def evaluate(model: TrainedModel, token_loader: BatchedTokenLoader, save_to: Opt
             raise FileNotFoundError(save_to)
         logger.info(f'Evaluation results will be written to {save_to}')
 
-    evaluation_options = evaluation_options or EvaluationOptions()
-    total_evaluation_result_accumulator = EvaluationResultAccumulator.empty(characterizers=evaluation_options.characteristics, metrics=evaluation_options.metric_names)
+    total_evaluation_result_accumulator = EvaluationResultAccumulator.empty(characteristics=evaluation_options.characteristics, metric_names=evaluation_options.metric_names)
     for metric_name in evaluation_options.metric_names:
         try:
             metric_func = metric_name_to_function[metric_name]
@@ -37,7 +36,7 @@ def evaluate(model: TrainedModel, token_loader: BatchedTokenLoader, save_to: Opt
 
 
 def evaluate_on_string(model: TrainedModel, text: str,
-                       evaluation_options: Optional[EvaluationOptions] = None,
+                       evaluation_options: EvaluationOptions = EvaluationOptions(),
                        full_tokens: bool = True,
                        extension='java', append_eof: bool = False) -> EvaluationResult:
     """
@@ -50,7 +49,7 @@ def evaluate_on_string(model: TrainedModel, text: str,
 
 
 def evaluate_on_file(model: TrainedModel, file: Path,
-                     evaluation_options: Optional[EvaluationOptions] = None,
+                     evaluation_options: EvaluationOptions = EvaluationOptions(),
                      full_tokens: bool = True) -> EvaluationResult:
     suffix: str = file.suffix[1:]
     model.assert_extension_supported(suffix)
@@ -61,12 +60,12 @@ def evaluate_on_file(model: TrainedModel, file: Path,
 
 
 def evaluate_on_path(model: TrainedModel, path: Path, save_to: Path,
-                     evaluation_options: Optional[EvaluationOptions] = None,
+                     evaluation_options: EvaluationOptions = EvaluationOptions(),
                      full_tokens: bool = True,
                      batch_size: int = 32) -> EvaluationResult:
 
     token_loader = BatchedTokenLoader.from_path(path, model.prep_text, batch_size=batch_size,
                                                 return_file_structure=False,
-                                                context_modifier=None)
+                                                context_modifier=evaluation_options.context_modifier)
 
     return evaluate(model, token_loader, save_to, evaluation_options, full_tokens=full_tokens)

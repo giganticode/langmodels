@@ -33,8 +33,8 @@ def test_evaluate_model_on_path():
                               batch_size=3)
 
     total = actual.total()
-    assert int(total['Entropy']) == 15
-    assert total['n_samples'] == 1528
+    assert int(total['Entropy']) == 16
+    assert total['n_samples'] == 1647
 
 
 def test_evaluate_model_on_file():

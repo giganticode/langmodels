@@ -202,14 +202,6 @@ class BatchedTokenLoader:
         self.tokens_after_reset[i] += actual_seq_len_full_tokens
         return new_batch
 
-    def _get_code_structure(self, i: int, actual_seq_len: int) -> CodeBaseStructure:
-        if actual_seq_len < len(self.code_structures[i]):
-            code_structure_to_return, self.code_structures[i] = self.code_structures[i].split(actual_seq_len)
-        else:
-            code_structure_to_return = self.code_structures[i]
-            self.code_structures[i] = CodeBaseStructure()
-        return code_structure_to_return
-
     def __next__(self) -> Tuple[List[TokenSequence], Mapping[int, int], List[CodeBaseStructure], bool]:
         if self.tokens_are_finished:
             raise StopIteration
@@ -234,7 +226,8 @@ class BatchedTokenLoader:
                 buffers_are_empty = False
 
         for i in range(self.batch_size):
-            code_structure.append(self._get_code_structure(i, result[i].sub_token_size()))
+            code_structure_to_return, self.code_structures[i] = self.code_structures[i].split(result[i].sub_token_size())
+            code_structure.append(code_structure_to_return)
 
         non_max_seq_lens = {}
         max_actual_seq_len = max(map(lambda r: r.sub_token_size(), result))

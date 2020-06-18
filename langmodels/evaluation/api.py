@@ -64,7 +64,7 @@ def evaluate_on_path(model: TrainedModel, path: Path, save_to: Path,
                      full_tokens: bool = True,
                      batch_size: int = 16,
                      n_processes: Optional[int] = None) -> EvaluationResult:
-
+    logger.info(f'Using batch size {batch_size}, n processes for pre-processing {n_processes}')
     token_loader = BatchedTokenLoader.from_path(path, model.prep_function.apply_to_text, batch_size=batch_size,
                                                 return_file_structure=False,
                                                 context_modifier=evaluation_options.context_modifier, n_processes=n_processes)

@@ -42,7 +42,7 @@ def evaluate_on_string(model: TrainedModel, text: str,
     """
     Evaluates the `model` on the provided `text` in scenarios specified by `evaluation_scenario_grid`
     """
-    token_loader = BatchedTokenLoader.from_text(text, model.prep_text,
+    token_loader = BatchedTokenLoader.from_text(text, model.prep_function.apply_to_text,
                                                 extension=extension, append_eof=append_eof)
 
     return evaluate(model, token_loader, evaluation_options=evaluation_options, full_tokens=full_tokens)
@@ -54,7 +54,7 @@ def evaluate_on_file(model: TrainedModel, file: Path,
     suffix: str = file.suffix[1:]
     model.assert_extension_supported(suffix)
 
-    token_loader = BatchedTokenLoader.from_file(file, prep_func=model.prep_text, return_file_structure=True)
+    token_loader = BatchedTokenLoader.from_file(file, prep_func=model.prep_function.apply_to_text, return_file_structure=True)
 
     return evaluate(model, token_loader, evaluation_options=evaluation_options, full_tokens=full_tokens)
 
@@ -64,7 +64,7 @@ def evaluate_on_path(model: TrainedModel, path: Path, save_to: Path,
                      full_tokens: bool = True,
                      batch_size: int = 16) -> EvaluationResult:
 
-    token_loader = BatchedTokenLoader.from_path(path, model.prep_text, batch_size=batch_size,
+    token_loader = BatchedTokenLoader.from_path(path, model.prep_function.apply_to_text, batch_size=batch_size,
                                                 return_file_structure=False,
                                                 context_modifier=evaluation_options.context_modifier)
 

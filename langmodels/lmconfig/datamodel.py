@@ -1,7 +1,6 @@
 import os
 import re
 
-import torch
 from functools import partial
 
 import jsons
@@ -9,13 +8,14 @@ import sys
 from dataclasses import dataclass, field, asdict
 
 from comet_ml import Experiment
-from torch import optim
+
 from typing import Optional, Callable, Tuple, List, Type, Dict, Any
 
 import codeprep.api.corpus as corpus_api
 from codeprep.api.corpus import PreprocessedCorpus
 from fastai.text import AWD_LSTM, Transformer, Activation
 
+from codeprep.preprocess.tokens import TokenSequence
 from langmodels import MODEL_ZOO_PATH, __version__, __major_version__
 from langmodels.model.nn import GRU
 from langmodels.util.misc import HOME
@@ -104,12 +104,25 @@ class PrepFunction(object):
     options: PrepFunctionOptions = PrepFunctionOptions()
 
     @property
-    def apply(self) -> ParametrizedPrepCallable:
+    def apply_to_corpus(self) -> ParametrizedPrepCallable:
         def prep_corpus(corpus: Corpus, **kwargs) -> PreprocessedCorpus:
             return self.callable(corpus.path, *self.params, **asdict(self.options), **kwargs,
                                  extensions=corpus.extensions)
 
         return prep_corpus
+
+    @property
+    def apply_to_text(self):
+        def prep_text(text: str, extension: str, **kwargs) -> TokenSequence:
+            import codeprep.api.text as text_api
+            func_name = self.callable.__name__
+            text_callable = getattr(text_api, func_name)
+            reinit_bpe_data_param = {'force_reinit_bpe_data': False } if func_name == 'bpe' else {}
+            prepped_token = text_callable(text, extension=extension,
+                                          *self.params, **reinit_bpe_data_param, **asdict(self.options), **kwargs)
+            return prepped_token
+
+        return prep_text
 
     @staticmethod
     def serializer(prep_function: 'PrepFunction', **kwargs) -> Dict[str, Any]:
@@ -146,6 +159,7 @@ class SGD(Optimizer):
     momentum: float = 0.9
 
     def get_callable(self):
+        import torch
         return partial(torch.optim.SGD, momentum=self.momentum)
 
 
@@ -155,7 +169,8 @@ class Adam(Optimizer):
     betas: Tuple[float, float] = (0.9, 0.99)
 
     def get_callable(self):
-        return partial(optim.Adam, betas=self.betas)
+        import torch
+        return partial(torch.optim.Adam, betas=self.betas)
 
 
 def camel_case_to_snake_case(name: str) -> str:

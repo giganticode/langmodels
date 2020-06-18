@@ -191,16 +191,10 @@ class TrainedModel(object):
     BEAM_SIZE = 500
 
     def prep_corpus(self, corpus: Corpus, **kwargs) -> PreprocessedCorpus:
-        return self.prep_function.apply(corpus, **kwargs)
+        return self.prep_function.apply_to_corpus(corpus, **kwargs)
 
     def prep_text(self, text: str, extension: str, **kwargs) -> TokenSequence:
-        import codeprep.api.text as text_api
-        func_name = self.prep_function.callable.__name__
-        text_callable = getattr(text_api, func_name)
-        reinit_bpe_data_param = {'force_reinit_bpe_data': False } if func_name == 'bpe' else {}
-        prepped_token = text_callable(text, extension=extension,
-                                      *self.prep_function.params, **reinit_bpe_data_param, **asdict(self.prep_function.options), **kwargs)
-        return prepped_token
+        return self.prep_function.apply_to_text(text, extension, **kwargs)
 
     def get_predictions_and_feed(self, text: str, extension: str, n_suggestions: int, append_eof: bool) \
             -> Generator[Tuple[PredictionList, str], None, None]:

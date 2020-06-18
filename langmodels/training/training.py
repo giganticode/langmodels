@@ -150,9 +150,9 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     check_run_prerequisites(experiment_run)
 
     if isinstance(training_config.corpus, Corpus):
-        prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply(training_config.corpus,
-                                                                              calc_vocab=True,
-                                                                              output_path=PATH_TO_PREP_DATASETS)
+        prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply_to_corpus(training_config.corpus,
+                                                                                            calc_vocab=True,
+                                                                                            output_path=PATH_TO_PREP_DATASETS)
     else:
         prep_corpus = training_config.corpus
 

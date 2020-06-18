@@ -55,7 +55,7 @@ def handle_train(args) -> None:
 def handle_evaluation(args) -> None:
     model = load_from_path(get_option(args, '<path-to-model>'))
     batch_size = get_option(args, '--batch-size')
-    kw = {"batch_size": batch_size} if batch_size else {}
+    kw = {"batch_size": int(batch_size)} if batch_size else {}
     path = get_option(args, '--path')
     output_path = get_option(args, '--output-path')
     evaluation = evaluate_on_path(model, path, Path(output_path),

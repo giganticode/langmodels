@@ -41,7 +41,7 @@ def evaluate(args):
       -p, --path <path>
       -o <path-out>, --output-path <path-out>
       -s, --sub-tokens
-      -b, --batch-size
+      -b, <batch-size>, --batch-size <batch-size>
 
     """
     handle_evaluation(args)

@@ -65,7 +65,7 @@ class ModelContext(object):
         self.prepped_sub_tokens = TokenSequence.empty()
 
     def add(self, prepped_tokens: TokenSequence) -> None:
-        self.prepped_sub_tokens = self.prepped_sub_tokens.add(prepped_tokens)
+        self.prepped_sub_tokens.extend(prepped_tokens)
         self.prepped_sub_tokens = self.prepped_sub_tokens.full_token_view()[-ModelContext.SAVE_FULL_TOKENS_CONTEXT_LIMIT:]
 
     def size(self, full_token: bool = True):
@@ -100,4 +100,4 @@ class ContextModifier(object):
         end = end if end > 0 else 0
         part_to_bhe_shuffled = tokens.full_token_view()[start:end]
         random.shuffle(part_to_bhe_shuffled)
-        return tokens[:start].add(part_to_bhe_shuffled).add(tokens[end:])
+        return tokens[:start].extend(part_to_bhe_shuffled).extend(tokens[end:])

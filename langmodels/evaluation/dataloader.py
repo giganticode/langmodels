@@ -161,7 +161,7 @@ class BatchedTokenLoader:
         self.tokens_after_reset: List[int] = [0 for _ in range(self.batch_size)]
 
         self.buffer: List[TokenSequence] = [TokenSequence.empty() for _ in range(batch_file_loader.batch_size)]
-        self.code_structures: List[CodeBaseStructure] = [CodeBaseStructure() for _ in range(batch_file_loader.batch_size)]
+        self.code_structures: List[CodeBaseStructure] = [CodeBaseStructure.empty() for _ in range(batch_file_loader.batch_size)]
         self.can_still_load_files: bool = True
 
         self.tokens_are_finished: bool = False
@@ -184,7 +184,7 @@ class BatchedTokenLoader:
             extension = path.suffix[1:]
             prepped_text, code_snippet_structure = self.prep_function(text, extension, append_eof=self.append_eof, path=path)
             self.code_structures[i].add_snippet(code_snippet_structure)
-            self.buffer[i] = self.buffer[i].add(prepped_text) if len(self.buffer[i]) > 0 else prepped_text
+            self.buffer[i] = self.buffer[i].extend(prepped_text) if len(self.buffer[i]) > 0 else prepped_text
 
     def _get_new_sequence(self, i: int) -> TokenSequence:
         n_full_tokens_needed = self.reset_every-self.tokens_after_reset[i]
@@ -239,7 +239,7 @@ class BatchedTokenLoader:
                 padding_tokens = [BatchedTokenLoader.PLACEHOLDER] * n_padding_tokens
                 padding_token_metadata = PreppedTokenMetadata([1] * n_padding_tokens, [SpecialToken] * n_padding_tokens)
                 padding_token_seq = TokenSequence.of(padding_tokens, padding_token_metadata)
-                result[i] = result[i].add(padding_token_seq)
+                result[i] = result[i].extend(padding_token_seq)
 
         if reset_context:
             self.tokens_after_reset: List[int] = [0 for _ in range(self.batch_size)]

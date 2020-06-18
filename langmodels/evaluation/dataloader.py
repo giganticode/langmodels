@@ -4,10 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Callable, Any, Optional, Tuple, Mapping, Iterator
 
+import psutil
 import sys
+from pathos.multiprocessing import ProcessingPool as Pool
 
 from codeprep.api.text import basic
-from codeprep.preprocess.codestructure import CodeBaseStructure
+from codeprep.preprocess.codestructure import CodeBaseStructure, SnippetStructure
 from codeprep.preprocess.metadata import PreppedTokenMetadata
 from codeprep.preprocess.tokens import TokenSequence
 from codeprep.tokentypes.word import SpecialToken
@@ -88,6 +90,16 @@ class BatchedFileLoader:
         return True
 
 
+def get_file_prep_func(prep_function, append_eof) -> Callable:
+    def prep_file(param: Tuple[int, Tuple]) -> Tuple[int, TokenSequence, SnippetStructure]:
+        i, (path, text) = param
+        extension = path.suffix[1:]
+        prepped_text, code_snippet_structure = prep_function(text, extension, append_eof=append_eof, path=path)
+        return i, prepped_text, code_snippet_structure
+
+    return prep_file
+
+
 @dataclass
 class AllTextLoader(BatchedFileLoader):
     text_list: Optional[List[str]]
@@ -128,7 +140,8 @@ class BatchedTokenLoader:
     #TODO add context modifier
 
     def __init__(self, batch_file_loader: BatchedFileLoader, prep_function: Callable, max_seq_len: Optional[int] = None,
-                 context_modifier: Optional[ContextModifier] = None, return_file_structure: bool = False):
+                 context_modifier: Optional[ContextModifier] = None, return_file_structure: bool = False,
+                 n_processes: Optional[int] =None):
         """
         >>> batch_file_loader = AllTextLoader(['class A', 'public getName {'], append_eof=True)
         >>> batched_token_loader = BatchedTokenLoader(batch_file_loader, basic, max_seq_len=2, context_modifier=ContextModifier(max_context_length=2))
@@ -166,6 +179,8 @@ class BatchedTokenLoader:
 
         self.tokens_are_finished: bool = False
 
+        self.n_processes: bool = n_processes or psutil.cpu_count(logical=False)
+
     def _need_to_load_files(self) -> bool:
         for i, chunk in enumerate(self.buffer):
             if chunk.sub_token_size() < self.max_seq_len and chunk.full_token_size() < self.reset_every - self.tokens_after_reset[i]:
@@ -177,14 +192,13 @@ class BatchedTokenLoader:
 
     def _load_file_batch(self) -> None:
         new_files = next(self.batch_file_loader_iter)
-        for i, path_and_text in enumerate(new_files):
-            if path_and_text is None:
-                continue
-            path, text = path_and_text
-            extension = path.suffix[1:]
-            prepped_text, code_snippet_structure = self.prep_function(text, extension, append_eof=self.append_eof, path=path)
-            self.code_structures[i].add_snippet(code_snippet_structure)
-            self.buffer[i] = self.buffer[i].extend(prepped_text) if len(self.buffer[i]) > 0 else prepped_text
+
+        file_prep_func = get_file_prep_func(self.prep_function, self.append_eof)
+        with Pool(self.n_processes) as pool:
+            it = pool.map(file_prep_func, list(filter(lambda x: x[1] is not None, enumerate(new_files))))
+            for i, prepped_text, code_snippet_structure in it:
+                self.code_structures[i].add_snippet(code_snippet_structure)
+                self.buffer[i] = self.buffer[i].extend(prepped_text) if len(self.buffer[i]) > 0 else prepped_text
 
     def _get_new_sequence(self, i: int) -> TokenSequence:
         n_full_tokens_needed = self.reset_every-self.tokens_after_reset[i]
@@ -258,15 +272,17 @@ class BatchedTokenLoader:
             return 0
 
     @classmethod
-    def from_path(cls, path: Path, prep_func: Callable, batch_size: int, return_file_structure: bool, context_modifier: ContextModifier = None) -> 'BatchedTokenLoader':
+    def from_path(cls, path: Path, prep_func: Callable, batch_size: int, return_file_structure: bool,
+                  context_modifier: ContextModifier = None, n_processes: Optional[int] = None) -> 'BatchedTokenLoader':
         return BatchedTokenLoader(BatchedFileLoader(path, batch_size, ['java']), prep_func,
                                   context_modifier=context_modifier or ContextModifier(),
-                                  return_file_structure=return_file_structure)
+                                  return_file_structure=return_file_structure, n_processes=n_processes)
 
     @classmethod
-    def from_file(self, path: Path, prep_func: Callable, return_file_structure: bool) -> 'BatchedTokenLoader':
-        return BatchedTokenLoader(BatchedFileLoader(path, 1, [path.suffix[1:]]), prep_func, return_file_structure=return_file_structure)
+    def from_file(self, path: Path, prep_func: Callable, return_file_structure: bool, n_processes: int = 1) -> 'BatchedTokenLoader':
+        return BatchedTokenLoader(BatchedFileLoader(path, 1, [path.suffix[1:]]), prep_func,
+                                  return_file_structure=return_file_structure, n_processes=n_processes)
 
     @classmethod
-    def from_text(cls, text: str, prep_func: Callable, extension: str, append_eof: bool) -> 'BatchedTokenLoader':
-        return BatchedTokenLoader(AllTextLoader([text], extension, append_eof), prep_func, return_file_structure=False)
+    def from_text(cls, text: str, prep_func: Callable, extension: str, append_eof: bool, n_processes: int = 1) -> 'BatchedTokenLoader':
+        return BatchedTokenLoader(AllTextLoader([text], extension, append_eof), prep_func, return_file_structure=False, n_processes=n_processes)

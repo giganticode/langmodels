@@ -44,7 +44,8 @@ def test_evaluate_model_on_path():
     actual = evaluate_on_path(load_default_model(),
                               Path(project_dir) /'data' /'dev' /'valid',
                               save_to=Path(f.name),
-                              batch_size=3, evaluation_options=EvaluationOptions(context_modifier=ContextModifier(max_context_length=10)))
+                              batch_size=3, n_processes=1,
+                              evaluation_options=EvaluationOptions(context_modifier=ContextModifier(max_context_length=10)))
 
     total = actual.total()
     assert int(total['Entropy']) == 17

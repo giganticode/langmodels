@@ -62,10 +62,11 @@ def evaluate_on_file(model: TrainedModel, file: Path,
 def evaluate_on_path(model: TrainedModel, path: Path, save_to: Path,
                      evaluation_options: EvaluationOptions = EvaluationOptions(),
                      full_tokens: bool = True,
-                     batch_size: int = 16) -> EvaluationResult:
+                     batch_size: int = 16,
+                     n_processes: Optional[int] = None) -> EvaluationResult:
 
     token_loader = BatchedTokenLoader.from_path(path, model.prep_function.apply_to_text, batch_size=batch_size,
                                                 return_file_structure=False,
-                                                context_modifier=evaluation_options.context_modifier)
+                                                context_modifier=evaluation_options.context_modifier, n_processes=n_processes)
 
     return evaluate(model, token_loader, save_to, evaluation_options, full_tokens=full_tokens)

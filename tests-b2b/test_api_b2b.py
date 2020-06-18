@@ -25,6 +25,18 @@ def test_hidden_state_not_changed_after_evaluation():
             assert torch.equal(b, a)
 
 
+def test_evaluate_model_on_path_subtokens():
+    f = tempfile.TemporaryDirectory()
+    actual = evaluate_on_path(load_default_model(),
+                              Path(project_dir) /'data' /'dev' /'valid',
+                              save_to=Path(f.name), full_tokens=False,
+                              batch_size=3)
+
+    total = actual.total()
+    assert int(total['Entropy']) == 9
+    assert total['n_samples'] == 2839
+
+
 def test_evaluate_model_on_path():
     f = tempfile.TemporaryDirectory()
     actual = evaluate_on_path(load_default_model(),

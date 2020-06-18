@@ -47,7 +47,8 @@ class Entropy(Metric):
         entropies_iterator = tokens.get_iterator(over=entropies, over_full_tokens=False, formatter=sum)
         for single_token_seq_elm, entropy in zip(tokens, entropies_iterator):
             token_characteristics = characterize_token(single_token_seq_elm, evaluation_options.characteristics, None)
-            evaluation_result.add(Entropy.__name__, to_full_token_string(single_token_seq_elm.tokens, include_debug_tokens=True), token_characteristics, entropy)
+            full_token_string = to_full_token_string(single_token_seq_elm.tokens, include_debug_tokens=True) if single_token_seq_elm.is_complete() else single_token_seq_elm.tokens[0]
+            evaluation_result.add(Entropy.__name__, full_token_string, token_characteristics, entropy)
         return evaluation_result
 
     @staticmethod

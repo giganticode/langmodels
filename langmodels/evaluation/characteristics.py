@@ -30,7 +30,7 @@ class FrequencyRank(Characteristic):
         self.vocab = vocab
 
     def __call__(self, token: TokenSequence, context_information: Optional[ContextInformation] = None) -> Any:
-        token_str = to_full_token_string(token.tokens, keep_word_end_token=False)
+        token_str = to_full_token_string(token.tokens, keep_word_end_token=False) if token.is_complete() else token.tokens[0]
         return int(log(self.vocab.stoi[token_str] + 1, 2))
 
 

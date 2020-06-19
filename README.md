@@ -292,7 +292,7 @@ Evaluation can be run on a set of files with `evaluate_model_on_path` method
 >>> model = repo.load_default_model()
 >>> evaluate_model_on_path(model, '/path/to/file')
 
-100%|████████████████████████████████████████████████████████████████████████████| 28/28 [00:11<00:00,  2.35it/s]
+100%|#########################| 28/28 [00:11<00:00,  2.35it/s]
 {full_token_entropy/ParsedToken: (5.859160765187885, 5745)}
 ```
 

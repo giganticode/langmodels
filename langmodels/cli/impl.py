@@ -59,5 +59,5 @@ def handle_evaluation(args) -> None:
     path = get_option(args, '--path')
     output_path = get_option(args, '--output-path')
     evaluation = evaluate_on_path(model, path, Path(output_path),
-                     full_tokens=not is_option_true(args, '--sub-token'), **kw)
+                     full_tokens=not is_option_true(args, '--sub-tokens'), **kw)
     print(evaluation.total())

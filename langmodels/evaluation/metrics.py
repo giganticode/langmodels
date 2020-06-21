@@ -34,7 +34,10 @@ class Entropy(Metric):
         all_structure_batches: List[CodeBaseStructure] = [CodeBaseStructure.empty() for i in range(batched_token_loader.batch_size)]
         for losses_with_metadata_batch in calculate_losses_for_batch(model, batched_token_loader):
             for i, losses_with_metadata in enumerate(losses_with_metadata_batch):
-                cur_batch_evaluation: EvaluationResultAccumulator = Entropy.sequence_entropy(losses_with_metadata.losses, losses_with_metadata.prepped_tokens, evaluation_options, full_tokens)
+                cur_batch_evaluation: EvaluationResultAccumulator = Entropy.sequence_entropy(
+                    losses_with_metadata.losses.tolist(), losses_with_metadata.prepped_tokens,
+                    evaluation_options, full_tokens
+                )
                 total_evaluation = total_evaluation.merge(cur_batch_evaluation)
                 all_structure_batches[i].merge(losses_with_metadata.code_structure)
             Entropy.update_progress_bar(tqdmed_batched_losses, total_evaluation, all_structure_batches)
@@ -42,7 +45,7 @@ class Entropy(Metric):
         return total_evaluation
 
     @staticmethod
-    def sequence_entropy(entropies: Tensor, prepped_tokens: TokenSequence, evaluation_options: EvaluationOptions, full_tokens: bool) -> EvaluationResultAccumulator:
+    def sequence_entropy(entropies: List[float], prepped_tokens: TokenSequence, evaluation_options: EvaluationOptions, full_tokens: bool) -> EvaluationResultAccumulator:
         assert prepped_tokens.is_complete()
         evaluation_result: EvaluationResultAccumulator = EvaluationResultAccumulator.empty(evaluation_options.characteristics, evaluation_options.metric_names)
         tokens = prepped_tokens.full_token_view(return_metadata=True) if full_tokens else prepped_tokens.sub_token_view(return_metadata=True)

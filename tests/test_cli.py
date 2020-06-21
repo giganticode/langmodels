@@ -1,3 +1,6 @@
+from pathlib import Path
+from unittest.mock import Mock
+
 from pytest import fixture
 from pytest_mock.plugin import MockFixture
 
@@ -9,6 +12,13 @@ from langmodels.lmconfig.datamodel import DeviceOptions, LMTrainingConfig
 @fixture
 def train_func_mocker(mocker: MockFixture):
     mocker.patch('langmodels.cli.impl.train')
+    return mocker
+
+
+@fixture
+def evaluate_func_mocker(mocker: MockFixture):
+    mocker.patch('langmodels.cli.impl.evaluate_on_path')
+    mocker.patch('langmodels.cli.impl.load_from_path')
     return mocker
 
 
@@ -34,3 +44,33 @@ def test_short_options(train_func_mocker):
     cli_impl.train.assert_called_with(allow_unks=False, tune=True, comet=False, save_every_epoch=True,
                                  device_options=DeviceOptions(fallback_to_cpu=True, non_default_device_to_use=3),
                                  training_config=LMTrainingConfig())
+
+
+def test_evaluate_with_defaults(evaluate_func_mocker):
+    mocked_model = Mock()
+    cli_impl.load_from_path.return_value = mocked_model
+
+    argv=['evaluate', '/path/to/model', '--path', '/path/to/evaluate', '--output-path', '/path/to/output']
+    cli_spec.run(argv)
+    cli_impl.load_from_path.assert_called_with('/path/to/model')
+    cli_impl.evaluate_on_path.assert_called_with(mocked_model, '/path/to/evaluate', Path('/path/to/output'), full_tokens=True)
+
+
+def test_evaluate_with_all_options(evaluate_func_mocker):
+    mocked_model = Mock()
+    cli_impl.load_from_path.return_value = mocked_model
+
+    argv=['evaluate', '/path/to/model', '--path', '/path/to/evaluate', '--output-path', '/path/to/output', '--sub-tokens', '--batch-size', '13']
+    cli_spec.run(argv)
+    cli_impl.load_from_path.assert_called_with('/path/to/model')
+    cli_impl.evaluate_on_path.assert_called_with(mocked_model, '/path/to/evaluate', Path('/path/to/output'), full_tokens=False, batch_size=13)
+
+
+def test_evaluate_with_short_options(evaluate_func_mocker):
+    mocked_model = Mock()
+    cli_impl.load_from_path.return_value = mocked_model
+
+    argv=['evaluate', '/path/to/model', '-p', '/path/to/evaluate', '-o', '/path/to/output', '-sb', '13']
+    cli_spec.run(argv)
+    cli_impl.load_from_path.assert_called_with('/path/to/model')
+    cli_impl.evaluate_on_path.assert_called_with(mocked_model, '/path/to/evaluate', Path('/path/to/output'), full_tokens=False, batch_size=13)

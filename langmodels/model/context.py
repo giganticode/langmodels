@@ -42,7 +42,7 @@ class ModelContext(object):
     >>> context = ModelContext()
     >>> context
     ModelContext(prepped_sub_tokens=[])
-    >>> context.add(TokenSequence.of(['h', 'i</t>', 'th', 'er', 'e</t>'], PreppedTokenMetadata([2, 3], [Identifier, Identifier])))
+    >>> context.add(TokenSequence.create(['h', 'i</t>', 'th', 'er', 'e</t>'], PreppedTokenMetadata([2, 3], [Identifier, Identifier])))
     >>> context
     ModelContext(prepped_sub_tokens=[['h', 'i</t>'], ['th', 'er', 'e</t>']])
     >>> context.size()
@@ -50,7 +50,7 @@ class ModelContext(object):
     >>> context.size(full_token=False)
     5
     >>> ModelContext.SAVE_FULL_TOKENS_CONTEXT_LIMIT = 2
-    >>> context.add(TokenSequence.of(['b', 'g</t>'], PreppedTokenMetadata([2], [Identifier])))
+    >>> context.add(TokenSequence.create(['b', 'g</t>'], PreppedTokenMetadata([2], [Identifier])))
     >>> context
     ModelContext(prepped_sub_tokens=[['th', 'er', 'e</t>'], ['b', 'g</t>']])
     >>> context.reset()
@@ -90,7 +90,7 @@ class ContextModifier(object):
         """
         >>> from codeprep.preprocess.tokens import TokenSequence
         >>> class TypeA: pass
-        >>> token_seq = TokenSequence.of(['hi</t>', 'the' ,'re</t>'], PreppedTokenMetadata([1, 2], [TypeA, TypeA]), word_end_token_added=True)
+        >>> token_seq = TokenSequence.create(['hi</t>', 'the' ,'re</t>'], PreppedTokenMetadata([1, 2], [TypeA, TypeA]), word_end_token_added=True)
         >>> ContextModifier(context_shuffling=ContextShuffling(0, 1)).modify(token_seq, 0)
         [['hi</t>'], ['the', 're</t>']]
         """

@@ -252,7 +252,7 @@ class BatchedTokenLoader:
 
                 padding_tokens = [BatchedTokenLoader.PLACEHOLDER] * n_padding_tokens
                 padding_token_metadata = PreppedTokenMetadata([1] * n_padding_tokens, [SpecialToken] * n_padding_tokens)
-                padding_token_seq = TokenSequence.of(padding_tokens, padding_token_metadata)
+                padding_token_seq = TokenSequence.create(padding_tokens, padding_token_metadata)
                 result[i] = result[i].extend(padding_token_seq)
 
         if reset_context:

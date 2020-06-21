@@ -38,7 +38,7 @@ class LossesWithMetadata:
         >>> l = LossesWithMetadata.empty('cpu')
         >>> class TypeA: pass
         >>> from codeprep.preprocess.metadata import PreppedTokenMetadata
-        >>> token_seq = TokenSequence.of(['hi</t>', 'the' ,'re</t>'], PreppedTokenMetadata([1, 2], [TypeA, TypeA]), full_token_view=True)
+        >>> token_seq = TokenSequence.create(['hi</t>', 'the' ,'re</t>'], PreppedTokenMetadata([1, 2], [TypeA, TypeA]), full_token_view=True)
         >>> code_base_structure = CodeBaseStructure.of([SnippetStructure.from_path_and_lines(Path(''), [2], 0)])
         >>> l.extend(LossesWithMetadata(torch.tensor([0.1, 0.2], device='cpu'), code_base_structure, token_seq.sub_token_view()[:2]))
         >>> l

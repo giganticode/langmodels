@@ -35,13 +35,15 @@ class EvaluationResult(object):
         self.data = data
 
     def save(self, save_to: Path) -> None:
+        save_to = save_to if isinstance(save_to, Path) else Path(save_to)
         self.data.to_html(save_to / f'{EvaluationResultAccumulator.FILE_NAME}.html')
         self.data.to_csv(save_to / f'{EvaluationResultAccumulator.FILE_NAME}.csv')
         self.data.to_pickle(save_to / f'{EvaluationResultAccumulator.FILE_NAME}.pkl')
 
     @classmethod
-    def from_path(cls, path: Path) -> 'EvaluationResult':
-        return cls.from_data(pandas.read_pickle(path /f'{EvaluationResultAccumulator.FILE_NAME}.pkl'))
+    def from_path(cls, path: Union[Path, str]) -> 'EvaluationResult':
+        path = path if isinstance(path, Path) else Path(path)
+        return cls.from_data(pandas.read_pickle(path / f'{EvaluationResultAccumulator.FILE_NAME}.pkl'))
 
     @classmethod
     def from_data(cls, dataframe: DataFrame) -> 'EvaluationResult':

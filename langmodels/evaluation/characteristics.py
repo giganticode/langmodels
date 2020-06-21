@@ -6,7 +6,6 @@ from math import log
 
 from codeprep.preprocess.tokens import TokenSequence
 from langmodels.model.context import ContextInformation
-from langmodels.model.model import to_full_token_string
 
 
 class Characteristic(ABC):
@@ -30,7 +29,7 @@ class FrequencyRank(Characteristic):
         self.vocab = vocab
 
     def __call__(self, token: TokenSequence, context_information: Optional[ContextInformation] = None) -> Any:
-        token_str = to_full_token_string(token.tokens, keep_word_end_token=False) if token.is_complete() else token.tokens[0]
+        token_str = token.to_full_token_string(keep_word_end_token=False) if token.is_complete() else token.token_str()
         return int(log(self.vocab.stoi[token_str] + 1, 2))
 
 

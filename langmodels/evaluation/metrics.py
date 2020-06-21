@@ -12,7 +12,7 @@ from langmodels.evaluation.dataloader import BatchedTokenLoader
 from langmodels.evaluation.options import EvaluationOptions
 from langmodels.evaluation.result import EvaluationResultAccumulator
 from langmodels.evaluation.evaluator import calculate_losses_for_batch
-from langmodels.model.model import TrainedModel, retain_models_state, to_full_token_string
+from langmodels.model.model import TrainedModel, retain_models_state
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class Entropy(Metric):
         entropies_iterator = tokens.get_iterator(over=entropies, over_full_tokens=False, formatter=sum)
         for single_token_seq_elm, entropy in zip(tokens, entropies_iterator):
             token_characteristics = characterize_token(single_token_seq_elm, evaluation_options.characteristics, None)
-            full_token_string = to_full_token_string(single_token_seq_elm.tokens, include_debug_tokens=True) if single_token_seq_elm.is_complete() else single_token_seq_elm.tokens[0]
+            full_token_string = single_token_seq_elm.to_full_token_string(include_debug_tokens=True) if single_token_seq_elm.is_complete() else single_token_seq_elm.token_str()
             evaluation_result.add(Entropy.__name__, full_token_string, token_characteristics, entropy)
         return evaluation_result
 

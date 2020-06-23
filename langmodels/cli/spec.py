@@ -32,16 +32,17 @@ def train(args):
 
 @dsc.command()
 def evaluate(args):
-    """usage: {program} evaluate <path-to-model> -p <path> -o <path-out> [--sub-tokens] [--batch-size <batch-size>]
+    """usage: {program} evaluate <path-to-model> [--after-epoch <after-epoch>] -p <path> -o <path-out> [--sub-tokens] [--batch-size <batch-size>]
 
     Evaluates the language model on the given corpus
 
     Options:
       <path-to-model>
+      -e, --after-epoch <after-epoch>
       -p, --path <path>
-      -o <path-out>, --output-path <path-out>
+      -o, --output-path <path-out>
       -s, --sub-tokens
-      -b, <batch-size>, --batch-size <batch-size>
+      -b, --batch-size <batch-size>
 
     """
     handle_evaluation(args)

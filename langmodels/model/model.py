@@ -72,7 +72,8 @@ def retain_models_state(func: Callable) -> Callable:
 class TrainedModel(object):
     STARTING_TOKEN = placeholders['ect']
 
-    def __init__(self, path: str, force_use_cpu: bool = False, load_only_description: bool = False):
+    def __init__(self, path: str, after_epoch: Optional[int] = None,
+                 force_use_cpu: bool = False, load_only_description: bool = False):
         if not os.path.exists(path):
             raise FileNotFoundError(f'Path does not exist: {path}')
         self._force_use_cpu = force_use_cpu
@@ -105,7 +106,7 @@ class TrainedModel(object):
 
             self._original_vocab = Vocab.load(os.path.join(path, VOCAB_FILE_NAME))
             term_vocab, self._first_nonterm_token = _create_term_vocab(self._original_vocab)
-            self._model, self._vocab = self._load_model(path, term_vocab)
+            self._model, self._vocab = self._load_model(path, after_epoch, term_vocab)
             to_test_mode(self._model)
             self._initial_snapshot = take_hidden_state_snapshot(self._model)
 
@@ -141,8 +142,10 @@ class TrainedModel(object):
     def vocab(self):
         return self._vocab
 
-    def _load_model(self, path: str, custom_vocab: Optional[Vocab] = None) -> Tuple[SequentialRNN, Vocab]:
-        path_to_model = os.path.join(path, BEST_MODEL_FILE_NAME)
+    def _load_model(self, path: str, after_epoch: Optional[int] = None,
+                    custom_vocab: Optional[Vocab] = None) -> Tuple[SequentialRNN, Vocab]:
+        path_to_model = os.path.join(path, BEST_MODEL_FILE_NAME if after_epoch is None else f'epoch_{after_epoch}.pth')
+
         logger.debug(f"Loading model from: {path_to_model} ...")
 
         vocab = custom_vocab if custom_vocab else self._original_vocab

@@ -52,7 +52,7 @@ def test_evaluate_with_defaults(evaluate_func_mocker):
 
     argv=['evaluate', '/path/to/model', '--path', '/path/to/evaluate', '--output-path', '/path/to/output']
     cli_spec.run(argv)
-    cli_impl.load_from_path.assert_called_with('/path/to/model')
+    cli_impl.load_from_path.assert_called_with('/path/to/model', after_epoch=None)
     cli_impl.evaluate_on_path.assert_called_with(mocked_model, '/path/to/evaluate', Path('/path/to/output'), full_tokens=True)
 
 
@@ -60,9 +60,9 @@ def test_evaluate_with_all_options(evaluate_func_mocker):
     mocked_model = Mock()
     cli_impl.load_from_path.return_value = mocked_model
 
-    argv=['evaluate', '/path/to/model', '--path', '/path/to/evaluate', '--output-path', '/path/to/output', '--sub-tokens', '--batch-size', '13']
+    argv=['evaluate', '/path/to/model', '--after-epoch', '43', '--path', '/path/to/evaluate', '--output-path', '/path/to/output', '--sub-tokens', '--batch-size', '13']
     cli_spec.run(argv)
-    cli_impl.load_from_path.assert_called_with('/path/to/model')
+    cli_impl.load_from_path.assert_called_with('/path/to/model', after_epoch='43')
     cli_impl.evaluate_on_path.assert_called_with(mocked_model, '/path/to/evaluate', Path('/path/to/output'), full_tokens=False, batch_size=13)
 
 
@@ -70,7 +70,7 @@ def test_evaluate_with_short_options(evaluate_func_mocker):
     mocked_model = Mock()
     cli_impl.load_from_path.return_value = mocked_model
 
-    argv=['evaluate', '/path/to/model', '-p', '/path/to/evaluate', '-o', '/path/to/output', '-sb', '13']
+    argv=['evaluate', '/path/to/model', '-e', '43', '-p', '/path/to/evaluate', '-o', '/path/to/output', '-sb', '13']
     cli_spec.run(argv)
-    cli_impl.load_from_path.assert_called_with('/path/to/model')
+    cli_impl.load_from_path.assert_called_with('/path/to/model', after_epoch='43')
     cli_impl.evaluate_on_path.assert_called_with(mocked_model, '/path/to/evaluate', Path('/path/to/output'), full_tokens=False, batch_size=13)

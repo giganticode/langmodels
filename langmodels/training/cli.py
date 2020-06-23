@@ -90,7 +90,7 @@ def handle_train(args) -> None:
               allow_unks=allow_unks, output_path=output_path, rewrite_output=rewrite_output)
     except CudaNotAvailable:
         print('Gpu with CUDA-support is not available on this machine. '
-              'Use --fallback-to-cpu  switch if you want to train on gpu')
+              'Use --fallback-to-cpu  switch if you want to train on cpu')
         exit(4)
 
 

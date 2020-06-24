@@ -54,7 +54,9 @@ def handle_train(args) -> None:
 
 def handle_evaluation(args) -> None:
     after_epoch = get_option(args, '--after-epoch')
-    model = load_from_path(get_option(args, '<path-to-model>'), after_epoch=after_epoch)
+    device = get_option(args, '--device')
+    device = int(device) if device else 0
+    model = load_from_path(get_option(args, '<path-to-model>'), after_epoch=after_epoch, device=device)
     batch_size = get_option(args, '--batch-size')
     kw = {"batch_size": int(batch_size)} if batch_size else {}
     path = get_option(args, '--path')

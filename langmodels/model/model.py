@@ -73,7 +73,7 @@ class TrainedModel(object):
     STARTING_TOKEN = placeholders['ect']
 
     def __init__(self, path: str, after_epoch: Optional[int] = None,
-                 force_use_cpu: bool = False, load_only_description: bool = False):
+                 force_use_cpu: bool = False, load_only_description: bool = False, device: Optional[int] = None):
         if not os.path.exists(path):
             raise FileNotFoundError(f'Path does not exist: {path}')
         self._force_use_cpu = force_use_cpu
@@ -106,7 +106,7 @@ class TrainedModel(object):
 
             self._original_vocab = Vocab.load(os.path.join(path, VOCAB_FILE_NAME))
             term_vocab, self._first_nonterm_token = _create_term_vocab(self._original_vocab)
-            self._model, self._vocab = self._load_model(path, after_epoch, term_vocab)
+            self._model, self._vocab = self._load_model(path, after_epoch, term_vocab, device=device)
             to_test_mode(self._model)
             self._initial_snapshot = take_hidden_state_snapshot(self._model)
 
@@ -143,7 +143,7 @@ class TrainedModel(object):
         return self._vocab
 
     def _load_model(self, path: str, after_epoch: Optional[int] = None,
-                    custom_vocab: Optional[Vocab] = None) -> Tuple[SequentialRNN, Vocab]:
+                    custom_vocab: Optional[Vocab] = None, device: Optional[int] = None) -> Tuple[SequentialRNN, Vocab]:
         path_to_model = os.path.join(path, BEST_MODEL_FILE_NAME if after_epoch is None else f'epoch_{after_epoch}.pth')
 
         logger.debug(f"Loading model from: {path_to_model} ...")
@@ -152,7 +152,7 @@ class TrainedModel(object):
         model = get_language_model(self._config.arch.get_module(), len(vocab.itos), create_custom_config(self._config))
         map_location = get_map_location(self._force_use_cpu)
         if cuda.is_available():
-            model.cuda()
+            model.cuda(device)
         state_dict = torch.load(path_to_model, map_location=map_location)
 
         # a more simple solution is to use fastai's load_learner,

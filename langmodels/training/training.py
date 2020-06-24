@@ -193,4 +193,5 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
         report_experiment_terminated_mormally(experiment_run.comet_experiment)
 
     # TODO export learner?
-    return load_from_path(experiment_run.path_to_trained_model, force_use_cpu=True)
+    return load_from_path(experiment_run.path_to_trained_model, force_use_cpu=True,
+                          device=device_options.non_default_device_to_use)

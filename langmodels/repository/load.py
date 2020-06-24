@@ -44,8 +44,9 @@ def list_pretrained_models(cached: bool = False) -> None:
 
 
 def load_from_path(path: str, after_epoch: Optional[int] = None,
-                   force_use_cpu: bool = False, load_description_only: bool = False) -> TrainedModel:
-    return TrainedModel(path, after_epoch, force_use_cpu, load_description_only)
+                   force_use_cpu: bool = False, load_description_only: bool = False,
+                   device: Optional[int] = None) -> TrainedModel:
+    return TrainedModel(path, after_epoch, force_use_cpu, load_description_only, device=device)
 
 
 MODEL_DATA_FILES = [BEST_MODEL_FILE_NAME, VOCAB_FILE_NAME]

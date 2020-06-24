@@ -43,6 +43,16 @@ class Project(Characteristic):
         return str(code_location.path.relative_to(self.relative_to).parts[0])
 
 
+class LinePosition(Characteristic):
+    def __call__(self, token: TokenSequence, code_location: CodeLocation, context_information: Optional[ContextInformation] = None) -> Any:
+        return code_location.line
+
+
+class TokenPosition(Characteristic):
+    def __call__(self, token: TokenSequence, code_location: CodeLocation, context_information: Optional[ContextInformation] = None) -> Any:
+        return code_location.token
+
+
 def characterize_token(token: TokenSequence, characteristics: List[Characteristic], code_location: CodeLocation,
                        context_information: Optional[ContextInformation] = None) -> List[Any]:
     return [f(token, code_location, context_information) for f in characteristics]

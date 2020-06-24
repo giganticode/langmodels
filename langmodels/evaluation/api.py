@@ -5,7 +5,7 @@ from typing import Optional
 
 import psutil
 
-from langmodels.evaluation.characteristics import Project, TokenType, SubtokenNumber
+from langmodels.evaluation.characteristics import Project, TokenType, SubtokenNumber, LinePosition, TokenPosition
 from langmodels.evaluation.dataloader import BatchedTokenLoader
 from langmodels.evaluation.metrics import metric_name_to_function
 from langmodels.evaluation.options import EvaluationOptions
@@ -45,7 +45,7 @@ def evaluate_on_string(model: TrainedModel, text: str,
     """
     Evaluates the `model` on the provided `text` in scenarios specified by `evaluation_scenario_grid`
     """
-    evaluation_options = evaluation_options or EvaluationOptions(['Entropy'], [TokenType(), SubtokenNumber()])
+    evaluation_options = evaluation_options or EvaluationOptions(['Entropy'], [TokenType(), SubtokenNumber(), LinePosition(), TokenPosition()])
     token_loader = BatchedTokenLoader.from_text(text, model.prep_function.apply_to_text,
                                                 extension=extension, append_eof=append_eof)
 
@@ -55,7 +55,7 @@ def evaluate_on_string(model: TrainedModel, text: str,
 def evaluate_on_file(model: TrainedModel, file: Path,
                      evaluation_options: Optional[EvaluationOptions] = None,
                      full_tokens: bool = True) -> EvaluationResult:
-    evaluation_options = evaluation_options or EvaluationOptions(['Entropy'], [TokenType(), SubtokenNumber()])
+    evaluation_options = evaluation_options or EvaluationOptions(['Entropy'], [TokenType(), SubtokenNumber(), LinePosition(), TokenPosition()])
     suffix: str = file.suffix[1:]
     model.assert_extension_supported(suffix)
 

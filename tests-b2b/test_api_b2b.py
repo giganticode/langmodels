@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 from langmodels import project_dir
-from langmodels.evaluation import EvaluationOptions
+from langmodels.evaluation import EvaluationOptions, TokenType, SubtokenNumber
 from langmodels.evaluation.api import evaluate_on_path, evaluate_on_string, evaluate_on_file
 from langmodels.lmconfig.datamodel import Corpus, LMTrainingConfig, DeviceOptions, Training, RafaelsTrainingSchedule
 from langmodels.model.context import ContextModifier
@@ -45,7 +45,8 @@ def test_evaluate_model_on_path():
                               Path(project_dir) /'data' /'dev' /'valid',
                               save_to=Path(f.name),
                               batch_size=3, n_processes=1,
-                              evaluation_options=EvaluationOptions(context_modifier=ContextModifier(max_context_length=10)))
+                              evaluation_options=EvaluationOptions(['Entropy'], [TokenType(), SubtokenNumber()],
+                                                                   context_modifier=ContextModifier(max_context_length=10)))
 
     total = actual.total()
     assert int(total['Entropy']) == 17

@@ -39,15 +39,15 @@ class LossesWithMetadata:
         >>> class TypeA: pass
         >>> from codeprep.preprocess.metadata import PreppedTokenMetadata
         >>> token_seq = TokenSequence.create(['hi</t>', 'the' ,'re</t>'], PreppedTokenMetadata([1, 2], [TypeA, TypeA]), full_token_view=True)
-        >>> code_base_structure = CodeBaseStructure.of([SnippetStructure.from_path_and_lines(Path(''), [2], 0)])
+        >>> code_base_structure = CodeBaseStructure.of([SnippetStructure.from_path_and_lines(Path(''), [2], 0, 17)])
         >>> l.extend(LossesWithMetadata(torch.tensor([0.1, 0.2], device='cpu'), code_base_structure, token_seq.sub_token_view()[:2]))
         >>> l
-        LossesWithMetadata(losses=tensor([0.1000, 0.2000]), code_structure=CodeBaseStructure(snippets=[.: [2], first-line: 0]), prepped_tokens=[['hi</t>'], ['the']])
+        LossesWithMetadata(losses=tensor([0.1000, 0.2000]), code_structure=CodeBaseStructure(snippets=[.: [2], start: (0:17)]), prepped_tokens=[['hi</t>'], ['the']])
         >>> l.split_by_first_subtoken()
-        (LossesWithMetadata(losses=tensor([0.1000]), code_structure=CodeBaseStructure(snippets=[.: [1], first-line: 0]), prepped_tokens=[['hi</t>']]), LossesWithMetadata(losses=tensor([0.2000]), code_structure=CodeBaseStructure(snippets=[.: [1], first-line: 0]), prepped_tokens=[['the']]))
-        >>> l.extend(LossesWithMetadata(torch.tensor([0.4]), CodeBaseStructure.of([SnippetStructure.from_path_and_lines(Path(''), [1], 0)]), token_seq.sub_token_view()[2:]))
+        (LossesWithMetadata(losses=tensor([0.1000]), code_structure=CodeBaseStructure(snippets=[.: [1], start: (0:17)]), prepped_tokens=[['hi</t>']]), LossesWithMetadata(losses=tensor([0.2000]), code_structure=CodeBaseStructure(snippets=[.: [1], start: (0:18)]), prepped_tokens=[['the']]))
+        >>> l.extend(LossesWithMetadata(torch.tensor([0.4]), CodeBaseStructure.of([SnippetStructure.from_path_and_lines(Path(''), [1], 0, 19)]), token_seq.sub_token_view()[2:]))
         >>> l.split_by_first_subtoken()
-        (LossesWithMetadata(losses=tensor([0.1000, 0.2000, 0.4000]), code_structure=CodeBaseStructure(snippets=[.: [3], first-line: 0]), prepped_tokens=[['hi</t>'], ['the', 're</t>']]), LossesWithMetadata(losses=tensor([]), code_structure=CodeBaseStructure(snippets=[]), prepped_tokens=[]))
+        (LossesWithMetadata(losses=tensor([0.1000, 0.2000, 0.4000]), code_structure=CodeBaseStructure(snippets=[.: [3], start: (0:17)]), prepped_tokens=[['hi</t>'], ['the', 're</t>']]), LossesWithMetadata(losses=tensor([]), code_structure=CodeBaseStructure(snippets=[]), prepped_tokens=[]))
         """
         self.losses = torch.cat([self.losses, other.losses], dim=-1)
         self.code_structure.merge(other.code_structure)

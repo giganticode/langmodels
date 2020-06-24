@@ -1,5 +1,5 @@
 fastai==1.0.57
-codeprep@git+https://github.com/giganticode/codeprep@fe272988d19d3da4f5777a65db23433219eb0162
+codeprep@git+https://github.com/giganticode/codeprep@c3f1e82d412087b4a9f58a80c78231b9a8d8da02
 future==0.18.2
 comet-ml==3.0.2
 flatdict==3.4.0

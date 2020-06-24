@@ -35,7 +35,7 @@ class Entropy(Metric):
         for losses_with_metadata_batch in calculate_losses_for_batch(model, batched_token_loader):
             for i, losses_with_metadata in enumerate(losses_with_metadata_batch):
                 cur_batch_evaluation: EvaluationResultAccumulator = Entropy.sequence_entropy(
-                    losses_with_metadata.losses.tolist(), losses_with_metadata.prepped_tokens,
+                    losses_with_metadata.losses.tolist(), losses_with_metadata.prepped_tokens, losses_with_metadata.code_structure,
                     evaluation_options, full_tokens
                 )
                 total_evaluation = total_evaluation.merge(cur_batch_evaluation)
@@ -45,13 +45,15 @@ class Entropy(Metric):
         return total_evaluation
 
     @staticmethod
-    def sequence_entropy(entropies: List[float], prepped_tokens: TokenSequence, evaluation_options: EvaluationOptions, full_tokens: bool) -> EvaluationResultAccumulator:
+    def sequence_entropy(entropies: List[float], prepped_tokens: TokenSequence, code_locations: CodeBaseStructure, evaluation_options: EvaluationOptions, full_tokens: bool) -> EvaluationResultAccumulator:
         assert prepped_tokens.is_complete()
         evaluation_result: EvaluationResultAccumulator = EvaluationResultAccumulator.empty(evaluation_options.characteristics, evaluation_options.metric_names)
         tokens = prepped_tokens.full_token_view(return_metadata=True) if full_tokens else prepped_tokens.sub_token_view(return_metadata=True)
         entropies_iterator = tokens.get_iterator(over=entropies, over_full_tokens=False, formatter=sum)
-        for single_token_seq_elm, entropy in zip(tokens, entropies_iterator):
-            token_characteristics = characterize_token(single_token_seq_elm, evaluation_options.characteristics, None)
+        preloaded_locations = [l for l in code_locations]
+        locations_iterator = tokens.get_iterator(over=preloaded_locations, over_full_tokens=False, formatter=lambda s: s[0])
+        for single_token_seq_elm, entropy, code_location in zip(tokens, entropies_iterator, locations_iterator):
+            token_characteristics = characterize_token(single_token_seq_elm, evaluation_options.characteristics, code_location, None)
             full_token_string = single_token_seq_elm.to_full_token_string(include_debug_tokens=True) if single_token_seq_elm.is_complete() else single_token_seq_elm.token_str()
             evaluation_result.add(Entropy.__name__, full_token_string, token_characteristics, entropy)
         return evaluation_result

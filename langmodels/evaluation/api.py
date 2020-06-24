@@ -5,6 +5,7 @@ from typing import Optional
 
 import psutil
 
+from langmodels.evaluation.characteristics import Project, TokenType, SubtokenNumber
 from langmodels.evaluation.dataloader import BatchedTokenLoader
 from langmodels.evaluation.metrics import metric_name_to_function
 from langmodels.evaluation.options import EvaluationOptions
@@ -14,8 +15,8 @@ from langmodels.model.model import TrainedModel
 logger = logging.getLogger(__name__)
 
 
-def evaluate(model: TrainedModel, token_loader: BatchedTokenLoader, save_to: Optional[Path] = None,
-             evaluation_options: EvaluationOptions = EvaluationOptions(), full_tokens: bool = True) -> EvaluationResult:
+def evaluate(model: TrainedModel, token_loader: BatchedTokenLoader, evaluation_options: EvaluationOptions,
+             save_to: Optional[Path] = None, full_tokens: bool = True) -> EvaluationResult:
     if save_to:
         if not save_to.exists():
             save_to.mkdir(parents=False)
@@ -38,12 +39,13 @@ def evaluate(model: TrainedModel, token_loader: BatchedTokenLoader, save_to: Opt
 
 
 def evaluate_on_string(model: TrainedModel, text: str,
-                       evaluation_options: EvaluationOptions = EvaluationOptions(),
+                       evaluation_options: Optional[EvaluationOptions] = None,
                        full_tokens: bool = True,
                        extension='java', append_eof: bool = False) -> EvaluationResult:
     """
     Evaluates the `model` on the provided `text` in scenarios specified by `evaluation_scenario_grid`
     """
+    evaluation_options = evaluation_options or EvaluationOptions(['Entropy'], [TokenType(), SubtokenNumber()])
     token_loader = BatchedTokenLoader.from_text(text, model.prep_function.apply_to_text,
                                                 extension=extension, append_eof=append_eof)
 
@@ -51,8 +53,9 @@ def evaluate_on_string(model: TrainedModel, text: str,
 
 
 def evaluate_on_file(model: TrainedModel, file: Path,
-                     evaluation_options: EvaluationOptions = EvaluationOptions(),
+                     evaluation_options: Optional[EvaluationOptions] = None,
                      full_tokens: bool = True) -> EvaluationResult:
+    evaluation_options = evaluation_options or EvaluationOptions(['Entropy'], [TokenType(), SubtokenNumber()])
     suffix: str = file.suffix[1:]
     model.assert_extension_supported(suffix)
 
@@ -62,10 +65,11 @@ def evaluate_on_file(model: TrainedModel, file: Path,
 
 
 def evaluate_on_path(model: TrainedModel, path: Path, save_to: Path,
-                     evaluation_options: EvaluationOptions = EvaluationOptions(),
+                     evaluation_options: Optional[EvaluationOptions] = None,
                      full_tokens: bool = True,
                      batch_size: int = 16,
                      n_processes: Optional[int] = None) -> EvaluationResult:
+    evaluation_options = evaluation_options or EvaluationOptions(['Entropy'], [TokenType(), SubtokenNumber(), Project(path)])
     n_processes = n_processes or psutil.cpu_count(logical=False)
     logger.info(f'Using batch size {batch_size}, processes for pre-processing: {n_processes}')
 
@@ -73,4 +77,4 @@ def evaluate_on_path(model: TrainedModel, path: Path, save_to: Path,
                                                 return_file_structure=False,
                                                 context_modifier=evaluation_options.context_modifier, n_processes=n_processes)
 
-    return evaluate(model, token_loader, save_to, evaluation_options, full_tokens=full_tokens)
+    return evaluate(model, token_loader, evaluation_options, save_to=save_to, full_tokens=full_tokens)

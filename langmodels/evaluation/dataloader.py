@@ -148,16 +148,16 @@ class BatchedTokenLoader:
         >>> iterator = iter(batched_token_loader)
         >>> next(iterator)
         ([['class', 'A'], ['public', '<w>']], {}, \
-[CodeBaseStructure(snippets=[0.java: [2], first-line: 0]), CodeBaseStructure(snippets=[1.java: [2], first-line: 0])], False)
+[CodeBaseStructure(snippets=[0.java: [2], start: (0:0)]), CodeBaseStructure(snippets=[1.java: [2], start: (0:0)])], False)
         >>> next(iterator)
         ([['`pad', '`pad'], ['get', 'Name']], {0: 0}, \
-[CodeBaseStructure(snippets=[]), CodeBaseStructure(snippets=[1.java: [2], first-line: 0])], False)
+[CodeBaseStructure(snippets=[]), CodeBaseStructure(snippets=[1.java: [2], start: (0:2)])], False)
         >>> next(iterator)
         ([['`pad'], ['</w>']], {0: 0}, \
-[CodeBaseStructure(snippets=[]), CodeBaseStructure(snippets=[1.java: [1], first-line: 0])], True)
+[CodeBaseStructure(snippets=[]), CodeBaseStructure(snippets=[1.java: [1], start: (0:4)])], True)
         >>> next(iterator)
         ([['<EOF>', '`pad'], ['{', '<EOF>']], {0: 1}, \
-[CodeBaseStructure(snippets=[0.java: [1], first-line: 0]), CodeBaseStructure(snippets=[1.java: [2], first-line: 0])], True)
+[CodeBaseStructure(snippets=[0.java: [1], start: (0:2)]), CodeBaseStructure(snippets=[1.java: [2], start: (0:5)])], True)
         >>> next(iterator)
         Traceback (most recent call last):
         ...

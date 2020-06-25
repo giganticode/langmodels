@@ -11,6 +11,13 @@ import matplotlib
 
 matplotlib.use('PS')  # to avoid error on OSX - this should go here, before other imports
 
+import numpy
+import torch
+
+numpy.random.seed(13)
+torch.manual_seed(13)
+torch.cuda.manual_seed(13)
+
 from langmodels.model.nn import add_gru_to_model_data
 
 app_name = 'langmodels'

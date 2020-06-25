@@ -1,9 +1,6 @@
 from importlib import import_module
 import_module('comet_ml')
 
-import numpy as np
-import torch
-
 import logging
 import logging.config
 import os
@@ -12,10 +9,14 @@ import appdirs
 import yaml
 import matplotlib
 
+matplotlib.use('PS')  # to avoid error on OSX - this should go here, before other imports
+
+import numpy as np
+import torch
+
 np.random.seed(13)
 torch.manual_seed(13)
-
-matplotlib.use('PS')  # to avoid error on OSX - this should go here, before other imports
+torch.cuda.manual_seed(13)
 
 from langmodels.nn import add_gru_to_model_data
 

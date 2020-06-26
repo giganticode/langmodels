@@ -13,7 +13,7 @@ from torch import cuda
 from codeprep.api.corpus import PreprocessedCorpus
 from codeprep.pipeline.dataset import normalize_extension_string
 from codeprep.preprocess.placeholders import placeholders
-from codeprep.preprocess.tokens import TokenSequence, is_terminal_subtoken
+from codeprep.preprocess.tokens import TokenSequence, is_terminal_subtoken, to_full_token_string
 from langmodels.lmconfig.datamodel import Corpus, TransformerArch, LMTrainingConfig, LMTrainingMetrics
 from langmodels.lmconfig.serialization import load_config_or_metrics_from_file, read_value_from_file
 from langmodels.model.beamsearch import beam_search
@@ -241,7 +241,7 @@ class TrainedModel(object):
                     start_of_empty_numbers = len(numericalized_subtokens)
                 numericalized_subtokens = numericalized_subtokens[:start_of_empty_numbers]
                 subtokens = self._vocab.textify(numericalized_subtokens, sep=None)
-                full_token = (to_full_token_string(subtokens, include_debug_tokens))
+                full_token = to_full_token_string(subtokens, include_debug_tokens)
                 suggestions.append((full_token,  1 / exp(score.item())))
             return suggestions
 

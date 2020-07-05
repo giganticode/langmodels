@@ -1,6 +1,7 @@
 from importlib import import_module
 import_module('comet_ml')
 
+import random
 import logging
 import logging.config
 import os
@@ -17,6 +18,7 @@ import torch
 numpy.random.seed(13)
 torch.manual_seed(13)
 torch.cuda.manual_seed(13)
+random.seed(13)
 
 from langmodels.model.nn import add_gru_to_model_data
 

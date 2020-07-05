@@ -69,6 +69,9 @@ class EvaluationResult(object):
         agg_dict = {column: (column, EvaluationResultAccumulator.metric_name_to_agg_function[column]) for column in data.columns}
         return data.groupby(groups).agg(**agg_dict)
 
+    def __repr__(self) -> str:
+        return str(self.total())
+
 
 class EvaluationResultAccumulator(object):
     """

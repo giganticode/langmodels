@@ -145,18 +145,18 @@ Example
 
     # this does not change the state of the model:
     >>> trained_model.predict_next_full_token(n_suggestions=5)
-    [('(', 0.6746670281525076), (',', 0.23908931414771148), ('{', 0.016398933782901106), ('new', 0.012877109749973123), ('}', 0.012467991164107416)]
+    [('(', 0.67...), (',', 0.23...), ('{', 0.016...), ('new', 0.01...), ('}', 0.01...)]
 
     # adding more context:
     >>> trained_model.feed_text('(', extension='java')
     >>> trained_model.predict_next_full_token(n_suggestions=3)
-    [('(', 0.1522144698931346), ('1', 0.1451228420940328), ('setLength', 0.033325369377327684)]
+    [('(', 0.15...), ('1', 0.14...), ('setLength', 0.03...)]
 
 
     # resetting the state of the model (make it forget the context)
     >>> trained_model.reset()
     >>> trained_model.predict_next_full_token(n_suggestions=5)
-    [('new', 0.05440214581575548), ('.', 0.04269835130132724), ('this', 0.041038340694370415), ('*', 0.016979841775257177), ('gle', 0.01167674835019808)]
+    [('new', 0.05...), ('.', 0.04...), ('this', 0.04...), ('*', 0.01...), ('gle', 0.01...)]
 
 
 Bug prediction based on per-line entropies evaluation

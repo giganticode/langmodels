@@ -47,6 +47,8 @@ except KeyError:
     user_data_dir = appdirs.user_data_dir(app_name, appauthor=False, version=_get_version())
     MODEL_ZOO_PATH = os.path.join(user_data_dir, 'modelzoo')
 
+logging.getLogger(__name__).info(f'MODEL_ZOO_PATH is ${MODEL_ZOO_PATH}')
+
 
 def load_logging_config():
     path = os.path.join(root_package_dir, 'logging.yaml')

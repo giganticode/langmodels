@@ -2,6 +2,7 @@ dist: xenial   # required for Python >= 3.7
 env:
   global:
     - CC_TEST_REPORTER_ID=$CODE_CLIMATE_REPORTER_ID
+    - LANGMODELSPATH='/home/travis/build/giganticode/langmodels/data/models'
 language: python
 python:
   - "3.6"

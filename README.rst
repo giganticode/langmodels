@@ -68,7 +68,7 @@ Loading a default pre-trained model
 
     >>> import langmodels.repository as repo
     >>> trained_model = repo.load_default_model()
-    20... [langmodels.model.model] DEBUG: Loading model from: /Users/hlib/Library/Application Support/langmodels/0.0.4-alpha.0/modelzoo/langmodel-large-split_10k_2_1024_191007.112241_-_langmodel-large-split_10k_2_1024_191022.141344_new/best.pth ...
+    20...
 
 Other model loading options
 ---------------------------

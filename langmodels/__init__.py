@@ -39,8 +39,11 @@ def _get_major_version():
 __version__ = _get_version()
 __major_version__ = _get_major_version()
 
-user_data_dir = appdirs.user_data_dir(app_name, appauthor=False, version=_get_version())
-MODEL_ZOO_PATH = os.path.join(user_data_dir, 'modelzoo')
+try:
+    MODEL_ZOO_PATH = os.environ['LANGMODELSPATH']
+except KeyError:
+    user_data_dir = appdirs.user_data_dir(app_name, appauthor=False, version=_get_version())
+    MODEL_ZOO_PATH = os.path.join(user_data_dir, 'modelzoo')
 
 
 def load_logging_config():

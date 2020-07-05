@@ -22,9 +22,6 @@ __all__ = [
 
 
 if 'LANGMODELS_EVALUATION_TEST' in os.environ:
-    from logging import getLogger
-    logger = getLogger(__name__)
-    logger.info("Running langmodels evaluation in test mode.")
     import pandas as pd
     pd.set_option('display.max_rows', None)
     pd.set_option('display.max_columns', None)

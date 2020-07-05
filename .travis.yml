@@ -30,6 +30,7 @@ before_script:
 script:
   - cd $TRAVIS_BUILD_DIR
   - echo "Current directory is $(pwd)"
+  - python -W ignore -m doctest -o ELLIPSIS -o NORMALIZE_WHITESPACE README.rst
   - coverage run -m pytest --doctest-modules
   - coverage report -m --include=./\*\* --omit=tests/\*\*,tests-b2b/\*\*,.venv/\*\* --fail-under=60
   - coverage xml -i --include=./\*\* --omit=tests/\*\*,tests-b2b/\*\*,.venv/\*\*

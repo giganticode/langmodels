@@ -6,8 +6,7 @@ import numpy as np
 import torch
 
 from langmodels import project_dir
-from langmodels.evaluation import EvaluationOptions, TokenType, SubtokenNumber
-from langmodels.evaluation.api import evaluate_on_path, evaluate_on_string, evaluate_on_file
+from langmodels.evaluation.api import evaluate_on_path, evaluate_on_string
 from langmodels.lmconfig.datamodel import Corpus, LMTrainingConfig, DeviceOptions, Training, RafaelsTrainingSchedule
 from langmodels.model.context import ContextModifier
 from langmodels.model.nn import take_hidden_state_snapshot
@@ -37,38 +36,6 @@ def test_evaluate_model_on_path_subtokens():
     total = actual.total()
     assert int(total['Entropy']) == 9
     assert total['n_samples'] == 2839
-
-
-def test_evaluate_model_on_path():
-    f = tempfile.TemporaryDirectory()
-    actual = evaluate_on_path(load_default_model(),
-                              Path(project_dir) /'data' /'dev' /'valid',
-                              save_to=Path(f.name),
-                              batch_size=3, n_processes=1,
-                              evaluation_options=EvaluationOptions(['Entropy'], [TokenType(), SubtokenNumber()],
-                                                                   context_modifier=ContextModifier(max_context_length=10)))
-
-    total = actual.total()
-    assert int(total['Entropy']) == 17
-    assert total['n_samples'] == 1647
-
-
-def test_evaluate_model_on_file():
-    actual = evaluate_on_file(load_default_model(),
-                              Path(project_dir) /'data' /'dev' /'valid' /'StandardDataTypeEmitter.java')
-
-    total = actual.total()
-    assert int(total['Entropy']) == 15
-    assert total['n_samples'] == 1528
-
-
-def test_evaluate_model_on_string():
-    actual = evaluate_on_string(load_default_model(),
-                                'import java.lang.collections;')
-
-    total = actual.total()
-    assert int(total['Entropy']) == 8
-    assert total['n_samples'] == 7
 
 
 def test_train():

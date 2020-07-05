@@ -1,7 +1,6 @@
 import logging
 import os
 from collections import OrderedDict
-from dataclasses import asdict
 from threading import Lock
 from typing import List, Tuple, Optional, Generator, Callable
 
@@ -241,7 +240,7 @@ class TrainedModel(object):
                     start_of_empty_numbers = len(numericalized_subtokens)
                 numericalized_subtokens = numericalized_subtokens[:start_of_empty_numbers]
                 subtokens = self._vocab.textify(numericalized_subtokens, sep=None)
-                full_token = to_full_token_string(subtokens, include_debug_tokens)
+                full_token = to_full_token_string(subtokens, include_debug_tokens, keep_word_end_token=False)
                 suggestions.append((full_token,  1 / exp(score.item())))
             return suggestions
 

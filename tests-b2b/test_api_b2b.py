@@ -35,7 +35,7 @@ def test_evaluate_model_on_path_subtokens():
                               batch_size=3)
 
     total = actual.total()
-    assert int(total['Entropy']) == 9
+    assert int(total['Entropy']) == 13
     assert total['n_samples'] == 2839
 
 

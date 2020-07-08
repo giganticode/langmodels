@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from math import log
 from pathlib import Path
 from typing import List, Tuple, Mapping, Generator, Union
 
@@ -96,7 +97,7 @@ def calculate_losses_for_batch(trained_model: TrainedModel, token_loader: Batche
             last_layer = get_last_layer_activations(trained_model.model, input_batch)
             loss: torch.Tensor = cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
                                                numericalized_batch.view(-1),
-                                               reduction='none').view(-1, sub_token_seq_len)
+                                               reduction='none').view(-1, sub_token_seq_len) / log(2)
             numericalized_last_predicted = numericalized_batch[:, -1:]
 
             current_batch_losses_with_metadata = [LossesWithMetadata(loss[i], code_structure[i], prepped_token_batch[i]) for i in range(batch_size)]

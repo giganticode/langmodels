@@ -9,7 +9,6 @@ from typing import List, Dict, Any, Tuple, Optional, Union, Generator
 import torch
 from fastai.text import SequentialRNN, get_language_model, Vocab, awd_lstm_lm_config, convert_weights
 from fastai.text.models.transformer import init_transformer
-from math import exp
 from torch import cuda
 
 from codeprep.api.corpus import PreprocessedCorpus
@@ -23,6 +22,7 @@ from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMT
 from langmodels.lmconfig.serialization import load_config_or_metrics_from_file, read_value_from_file
 from langmodels.nn import take_hidden_state_snapshot, HiddenStateSnapshot, restore_snapshot
 from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
+from langmodels.util.misc import entropy_to_probability
 
 logger = logging.getLogger(__name__)
 
@@ -435,7 +435,7 @@ class TrainedModel(object):
                 numericalized_subtokens = numericalized_subtokens[:start_of_empty_numbers]
                 subtokens = self._vocab.textify(numericalized_subtokens, sep=None)
                 full_token = to_full_token_string(subtokens, include_debug_tokens, keep_word_end_token=False)
-                suggestions.append((full_token,  1 / exp(score.item())))
+                suggestions.append((full_token,  entropy_to_probability(score.item())))
             return suggestions
 
     def _format_layers_config(self) -> str:

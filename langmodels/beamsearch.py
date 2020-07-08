@@ -1,3 +1,4 @@
+from math import log
 from typing import Tuple, Callable, Optional
 
 import torch
@@ -132,7 +133,7 @@ def _expand_with_new_candidates(model: SequentialRNN, context: AnyDeviceLongTens
     batch_size = context.size(0)
 
     current_candidate_subtokens = current_candidates.subtokens
-    return FlattenedCandidateList(scores= (-loss + current_candidates.scores[:, None]).view(-1),
+    return FlattenedCandidateList(scores= (-loss / log(2) + current_candidates.scores[:, None]).view(-1),
                                   hidden_indices= torch.arange(0, batch_size, device=current_candidate_subtokens.device)[:, None].expand(batch_size, n_predictions).contiguous().view(-1),
                                   subtokens= torch.cat([current_candidate_subtokens.repeat(n_predictions, 1), num_tokens.view(-1)[:, None]], dim=-1))
 

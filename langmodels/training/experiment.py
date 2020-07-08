@@ -10,8 +10,8 @@ from fastai.text import Vocab
 from flatdict import FlatDict
 
 from langmodels import MODEL_ZOO_PATH
-from langmodels.cuda_util import DeviceOptions
-from langmodels.file_util import check_path_exists, check_path_writable
+from langmodels.util.cuda import DeviceOptions
+from langmodels.util.file import check_path_exists, check_path_writable
 from langmodels.lmconfig.datamodel import LMTrainingConfig, BEST_MODEL_FILE_NAME, create_comet_experiment, \
     TransformerArch, TMP_SUFFIX
 from langmodels.lmconfig.serialization import dump_to_file

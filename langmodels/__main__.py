@@ -1,6 +1,6 @@
 import sys
 
-from langmodels.training.cli import run
+from langmodels.cli.spec import run
 
 
 def main():

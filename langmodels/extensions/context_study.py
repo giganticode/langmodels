@@ -1,18 +1,16 @@
 import os
-
-import time
 from pathlib import Path
+from typing import List, Tuple
 
 import jsons
 import matplotlib
+import time
 from matplotlib import pyplot as plt
 
-from typing import List, Tuple
-
-from langmodels import repository
-from langmodels.evaluation import evaluate_model_on_path
-from langmodels.evaluation.customization import each_token_type_separately
 from langmodels import project_dir
+from langmodels import repository
+from langmodels.evaluation import evaluate_on_path
+from langmodels.util.misc import HOME
 
 
 def get_run_name(path_basename: str) -> str:
@@ -38,8 +36,8 @@ def plot(entropies_list: List[Tuple[List[float], str]], dir: str, title: str):
 def run_and_plot():
     m = repository.load_default_model()
 
-    path = "/path/to/dataset"
-    result = evaluate_model_on_path(m, Path(path), max_context_allowed=200, token_type_subsets=each_token_type_separately())
+    path = os.path.join(HOME, "dev/raw_datasets/allamanis/java-small-test")
+    result = evaluate_on_path(m, Path(path))
 
     matplotlib.use('Agg')
 
@@ -49,8 +47,8 @@ def run_and_plot():
         os.makedirs(dir)
 
     for scenario, summary in result.items():
-        title = scenario.type_subset.short_summary
-        plot(list(map(lambda x: x[0], summary.of_context_length)), dir, title)
+        title = scenario.token_category.short_summary
+        plot([(list(map(lambda x: x[0], summary.values_for_contexts)), title)], dir, title)
         with open(os.path.join(dir, f'{title}.json'), 'w') as f:
             f.write(jsons.dumps(summary))
 
@@ -74,7 +72,7 @@ def plot_saved_ones(path: str, filenames: List[str]):
 
 if __name__ == '__main__':
     # run_and_plot()
-	
+
     plot_saved_ones(os.path.join(project_dir, 'langmodels/figures/test_Wed_Mar__4_00_06_41_2020'), [
         # 'ClosingBracket.json',
         # 'Semicolon.json',

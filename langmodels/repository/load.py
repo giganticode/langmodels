@@ -1,7 +1,7 @@
 import logging
 import os
 from threading import Lock
-from typing import List
+from typing import List, Optional
 
 import requests
 
@@ -42,8 +42,10 @@ def list_pretrained_models(cached: bool = False) -> None:
     print(_get_all_models_query(cached=cached).sorted_by_entropy())
 
 
-def load_from_path(path: str, force_use_cpu: bool = False, load_description_only: bool = False) -> TrainedModel:
-    return TrainedModel(path, force_use_cpu, load_description_only)
+def load_from_path(path: str, after_epoch: Optional[int] = None,
+                   force_use_cpu: bool = False, load_description_only: bool = False,
+                   device: Optional[int] = None) -> TrainedModel:
+    return TrainedModel(path, after_epoch, force_use_cpu, load_description_only, device=device)
 
 
 MODEL_DATA_FILES = [BEST_MODEL_FILE_NAME, VOCAB_FILE_NAME]
@@ -52,7 +54,8 @@ MODEL_METADATA_FILES = [CONFIG_FILE_NAME, METRICS_FILE_NAME, TAGS_FILE_NAME]
 load_model_lock = Lock()
 
 
-def load_model_by_id(id: str, force_use_cpu: bool = False, load_description_only: bool = False) -> TrainedModel:
+def load_model_by_id(id: str, after_epoch: Optional[int] = None,
+                     force_use_cpu: bool = False, load_description_only: bool = False) -> TrainedModel:
     with load_model_lock:
         path = os.path.join(MODEL_ZOO_PATH, id)
         if not os.path.exists(os.path.join(path, BEST_MODEL_FILE_NAME)):
@@ -70,14 +73,14 @@ def load_model_by_id(id: str, force_use_cpu: bool = False, load_description_only
                     download_model(f'{url_to_model_dir}/{model_data_file}',
                                    os.path.join(path, model_data_file))
 
-        return load_from_path(path, force_use_cpu, load_description_only)
+        return load_from_path(path, after_epoch, force_use_cpu, load_description_only)
 
 
-def load_model_with_tag(tag: str, force_use_cpu: bool = False) -> TrainedModel:
+def load_model_with_tag(tag: str, after_epoch: Optional[int] = None, force_use_cpu: bool = False) -> TrainedModel:
     for cached in [True, False]:  # first checking tags of cached models
         for model in query_all_models(cached=cached):
             if model.is_tagged_by(tag):
-                return load_model_by_id(model.id, force_use_cpu=force_use_cpu)
+                return load_model_by_id(model.id, after_epoch, force_use_cpu=force_use_cpu)
     raise ValueError(f'Model tagged with {tag} not found.')
 
 

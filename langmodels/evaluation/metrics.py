@@ -1,110 +1,71 @@
 import logging
-import sys
-from typing import List, Optional, Set, Callable, Dict, Type
+from abc import ABC
+from typing import Mapping, List
 
-from langmodels.evaluation.definitions import EvaluationResult
-from langmodels.evaluation.customization import TokenTypeSubset
-from langmodels.model import TrainedModel
+from tqdm import tqdm
 
-DEFAULT_N_MODEL_SUGGESTIONS = 100
-
+from codeprep.preprocess.codestructure import CodeBaseStructure
+from codeprep.preprocess.tokens import TokenSequence
+from langmodels.evaluation.characteristics import characterize_token
+from langmodels.evaluation.dataloader import BatchedTokenLoader
+from langmodels.evaluation.evaluator import calculate_losses_for_batch
+from langmodels.evaluation.options import EvaluationOptions
+from langmodels.evaluation.result import EvaluationResultAccumulator
+from langmodels.model import TrainedModel, retain_models_state
 
 logger = logging.getLogger(__name__)
 
 
-def bin_entropy(model: TrainedModel, line: str, extension: str, append_eof: bool,
-                token_type_subsets: Optional[Set[TokenTypeSubset]] = None, max_context_allowed: int = sys.maxsize,
-                full_tokens: bool = True) \
-        -> Dict[TokenTypeSubset, EvaluationResult]:
-    """
-    Changes the state of the model!
-    """
-    token_type_subsets = token_type_subsets or {TokenTypeSubset.full_set()}
-
-    all_entropies, tokens, all_token_types, context_lengths = model.get_entropies_for_text(line, extension, full_tokens=full_tokens, append_eof=append_eof, max_context_allowed=max_context_allowed)
-    evaluation_results: Dict[TokenTypeSubset, EvaluationResult] = {}
-    for token_type_subset in token_type_subsets:
-        res = []
-        sum = 0.0
-        count = 0
-        for entropy, token_type in zip(all_entropies, all_token_types):
-            if token_type_subset.contains(token_type):
-                res.append(entropy)
-                sum += entropy
-                count += 1
-            else:
-                res.append(None)
-        if max_context_allowed < 1000:
-            of_context_length_cumul = [(0.0, 0)] * max_context_allowed
-            for entropy, token_type, context_length in zip(all_entropies, all_token_types, context_lengths):
-                if token_type_subset.contains(token_type):
-                    if context_length is not None:
-                        of_context_length_cumul[context_length] = (of_context_length_cumul[context_length][0] + entropy, of_context_length_cumul[context_length][1] + 1)
-            of_context_length = [(val / n if n != 0 else 0.0, n) for (val, n) in of_context_length_cumul]
-        else:
-            of_context_length = None
-        evaluation_results[token_type_subset] = EvaluationResult(tokens, list(map(lambda tt: tt.__name__, all_token_types)),
-                                                                 res, sum / count if count else 0., of_context_length)
-    return evaluation_results
+class Metric(ABC):
+    def __call__(model: TrainedModel, batched_token_loader: BatchedTokenLoader,
+                 evaluation_options: EvaluationOptions,
+                 full_tokens: bool = True) -> EvaluationResultAccumulator:
+        pass
 
 
-def mrr(model: TrainedModel, line: str, extension: str, append_eof: bool,
-        token_type_subsets: Optional[Set[TokenTypeSubset]] = None) \
-        -> Dict[TokenTypeSubset, EvaluationResult]:
-    """
-    Changes the state of the model!
-    """
-    token_type_subsets = token_type_subsets or {TokenTypeSubset.full_set()}
+class Entropy(Metric):
+    @retain_models_state
+    def __call__(self, model: TrainedModel, batched_token_loader: BatchedTokenLoader,
+                evaluation_options: EvaluationOptions,
+                full_tokens: bool = True) -> EvaluationResultAccumulator:
+        total_evaluation: EvaluationResultAccumulator = EvaluationResultAccumulator.empty(evaluation_options.characteristics, list(metric_name_to_function.keys()))
+        tqdmed_batched_losses = tqdm(total=batched_token_loader.n_files, unit='files')
+        all_structure_batches: List[CodeBaseStructure] = [CodeBaseStructure.empty() for i in range(batched_token_loader.batch_size)]
+        for losses_with_metadata_batch in calculate_losses_for_batch(model, batched_token_loader):
+            for i, losses_with_metadata in enumerate(losses_with_metadata_batch):
+                cur_batch_evaluation: EvaluationResultAccumulator = Entropy.sequence_entropy(
+                    losses_with_metadata.losses.tolist(), losses_with_metadata.prepped_tokens, losses_with_metadata.code_structure,
+                    evaluation_options, full_tokens
+                )
+                total_evaluation = total_evaluation.merge(cur_batch_evaluation)
+                all_structure_batches[i].merge(losses_with_metadata.code_structure)
+            Entropy.update_progress_bar(tqdmed_batched_losses, total_evaluation, all_structure_batches)
+        tqdmed_batched_losses.close()
+        return total_evaluation
 
-    evaluation_results: Dict[TokenTypeSubset, EvaluationResult] = {}
-    for token_type_subsets in token_type_subsets:
-        inverse_rank_sum = .0
-        count = 0
-        inverse_ranks: List[Optional[float]] = []
-        all_tokens: List[str] = []
-        all_token_types: List[str] = []
+    @staticmethod
+    def sequence_entropy(entropies: List[float], prepped_tokens: TokenSequence, code_locations: CodeBaseStructure, evaluation_options: EvaluationOptions, full_tokens: bool) -> EvaluationResultAccumulator:
+        assert prepped_tokens.is_complete()
+        evaluation_result: EvaluationResultAccumulator = EvaluationResultAccumulator.empty(evaluation_options.characteristics, evaluation_options.metric_names)
+        tokens = prepped_tokens.full_token_view(return_metadata=True) if full_tokens else prepped_tokens.sub_token_view(return_metadata=True)
+        entropies_iterator = tokens.get_iterator(over=entropies, over_full_tokens=False, formatter=sum)
+        preloaded_locations = [l for l in code_locations]
+        locations_iterator = tokens.get_iterator(over=preloaded_locations, over_full_tokens=False, formatter=lambda s: s[0])
+        for single_token_seq_elm, entropy, code_location in zip(tokens, entropies_iterator, locations_iterator):
+            token_characteristics = characterize_token(single_token_seq_elm, evaluation_options.characteristics, code_location, None)
+            full_token_string = single_token_seq_elm.to_full_token_string(include_debug_tokens=True) if single_token_seq_elm.is_complete() else single_token_seq_elm.token_str()
+            evaluation_result.add(Entropy.__name__, full_token_string, token_characteristics, entropy)
+        return evaluation_result
 
-        for predictions, prep_token, token_type in \
-                model.get_predictions_and_feed(line, extension,
-                                               n_suggestions=DEFAULT_N_MODEL_SUGGESTIONS,
-                                               append_eof=append_eof):
-            all_tokens.append(prep_token)
-            all_token_types.append(token_type.__name__)
-            predicted_tokens = list(map(lambda p: p[0], predictions))
-            if token_type_subsets.contains(token_type):
-                try:
-                    rank = predicted_tokens.index(prep_token) + 1
-                    inverse_rank = 1. / rank
-                except ValueError:  # actual token is not in prediction list
-                    inverse_rank = 0.
-                inverse_rank_sum += inverse_rank
-                inverse_ranks.append(inverse_rank)
-                count += 1
-            else:
-                inverse_ranks.append(None)
-        evaluation_results[token_type_subsets] = EvaluationResult(all_tokens, all_token_types, inverse_ranks, inverse_rank_sum / count if count else 1.)
-
-    return evaluation_results
-
-
-Metric = Callable[[TrainedModel, List[str], str, bool, Optional[Set[TokenTypeSubset]], Dict[Type, float], int],
-                  Dict[TokenTypeSubset, EvaluationResult]]
-
-
-def entropy_to_probability(entropy: float) -> float:
-    """
-    >>> entropy_to_probability(0.0)
-    1.0
-
-    >>> entropy_to_probability(1.0)
-    0.5
-
-    >>> entropy_to_probability(3.0)
-    0.125
-
-    >>> entropy_to_probability(100.0)
-    7.888609052210118e-31
-    """
-    return 2 ** -entropy
+    @staticmethod
+    def update_progress_bar(tqdmed_batched_losses: tqdm,
+                            total_evaluation: EvaluationResultAccumulator, file_structure_batch: List[CodeBaseStructure]) -> None:
+        prep_file_estimate = int(sum(map(lambda cs: len(cs.snippets), file_structure_batch)))
+        tqdmed_batched_losses.update(prep_file_estimate - tqdmed_batched_losses.n)
+        if tqdmed_batched_losses.total//32 & (tqdmed_batched_losses.total//32 - 1) == 0 or prep_file_estimate//32 & (prep_file_estimate//32 - 1) == 0:
+            tqdmed_batched_losses.set_postfix(ordered_dict=total_evaluation.build().total())
 
 
+metric_name_to_function: Mapping[str, Metric] = {
+    Entropy.__name__: Entropy()
+}

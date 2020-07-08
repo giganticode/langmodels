@@ -1,34 +1,31 @@
-import os
-
 import logging
+import os
+from typing import Tuple, Union, Optional
+
 import torch
 from fastai.basic_data import DataBunch
 from fastai.basic_train import validate
 from fastai.callback import CallbackHandler, Callback
 from fastai.callbacks.misc import StopAfterNBatches
-from fastai.layers import CrossEntropyFlat
 from fastai.metrics import accuracy, Perplexity
 from fastai.text import Vocab, language_model_learner
-from fastai.train import fit_one_cycle, Learner, EarlyStoppingCallback
-from typing import Tuple, Union, Optional
+from fastai.train import Learner
 
 import codeprep.api.corpus as api
 from codeprep.api.corpus import PreprocessedCorpus
-from codeprep.util import to_literal_str
-
-from langmodels.cuda_util import DeviceOptions
-from langmodels.file_util import get_all_files
+from codeprep.util.misc import to_literal_str
+from langmodels.util.cuda import DeviceOptions
+from langmodels.util.file import get_all_files
 from langmodels.lmconfig.datamodel import LMTrainingConfig, Corpus
-from langmodels.training.experiment import ExperimentRun
 from langmodels.model import TrainedModel, create_custom_config
 from langmodels.repository.load import load_from_path
 from langmodels.tensor_ops import mrr
-from langmodels.training.data import EmptyDataBunch, create_databunch
-from langmodels.training.schedule import ReduceLRCallback
+from langmodels.training.data import EmptyDataBunch, create_databunch, binary_cross_entropy_flat
+from langmodels.training.experiment import ExperimentRun
 from langmodels.training.subepoch_files import EpochFileLoader
 from langmodels.training.tracking import FirstModelTrainedCallback, LrLogger, RetryingSaveModelCalback, \
     MetricSavingCallback, report_experiment_terminated_mormally
-from langmodels.util import HOME
+from langmodels.util.misc import HOME
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +68,7 @@ def run_validation(trained_model: TrainedModel, corpus: Corpus, only_validation_
             """Save the extra outputs for later and only returns the true output."""
             return {'last_output': last_output[0]}
 
-    return validate(trained_model.model, databunch.valid_dl, loss_func=CrossEntropyFlat(),
+    return validate(trained_model.model, databunch.valid_dl, loss_func=binary_cross_entropy_flat(),
                     cb_handler=CallbackHandler([DetupleCallback()]))
 
 
@@ -104,7 +101,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     experiment_run.log_experiment_input()
 
     if isinstance(training_config.corpus, Corpus):
-        prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply(training_config.corpus,
+        prep_corpus: api.PreprocessedCorpus = training_config.prep_function.apply_to_corpus(training_config.corpus,
                                                                               calc_vocab=True,
                                                                               output_path=PATH_TO_PREP_DATASETS)
     elif isinstance(training_config.corpus, PreprocessedCorpus):
@@ -137,6 +134,7 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
                                      beta=training.activation_regularization.beta,
                                      path=os.path.dirname(experiment_run.path_to_trained_model),
                                      model_dir=os.path.basename(experiment_run.path_to_trained_model))
+    learner.loss_func = binary_cross_entropy_flat()
 
     if training_config.training.sub_epochs:
         files_per_epoch = training_config.training.sub_epochs.n_files
@@ -155,5 +153,6 @@ def train(training_config: LMTrainingConfig = LMTrainingConfig(),
     if experiment_run.comet_experiment:
         report_experiment_terminated_mormally(experiment_run.comet_experiment)
 
-    # TODO export learner?
-    return load_from_path(experiment_run.path_to_trained_model, force_use_cpu=True), learner
+    model = load_from_path(experiment_run.path_to_trained_model, force_use_cpu=True,
+                          device=device_options.non_default_device_to_use)
+    return model if not return_fastai_learner else (model, learner)

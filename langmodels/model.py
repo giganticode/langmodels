@@ -1,33 +1,30 @@
 import logging
 import os
 from collections import OrderedDict
+from dataclasses import dataclass
 from threading import Lock
-from typing import List, Dict, Any, Tuple, Optional, Union, Type, Generator
+from typing import Callable
+from typing import List, Dict, Any, Tuple, Optional, Union, Generator
 
 import torch
-from dataclasses import dataclass, asdict
-from fastai.text import SequentialRNN, get_language_model, F, Vocab, awd_lstm_lm_config, convert_weights
+from fastai.text import SequentialRNN, get_language_model, Vocab, awd_lstm_lm_config, convert_weights
 from fastai.text.models.transformer import init_transformer
 from math import exp
 from torch import cuda
 
 from codeprep.api.corpus import PreprocessedCorpus
 from codeprep.pipeline.dataset import normalize_extension_string
-from codeprep.preprocess.metadata import check_metadata_validity, PreprocessingMetadata
 from codeprep.preprocess.placeholders import placeholders
-from codeprep.subtokens import is_terminal_subtoken, FullTokenIterator, SubtokenIterator
-
+from codeprep.preprocess.tokens import TokenSequence, is_terminal_subtoken, to_full_token_string
 from langmodels.beamsearch import beam_search
-from langmodels.cuda_util import get_device, get_map_location
+from langmodels.util.cuda import get_device, get_map_location
 from langmodels.lmconfig.datamodel import Corpus, LstmArch, TransformerArch, LMTrainingConfig, GruArch, \
     LMTrainingMetrics, BEST_MODEL_FILE_NAME
 from langmodels.lmconfig.serialization import load_config_or_metrics_from_file, read_value_from_file
+from langmodels.nn import take_hidden_state_snapshot, HiddenStateSnapshot, restore_snapshot
 from langmodels.nn import to_test_mode, get_last_layer_activations, TORCH_LONG_MIN_VAL
-from langmodels.util import to_binary_entropy, split_list_into_nested_chunks
-from langmodels.nn import take_hidden_state_snapshot
 
 logger = logging.getLogger(__name__)
-
 
 PAD_TOKEN_INDEX = 1
 
@@ -111,28 +108,20 @@ def _check_is_term_vocab(vocab: Vocab, first_non_term: int) -> None:
                              f"that has index {vocab.itos.index(token)}")
 
 
-def to_full_token_string(subtokens: List[str], include_debug_tokens=False) -> str:
-    """
-    >>> to_full_token_string(['the', 're</t>'], include_debug_tokens=True)
-    'the|re</t>'
-
-    >>> to_full_token_string(['re', 'vol', 'v', 'er</t>'])
-    'revolver</t>'
-
-    >>> to_full_token_string([placeholders['olc_end']])
-    '<EOL>'
-    """
-    separator = '|' if include_debug_tokens else ''
-    full_token = separator.join(subtokens)
-    if full_token in placeholders.values():
-        return full_token
-
-    if not is_terminal_subtoken(full_token):
-        raise ValueError(f'{full_token} is not a full token')
-    return full_token
-
-
 PredictionList = List[Tuple[str, float]]
+
+lock = Lock()
+
+
+def retain_models_state(func: Callable) -> Callable:
+    def wrapper(metric, model: TrainedModel, *args, **kwargs):
+        model_snapshot: HiddenStateSnapshot = take_hidden_state_snapshot(model.model)
+        try:
+            return func(metric, model, *args, **kwargs)
+        finally:
+            restore_snapshot(model.model, model_snapshot)
+    return wrapper
+
 
 @dataclass
 class ModelDescription(object):
@@ -156,9 +145,6 @@ class ModelDescription(object):
 
     def get_value_list(self) -> List[str]:
         return list(map(lambda a: self.__getattribute__(a), ModelDescription.get_attribute_list()))
-
-
-lock = Lock()
 
 
 @dataclass(frozen=True)
@@ -270,7 +256,8 @@ class ContextUsage(object):
 class TrainedModel(object):
     STARTING_TOKEN = placeholders['ect']
 
-    def __init__(self, path: str, force_use_cpu: bool = False, load_only_description: bool = False):
+    def __init__(self, path: str, after_epoch: Optional[int] = None,
+                 force_use_cpu: bool = False, load_only_description: bool = False, device: Optional[int] = None):
         if not os.path.exists(path):
             raise FileNotFoundError(f'Path does not exist: {path}')
         self._force_use_cpu = force_use_cpu
@@ -294,7 +281,7 @@ class TrainedModel(object):
             value = read_value_from_file(path_to_tags_file, value_type=str)
             if value != '':
                 self._tags = value.split(',')
-        self._prep_function = self._config.prep_function
+        self.prep_function = self._config.prep_function
 
         self._load_only_description = load_only_description
         if not load_only_description:
@@ -303,7 +290,7 @@ class TrainedModel(object):
 
             self._original_vocab = Vocab.load(os.path.join(path, VOCAB_FILE_NAME))
             term_vocab, self._first_nonterm_token = _create_term_vocab(self._original_vocab)
-            self._model, self._vocab = self._load_model(path, term_vocab)
+            self._model, self._vocab = self._load_model(path, after_epoch, term_vocab, device=device)
             to_test_mode(self._model)
             self._initial_snapshot = take_hidden_state_snapshot(self._model)
 
@@ -339,15 +326,17 @@ class TrainedModel(object):
     def vocab(self):
         return self._vocab
 
-    def _load_model(self, path: str, custom_vocab: Optional[Vocab] = None) -> Tuple[SequentialRNN, Vocab]:
-        path_to_model = os.path.join(path, BEST_MODEL_FILE_NAME)
+    def _load_model(self, path: str, after_epoch: Optional[int] = None,
+                    custom_vocab: Optional[Vocab] = None, device: Optional[int] = None) -> Tuple[SequentialRNN, Vocab]:
+        path_to_model = os.path.join(path, BEST_MODEL_FILE_NAME if after_epoch is None else f'epoch_{after_epoch}.pth')
+
         logger.debug(f"Loading model from: {path_to_model} ...")
 
         vocab = custom_vocab if custom_vocab else self._original_vocab
         model = get_language_model(self._config.arch.get_module(), len(vocab.itos), create_custom_config(self._config))
         map_location = get_map_location(self._force_use_cpu)
         if cuda.is_available():
-            model.cuda()
+            model.cuda(device)
         state_dict = torch.load(path_to_model, map_location=map_location)
 
         # a more simple solution is to use fastai's load_learner,
@@ -373,27 +362,21 @@ class TrainedModel(object):
         self._context = []
 
     def prep_corpus(self, corpus: Corpus, **kwargs) -> PreprocessedCorpus:
-        return self._prep_function.apply(corpus, **kwargs)
+        return self.prep_function.apply_to_corpus(corpus, **kwargs)
 
-    def prep_text(self, text: str, extension: str, **kwargs) -> Union[Tuple[List[str], PreprocessingMetadata], List[str]]:
-        import codeprep.api.text as text_api
-        return_metadata: bool = 'return_metadata' in kwargs and kwargs['return_metadata']
-        text_callable = getattr(text_api, self._prep_function.callable.__name__)
-        preprocessing_result = text_callable(text, extension=extension, force_reinit_bpe_data=False,
-                                            *self._prep_function.params, **asdict(self._prep_function.options), **kwargs)
-        if return_metadata:
-            check_metadata_validity(*preprocessing_result)
-        return preprocessing_result
+    def prep_text(self, text: str, extension: str, **kwargs) -> TokenSequence:
+        return self.prep_function.apply_to_text(text, extension, **kwargs)
 
-    def get_predictions_and_feed(self, text: str, extension: str, n_suggestions: int, append_eof: bool)\
-            -> Generator[Tuple[PredictionList, str, Type], None, None]:
-        prep_text, metadata = self.prep_text(text, extension, return_metadata=True, append_eof=append_eof)
+    def get_predictions_and_feed(self, text: str, extension: str, n_suggestions: int, append_eof: bool) \
+            -> Generator[Tuple[PredictionList, str], None, None]:
+        prepped_tokens = self.prep_text(text, extension, append_eof=append_eof)
 
-        for ind, prep_token in FullTokenIterator(prep_text, metadata.word_boundaries, return_full_token_index=True):
+        for prepped_token in prepped_tokens.full_token_view(return_metadata=True):
             predictions = self.predict_next_full_token(n_suggestions)
-            self._feed_prep_tokens([prep_token])
 
-            yield predictions, prep_token, metadata.token_types[ind]
+            self._feed_prep_tokens(prepped_tokens.sub_token_view())
+
+            yield predictions, "".join(prepped_token.token_str)
 
     def _check_model_loaded(self, only_description=False):
         if not only_description and self._load_only_description:
@@ -410,74 +393,16 @@ class TrainedModel(object):
 
     def check_inference_possible_for_file_type(self, extension: str) -> bool:
         try:
-            self._assert_inference_possible_for_file_type(extension)
+            self.assert_extension_supported(extension)
             return True
         except ValueError:
             return False
 
     def feed_text(self, text: str, extension: str) -> None:
-        self._assert_inference_possible_for_file_type(extension)
+        self.assert_extension_supported(extension)
 
-        prep_text, metadata = self.prep_text(text, extension=extension, return_metadata=True)
-        self._feed_prep_tokens(prep_text)
-
-    def get_entropies_for_text(self, text: str, extension: str, full_tokens: bool,
-                               append_eof: bool, max_context_allowed: int) \
-            -> Tuple[List[float], List[str], List[Type], List[int]]:
-        tokens, metadata = self.prep_text(text, extension, return_metadata=True, append_eof=append_eof)
-        max_subtokens_per_chunk = 200
-        context_length_for_next_prediction = len(self.context)
-        prep_text_chunks = split_list_into_nested_chunks(tokens, max_context_allowed - len(self.context), max_context_allowed, max_subtokens_per_chunk)
-        context_usage = ContextUsage.from_chunks(prep_text_chunks, context_length_for_next_prediction)
-        # if the line is too big, we break it down to chunks to fit it into gpu memory
-        # big chunks require more memory, small chunks require more time
-        subtoken_entropies = self._get_entropies_for_prep_text(prep_text_chunks, max_context_allowed)
-
-        iterator_type = FullTokenIterator if full_tokens else SubtokenIterator
-
-        def formatter(lst: List[Tuple[float, str, int]]) -> Tuple[float, str, int]:
-            entropies, tokens, context_lengths = tuple(zip(*lst))
-            return sum(entropies), "".join(tokens), context_lengths[0] if len(context_lengths) == 1 else None
-
-        iterator = iterator_type(list(zip(subtoken_entropies, tokens, context_usage)), metadata.word_boundaries,
-                                 format=formatter, return_full_token_index=True)
-        e, t, tt, ct = [], [], [], []
-        for ind, (entropy, token, context_length) in iterator:
-            e.append(entropy)
-            t.append(token)
-            tt.append(metadata.token_types[ind])
-            ct.append(context_length)
-        return e, t, tt, ct
-
-    def _get_entropies_for_prep_text(self, prep_text_chunks: List[List[List[str]]],
-                                     max_context_allowed: int) -> List[float]:
-        """
-        changes hidden states of the model!!
-        """
-        with lock:
-            self._check_model_loaded()
-
-        if prep_text_chunks == [[]]:
-            return []
-
-        loss_list = []
-
-        for chunk in prep_text_chunks:
-            for sub_chunk in chunk:
-                numericalized_prep_text = torch.tensor([self._vocab.numericalize(sub_chunk)],
-                                                       device=get_device(self._force_use_cpu))
-
-                self._save_context(sub_chunk)
-                last_layer = get_last_layer_activations(self._model, torch.cat([self._last_predicted_token_tensor, numericalized_prep_text[:, :-1]], dim=1))
-                loss = F.cross_entropy(last_layer.view(-1, last_layer.shape[-1]),
-                                       numericalized_prep_text.view(-1),
-                                       reduction='none')
-                binary_loss = to_binary_entropy(loss)
-                loss_list.extend(binary_loss.tolist())
-                self._last_predicted_token_tensor = numericalized_prep_text[:, -1:]
-            if len(self.context) == max_context_allowed:
-                self._reset()
-        return loss_list
+        token_sequence = self.prep_text(text, extension=extension)
+        self._feed_prep_tokens(token_sequence.tokens)
 
     def _reset(self) -> None:
         self._model.reset()
@@ -509,7 +434,7 @@ class TrainedModel(object):
                     start_of_empty_numbers = len(numericalized_subtokens)
                 numericalized_subtokens = numericalized_subtokens[:start_of_empty_numbers]
                 subtokens = self._vocab.textify(numericalized_subtokens, sep=None)
-                full_token = (to_full_token_string(subtokens, include_debug_tokens))
+                full_token = to_full_token_string(subtokens, include_debug_tokens, keep_word_end_token=False)
                 suggestions.append((full_token,  1 / exp(score.item())))
             return suggestions
 
@@ -534,7 +459,7 @@ class TrainedModel(object):
                                 size_on_disk_mb=self._metrics.size_on_disk_mb,
                                 tags=self._tags)
 
-    def _assert_inference_possible_for_file_type(self, extension: str) -> None:
+    def assert_extension_supported(self, extension: str) -> None:
         if extension not in normalize_extension_string(self._config.corpus.extensions):
             raise ValueError(f'The model was not trained on .{extension} files. Cannot do inference.')
 

@@ -1,28 +1,25 @@
 import os
 import re
 from abc import ABC, abstractmethod
-
-import torch
+from dataclasses import dataclass, field, asdict
 from functools import partial
+from typing import Optional, Callable, Tuple, List, Type, Dict, Any
 
 import jsons
 import sys
-from dataclasses import dataclass, field, asdict
-
 from comet_ml import Experiment
 from fastai.basic_train import Learner
 from fastai.callbacks import EarlyStoppingCallback
+from fastai.text import AWD_LSTM, Transformer, Activation
 from fastai.train import fit_one_cycle
-from torch import optim
-from typing import Optional, Callable, Tuple, List, Type, Dict, Any
 
 import codeprep.api.corpus as corpus_api
 from codeprep.api.corpus import PreprocessedCorpus
-from fastai.text import AWD_LSTM, Transformer, Activation
-
+from codeprep.preprocess.tokens import TokenSequence
 from langmodels import __version__, __major_version__
 from langmodels.nn import GRU
-from langmodels.util import HOME
+from langmodels.training.schedule import ReduceLRCallback
+from langmodels.util.misc import HOME
 
 CONFIG_VERSION = __major_version__ if __major_version__ > 0 else __version__
 
@@ -83,6 +80,24 @@ class CosineLRSchedule(TrainingSchedule):
 
 
 @dataclass(frozen=True)
+class RafaelsTrainingSchedule(TrainingSchedule):
+    name: str = 'rafael'
+    init_lr: float = 1e-4
+    mult_coeff: float = 0.5
+    max_epochs: int = 50
+    max_lr_reduction_times: int = 6
+    patience: int = 0
+
+    def fit(self, learner: Learner, weigth_decay: float):
+        reduce_lr_callback = ReduceLRCallback(learner,
+                                              mult_coeff=self.mult_coeff,
+                                              max_times_lr_decrease=self.max_lr_reduction_times,
+                                              patience=self.patience)
+        learner.callbacks.append(reduce_lr_callback)
+        learner.fit(epochs=self.max_epochs, lr=self.init_lr, wd=weigth_decay)
+
+
+@dataclass(frozen=True)
 class Corpus(object):
     path: str = os.path.join(HOME, 'dataset')
     extensions: str = 'java'  # in format "py" or "java|c|py"
@@ -108,12 +123,25 @@ class PrepFunction(object):
     options: PrepFunctionOptions = PrepFunctionOptions()
 
     @property
-    def apply(self) -> ParametrizedPrepCallable:
+    def apply_to_corpus(self) -> ParametrizedPrepCallable:
         def prep_corpus(corpus: Corpus, **kwargs) -> PreprocessedCorpus:
             return self.callable(corpus.path, *self.params, **asdict(self.options), **kwargs,
                                  extensions=corpus.extensions)
 
         return prep_corpus
+
+    @property
+    def apply_to_text(self) -> TokenSequence:
+        def prep_text(text: str, extension: str, **kwargs) -> TokenSequence:
+            import codeprep.api.text as text_api
+            func_name = self.callable.__name__
+            text_callable = getattr(text_api, func_name)
+            reinit_bpe_data_param = {'force_reinit_bpe_data': False } if func_name == 'bpe' else {}
+            prepped_token = text_callable(text, extension=extension,
+                                          *self.params, **reinit_bpe_data_param, **asdict(self.options), **kwargs)
+            return prepped_token
+
+        return prep_text
 
     @staticmethod
     def serializer(prep_function: 'PrepFunction', **kwargs) -> Dict[str, Any]:
@@ -154,6 +182,7 @@ class SGD(Optimizer):
     momentum: float = 0.9
 
     def get_callable(self):
+        import torch
         return partial(torch.optim.SGD, momentum=self.momentum)
 
 
@@ -163,7 +192,8 @@ class Adam(Optimizer):
     betas: Tuple[float, float] = (0.9, 0.99)
 
     def get_callable(self):
-        return partial(optim.Adam, betas=self.betas)
+        import torch
+        return partial(torch.optim.Adam, betas=self.betas)
 
 
 def camel_case_to_snake_case(name: str) -> str:
@@ -269,6 +299,20 @@ class Training(object):
     activation_regularization: ActivationRegularization = ActivationRegularization()
     schedule: TrainingSchedule = CosineLRSchedule()
     sub_epochs: Optional[SubEpochs] = None
+    _serializer: Any = None
+
+    @staticmethod
+    def deserializer(dct: Dict[str, Any], cls: Type['Training'], **kwargs) -> 'Training':
+        return jsons.load(dct, cls, fork_inst=cls.get_serializer())
+
+    @classmethod
+    def get_serializer(cls):
+        if not cls._serializer:
+            cls._serializer = jsons.fork()
+            jsons.set_deserializer(field_based_deserializer_func, cls=Optimizer, fork_inst=cls._serializer)
+            jsons.set_deserializer(field_based_deserializer_func, cls=TrainingSchedule, fork_inst=cls._serializer)
+
+        return cls._serializer
 
     def __post_init__(self):
         if self.sub_epochs is not None and isinstance(self.schedule, CosineLRSchedule):
@@ -289,13 +333,12 @@ class LMTrainingConfig(object):
 
     @classmethod
     def get_serializer(cls):
-        if not LMTrainingConfig._serializer:
+        if not cls._serializer:
             cls._serializer = jsons.fork()
             jsons.set_deserializer(jsons.default_object_deserializer, cls=cls, fork_inst=cls._serializer)
             jsons.set_deserializer(field_based_deserializer_func, cls=Arch, fork_inst=cls._serializer)
-            jsons.set_deserializer(field_based_deserializer_func, cls=TrainingSchedule, fork_inst=cls._serializer)
-            jsons.set_deserializer(field_based_deserializer_func, cls=Optimizer, fork_inst=cls._serializer)
             jsons.set_deserializer(PrepFunction.deserializer, cls=PrepFunction, fork_inst=cls._serializer)
+            jsons.set_deserializer(Training.deserializer, cls=Training, fork_inst=cls._serializer)
 
             jsons.set_serializer(jsons.default_object_serializer, cls=cls, fork_inst=cls._serializer)
             jsons.set_serializer(PrepFunction.serializer, cls=PrepFunction, fork_inst=cls._serializer)

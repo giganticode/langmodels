@@ -2,6 +2,8 @@ dist: xenial   # required for Python >= 3.7
 env:
   global:
     - CC_TEST_REPORTER_ID=$CODE_CLIMATE_REPORTER_ID
+    - LANGMODELSPATH="$TRAVIS_BUILD_DIR/data/models"
+    - LANGMODELS_EVALUATION_TEST='true'
 language: python
 python:
   - "3.6"
@@ -30,8 +32,9 @@ before_script:
 script:
   - cd $TRAVIS_BUILD_DIR
   - echo "Current directory is $(pwd)"
+  - python -W ignore -m doctest -o ELLIPSIS -o NORMALIZE_WHITESPACE README.rst
   - coverage run -m pytest --doctest-modules
-  - coverage report -m --include=./\*\* --omit=tests/\*\*,.venv/\*\* --fail-under=60
-  - coverage xml -i --include=./\*\* --omit=tests/\*\*,.venv/\*\*
+  - coverage report -m --include=./\*\* --omit=tests/\*\*,tests-b2b/\*\*,.venv/\*\* --fail-under=60
+  - coverage xml -i --include=./\*\* --omit=tests/\*\*,tests-b2b/\*\*,.venv/\*\*
 after_script:
   - if [[ "$TRAVIS_PULL_REQUEST" == "false" && "$TRAVIS_PYTHON_VERSION" == "3.7" ]]; then echo "Reporting coverage to Code Climate" && ./cc-test-reporter after-build --exit-code $TRAVIS_TEST_RESULT; fi

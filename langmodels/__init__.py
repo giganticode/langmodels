@@ -1,6 +1,10 @@
 from importlib import import_module
+
+from langmodels.nn import add_gru_to_model_data
+
 import_module('comet_ml')
 
+import random
 import logging
 import logging.config
 import os
@@ -11,14 +15,13 @@ import matplotlib
 
 matplotlib.use('PS')  # to avoid error on OSX - this should go here, before other imports
 
-import numpy as np
+import numpy
 import torch
 
-np.random.seed(13)
+numpy.random.seed(13)
 torch.manual_seed(13)
 torch.cuda.manual_seed(13)
-
-from langmodels.nn import add_gru_to_model_data
+random.seed(13)
 
 app_name = 'langmodels'
 
@@ -39,8 +42,13 @@ def _get_major_version():
 __version__ = _get_version()
 __major_version__ = _get_major_version()
 
-user_data_dir = appdirs.user_data_dir(app_name, appauthor=False, version=_get_version())
-MODEL_ZOO_PATH = os.path.join(user_data_dir, 'modelzoo')
+try:
+    MODEL_ZOO_PATH = os.environ['LANGMODELSPATH']
+except KeyError:
+    user_data_dir = appdirs.user_data_dir(app_name, appauthor=False, version=_get_version())
+    MODEL_ZOO_PATH = os.path.join(user_data_dir, 'modelzoo')
+
+logging.getLogger(__name__).info(f'MODEL_ZOO_PATH is ${MODEL_ZOO_PATH}')
 
 
 def load_logging_config():

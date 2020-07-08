@@ -9,7 +9,7 @@ from pprint import pformat
 import logging
 
 import numpy as np
-from codeprep.util import merge_dicts_
+from codeprep.util.misc import merge_dicts_
 from fastai.basic_data import DataBunch
 from fastai.core import partition_by_cores
 from fastai.data_block import PreProcessor
@@ -17,17 +17,29 @@ from fastai.layers import FlattenedLoss, CrossEntropyFlat
 from fastai.text import LMLabelList, Vocab, TextList
 from pathlib import Path
 from typing import Sequence, Collection, List, Tuple
+from torch.nn import CrossEntropyLoss
 
 from tqdm import tqdm
 
-from langmodels.profiling import get_cpu_memory_used_mb
+from langmodels.util.profiling import get_cpu_memory_used_mb
 from langmodels.tensor_ops import contains_no_value
-
+from langmodels.util.misc import to_binary_entropy
 
 logger = logging.getLogger(__name__)
 
 
 UNKNOWN_TOKEN_INDEX = 0
+
+
+def binary_cross_entropy_flat(*args, axis:int=-1, **kwargs):
+    class BinaryCrossEntropyLoss(CrossEntropyLoss):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+
+        def forward(self, input, target):
+            return to_binary_entropy(super().forward(input, target))
+
+    return FlattenedLoss(BinaryCrossEntropyLoss, *args, axis=axis, **kwargs)
 
 
 class Numericalizer(PreProcessor):
@@ -95,7 +107,7 @@ class EmptyDataBunch(object):
     path: str
     device: str
     backwards: bool = False
-    loss_func: FlattenedLoss = CrossEntropyFlat()
+    loss_func: FlattenedLoss = binary_cross_entropy_flat()
     train_ds: EmptyTrainDS = EmptyTrainDS()
     train_dl: EmptyTrainDL = EmptyTrainDL()
 

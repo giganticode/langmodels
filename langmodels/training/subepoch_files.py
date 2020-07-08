@@ -1,14 +1,14 @@
 import logging
 import os
+from pathlib import Path
+from typing import Any, Optional, List, Tuple
 
 from fastai.basic_train import LearnerCallback, Learner
 from fastai.callback import Callback
 from fastai.text import Vocab
-from pathlib import Path
-from typing import Any, Optional, List, Tuple
 
 from codeprep.api.corpus import PreprocessedCorpus
-from langmodels.file_util import get_all_files
+from langmodels.util.file import get_all_files
 from langmodels.training.data import create_databunch, check_data
 
 BIG_EPOCH_FILE_LIMIT = 10 * 1000
@@ -72,10 +72,15 @@ class EpochFileLoader(LearnerCallback):
 
     def _load_valid_and_test_files(self) -> List[Path]:
         path_to_valid_files = os.path.join(self.prep_corpus.path_to_prep_dataset, VALID_SUBDIR)
-        path_to_test_files = os.path.join(self.prep_corpus.path_to_prep_dataset, TEST_SUBDIR)
+        valid_files = [f for f in get_all_files(path_to_valid_files, None)]
 
-        return [f for f in get_all_files(path_to_valid_files, None)] + \
-               [f for f in get_all_files(path_to_test_files, None)]
+        path_to_test_files = os.path.join(self.prep_corpus.path_to_prep_dataset, TEST_SUBDIR)
+        if os.path.exists(path_to_test_files):
+            test_files = [f for f in get_all_files(path_to_test_files, None)]
+        else:
+            test_files = []
+
+        return valid_files + test_files
 
     def _get_next_training_files(self, n: Optional[int]) -> Tuple[List[Path], bool]:
         res: List[Path] = []

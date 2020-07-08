@@ -7,7 +7,7 @@ training_package_name = f'{root_package_name}.training'
 
 
 def readme():
-    with open('README.md') as f:
+    with open('README.rst') as f:
         return f.read()
 
 

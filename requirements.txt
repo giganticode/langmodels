@@ -72,7 +72,7 @@ torchvision==0.5.0
 tqdm==4.46.0
 typing-extensions==3.7.4.2
 typish==1.6.0
-urllib3==1.25.9
+urllib3==1.26.5
 wasabi==0.6.0
 wcwidth==0.1.9
 websocket-client==0.57.0
